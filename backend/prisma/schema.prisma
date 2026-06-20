@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  mssv           String?  @unique
+  email          String   @unique
+  name           String
+  role           Role     @default(STUDENT)
+  passwordHash   String
+  class          String?
+  faculty        String?
+  phone          String?
+  isFirstLogin   Boolean  @default(true)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  deviceBindings DeviceBinding[]
+  otpTokens      OtpToken[]
+  createdEvents  Event[]         @relation("EventCreator")
+  attendances    Attendance[]
+  fraudLogs      FraudLog[]
+  eventMembers   EventMember[]
+
+  @@index([role])
+  @@index([isActive])
+  @@index([role, isActive])
+  @@map("attendance_users")
+}
+
+enum Role {
+  ADMIN
+  BTC
+  LECTURER
+  STUDENT
+}
+
+model Event {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  location       String
+  lat            Float?
+  lng            Float?
+  radius         Float    @default(100)
+  gpsEnabled     Boolean  @default(true)
+  checkinOpen    DateTime
+  checkinClose   DateTime
+  checkoutOpen   DateTime
+  checkoutClose  DateTime
+  bannerUrl      String?
+  isWhitelisted  Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  createdBy    User          @relation("EventCreator", fields: [createdById], references: [id])
+  attendances  Attendance[]
+  fraudLogs    FraudLog[]
+  eventMembers EventMember[]
+
+  @@index([createdById])
+  @@index([isActive])
+  @@index([isWhitelisted])
+  @@index([checkinOpen])
+  @@index([isActive, checkinOpen])
+  @@index([isActive, isWhitelisted])
+  @@map("attendance_events")
+}
+
+model EventMember {
+  id      String @id @default(cuid())
+  eventId String
+  userId  String
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@map("attendance_event_members")
+}
+
+model Attendance {
+  id           String           @id @default(cuid())
+  userId       String
+  eventId      String
+  checkinTime  DateTime?
+  checkoutTime DateTime?
+  checkinGps   Json?
+  checkoutGps  Json?
+  deviceId     String?
+  ip           String?
+  status       AttendanceStatus @default(REGISTERED)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@unique([userId, eventId])
+  @@index([userId])
+  @@index([eventId])
+  @@index([status])
+  @@index([checkinTime])
+  @@index([eventId, status])
+  @@index([userId, status])
+  @@map("attendance_records")
+}
+
+enum AttendanceStatus {
+  REGISTERED
+  CHECKED_IN
+  CHECKED_OUT
+  ABSENT
+}
+
+model FraudLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  eventId   String?
+  reason    String
+  ip        String?
+  deviceId  String?
+  gps       Json?
+  token     String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user  User?  @relation(fields: [userId], references: [id])
+  event Event? @relation(fields: [eventId], references: [id])
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([createdAt])
+  @@index([eventId, createdAt])
+  @@map("attendance_fraud_logs")
+}
+
+model DeviceBinding {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceId   String
+  deviceInfo String?
+  isTrusted  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@map("attendance_device_bindings")
+}
+
+model OtpToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String
+  deviceId  String
+  purpose   String   @default("DEVICE_BIND")
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([userId, purpose])
+  @@index([used, expiresAt])
+  @@map("attendance_otp_tokens")
+}

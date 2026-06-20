@@ -1,0 +1,22 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A6BFF"/>
+      <stop offset="100%" stop-color="#00A3FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- QR corners -->
+  <rect x="12" y="12" width="16" height="16" rx="3" fill="none" stroke="white" stroke-width="3"/>
+  <rect x="36" y="12" width="16" height="16" rx="3" fill="none" stroke="white" stroke-width="3"/>
+  <rect x="12" y="36" width="16" height="16" rx="3" fill="none" stroke="white" stroke-width="3"/>
+  <!-- Inner fills -->
+  <rect x="17" y="17" width="6" height="6" rx="1.5" fill="white"/>
+  <rect x="41" y="17" width="6" height="6" rx="1.5" fill="white"/>
+  <rect x="17" y="41" width="6" height="6" rx="1.5" fill="white"/>
+  <!-- Data dots -->
+  <rect x="37" y="37" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
+  <rect x="44" y="37" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
+  <rect x="37" y="44" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
+  <rect x="44" y="44" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
+</svg>
