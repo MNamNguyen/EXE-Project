@@ -38,16 +38,16 @@ async function processCheckin(req, res) {
       return res.status(400).json({ success: false, error: 'MISSING_PARAMS', message: 'Thiếu thông tin' });
     }
 
-    // 1. Validate QR token (DISABLED: QR expiry check tắt tạm thời)
-    // const isValidToken = validateToken(token, eventId, type);
-    // if (!isValidToken) {
-    //   await logFraud(userId, eventId, 'INVALID_QR_TOKEN', req, { token });
-    //   return res.status(400).json({
-    //     success: false,
-    //     error: 'QR_EXPIRED',
-    //     message: 'Mã QR đã hết hạn. Vui lòng quét lại mã mới.',
-    //   });
-    // }
+    // 1. Validate QR token
+    const isValidToken = validateToken(token, eventId, type);
+    if (!isValidToken) {
+      await logFraud(userId, eventId, 'INVALID_QR_TOKEN', req, { token });
+      return res.status(400).json({
+        success: false,
+        error: 'QR_EXPIRED',
+        message: 'Mã QR đã hết hạn. Vui lòng quét lại mã mới.',
+      });
+    }
 
     // 2. Get event
     const event = await prisma.event.findUnique({ where: { id: eventId, isActive: true } });
