@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import Spinner from './components/ui/Spinner';
 
@@ -25,8 +25,13 @@ function RequireAuth({ children, roles }) {
 
 function PublicOnly({ children }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="xl" /></div>;
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) {
+    const params = new URLSearchParams(location.search);
+    const redirectTo = params.get('redirect') || '/dashboard';
+    return <Navigate to={redirectTo} replace />;
+  }
   return children;
 }
 
