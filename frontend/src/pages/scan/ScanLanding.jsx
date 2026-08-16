@@ -94,6 +94,7 @@ export default function ScanLanding() {
       NOT_CHECKED_IN: 'Chưa check-in',
       OUTSIDE_TIME_WINDOW: 'Ngoài giờ',
       DEVICE_NOT_BOUND: 'Thiết bị chưa xác thực',
+      NOT_REGISTERED: 'Chưa đăng ký tham gia',
     };
     return map[code] || 'Không thể check-in';
   };

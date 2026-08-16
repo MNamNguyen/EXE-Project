@@ -55,7 +55,21 @@ async function processCheckin(req, res) {
       return res.status(404).json({ success: false, error: 'EVENT_NOT_FOUND', message: 'Không tìm thấy sự kiện' });
     }
 
-    // 3. Validate time window
+    // 3. Whitelist: chỉ thành viên trong danh sách mới được điểm danh (design 2026-07-14).
+    if (event.isWhitelisted) {
+      const membership = await prisma.eventMember.findUnique({
+        where: { eventId_userId: { eventId, userId } },
+      });
+      if (!membership) {
+        return res.status(403).json({
+          success: false,
+          error: 'NOT_REGISTERED',
+          message: 'Bạn không có trong danh sách đăng ký tham gia sự kiện này.',
+        });
+      }
+    }
+
+    // 4. Validate time window
     if (type === 'checkin') {
       if (now < event.checkinOpen || now > event.checkinClose) {
         return res.status(400).json({
@@ -74,7 +88,7 @@ async function processCheckin(req, res) {
       }
     }
 
-    // 4. Validate GPS
+    // 5. Validate GPS
     if (event.gpsEnabled) {
       if (!gps?.lat || !gps?.lng) {
         return res.status(400).json({
@@ -98,7 +112,7 @@ async function processCheckin(req, res) {
       }
     }
 
-    // 5. Validate device binding
+    // 6. Validate device binding
     const deviceBinding = await prisma.deviceBinding.findFirst({
       where: { userId, deviceId, isTrusted: true },
     });
@@ -111,7 +125,7 @@ async function processCheckin(req, res) {
       });
     }
 
-    // 6. Process attendance
+    // 7. Process attendance
     let attendance = await prisma.attendance.findUnique({
       where: { userId_eventId: { userId, eventId } },
     });
