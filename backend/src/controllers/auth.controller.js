@@ -19,6 +19,7 @@ function signToken(userId) {
 async function login(req, res) {
   try {
     const { identifier, password, deviceId, deviceInfo } = req.body;
+    const now = new Date();
 
     if (!identifier || !password || !deviceId) {
       return res.status(400).json({ success: false, message: 'Thiếu thông tin đăng nhập' });
@@ -35,10 +36,31 @@ async function login(req, res) {
       return res.status(401).json({ success: false, message: 'MSSV/Email hoặc mật khẩu không đúng' });
     }
 
+    if (user.lockedUntil && user.lockedUntil > now) {
+      const mins = Math.max(1, Math.ceil((user.lockedUntil.getTime() - now.getTime()) / 60000));
+      return res.status(429).json({
+        success: false,
+        error: 'ACCOUNT_LOCKED',
+        message: `Tài khoản tạm khoá do đăng nhập sai nhiều lần. Thử lại sau ${mins} phút.`,
+      });
+    }
+
     const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) {
+      const failed = (user.failedLoginAttempts || 0) + 1;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: failed >= 5
+          ? { failedLoginAttempts: 0, lockedUntil: new Date(now.getTime() + 15 * 60 * 1000) }
+          : { failedLoginAttempts: failed },
+      });
       return res.status(401).json({ success: false, message: 'MSSV/Email hoặc mật khẩu không đúng' });
     }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginAttempts: 0, lockedUntil: null },
+    });
 
     // Check device binding
     const existingBinding = await prisma.deviceBinding.findFirst({

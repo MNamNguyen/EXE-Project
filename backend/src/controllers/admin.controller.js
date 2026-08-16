@@ -1,10 +1,11 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const XLSX = require('xlsx');
 const prisma = require('../lib/prisma');
 const { sendWelcomeEmail } = require('../services/email.service');
 
 function generateTempPassword() {
-  return 'Fpt@' + Math.floor(100000 + Math.random() * 900000);
+  return 'Fpt@' + crypto.randomInt(100000, 1000000).toString();
 }
 
 async function listUsers(req, res) {
