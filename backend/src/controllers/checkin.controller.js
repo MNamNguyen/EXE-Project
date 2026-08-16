@@ -90,14 +90,25 @@ async function processCheckin(req, res) {
 
     // 5. Validate GPS
     if (event.gpsEnabled) {
-      if (!gps?.lat || !gps?.lng) {
+      if (gps?.lat == null || gps?.lng == null) {
         return res.status(400).json({
           success: false,
           error: 'GPS_REQUIRED',
           message: 'Vui lòng bật GPS và cấp quyền vị trí để check-in',
         });
       }
-      if (event.lat && event.lng) {
+
+      const isCoord = (v, min, max) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+      if (!isCoord(gps.lat, -90, 90) || !isCoord(gps.lng, -180, 180)) {
+        await logFraud(userId, eventId, 'GPS_INVALID', req, { gps });
+        return res.status(400).json({
+          success: false,
+          error: 'GPS_INVALID',
+          message: 'Dữ liệu GPS không hợp lệ. Vui lòng thử lại.',
+        });
+      }
+
+      if (event.lat !== null && event.lng !== null) {
         const distance = haversineDistance(gps.lat, gps.lng, event.lat, event.lng);
         if (distance > event.radius) {
           await logFraud(userId, eventId, 'GPS_OUT_OF_RANGE', req, { gps, distance: Math.round(distance) });

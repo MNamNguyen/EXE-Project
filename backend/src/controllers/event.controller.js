@@ -64,13 +64,30 @@ async function createEvent(req, res) {
       isWhitelisted, memberIds,
     } = req.body;
 
+    const latVal = lat === undefined || lat === null || lat === '' ? null : Number(lat);
+    const lngVal = lng === undefined || lng === null || lng === '' ? null : Number(lng);
+    const gpsOn = gpsEnabled !== false;
+
+    if (gpsOn) {
+      const okLat = latVal !== null && Number.isFinite(latVal) && latVal >= -90 && latVal <= 90;
+      const okLng = lngVal !== null && Number.isFinite(lngVal) && lngVal >= -180 && lngVal <= 180;
+      if (!okLat || !okLng) {
+        return res.status(400).json({ success: false, message: 'Bật GPS thì phải nhập toạ độ hợp lệ' });
+      }
+    }
+
+    const radiusVal = radius === undefined || radius === null || radius === '' ? 100 : Number(radius);
+    if (!Number.isFinite(radiusVal) || radiusVal <= 0) {
+      return res.status(400).json({ success: false, message: 'Bán kính không hợp lệ' });
+    }
+
     const event = await prisma.event.create({
       data: {
         name, description, location,
-        lat: lat ? parseFloat(lat) : null,
-        lng: lng ? parseFloat(lng) : null,
-        radius: parseFloat(radius || 100),
-        gpsEnabled: gpsEnabled !== false,
+        lat: latVal,
+        lng: lngVal,
+        radius: radiusVal,
+        gpsEnabled: gpsOn,
         checkinOpen: new Date(checkinOpen),
         checkinClose: new Date(checkinClose),
         checkoutOpen: new Date(checkoutOpen),
@@ -125,15 +142,32 @@ async function updateEvent(req, res) {
       gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose, isWhitelisted,
     } = req.body;
 
+    const latVal = lat !== undefined ? (lat === null || lat === '' ? null : Number(lat)) : event.lat;
+    const lngVal = lng !== undefined ? (lng === null || lng === '' ? null : Number(lng)) : event.lng;
+    const gpsOn = gpsEnabled !== undefined ? gpsEnabled : event.gpsEnabled;
+
+    if (gpsOn) {
+      const okLat = latVal !== null && Number.isFinite(latVal) && latVal >= -90 && latVal <= 90;
+      const okLng = lngVal !== null && Number.isFinite(lngVal) && lngVal >= -180 && lngVal <= 180;
+      if (!okLat || !okLng) {
+        return res.status(400).json({ success: false, message: 'Bật GPS thì phải nhập toạ độ hợp lệ' });
+      }
+    }
+
+    const radiusVal = radius !== undefined && radius !== null && radius !== '' ? Number(radius) : undefined;
+    if (radiusVal !== undefined && (!Number.isFinite(radiusVal) || radiusVal <= 0)) {
+      return res.status(400).json({ success: false, message: 'Bán kính không hợp lệ' });
+    }
+
     const updated = await prisma.event.update({
       where: { id: req.params.id },
       data: {
         ...(name && { name }),
         ...(description !== undefined && { description }),
         ...(location && { location }),
-        ...(lat !== undefined && { lat: lat ? parseFloat(lat) : null }),
-        ...(lng !== undefined && { lng: lng ? parseFloat(lng) : null }),
-        ...(radius && { radius: parseFloat(radius) }),
+        ...(lat !== undefined && { lat: latVal }),
+        ...(lng !== undefined && { lng: lngVal }),
+        ...(radiusVal !== undefined && { radius: radiusVal }),
         ...(gpsEnabled !== undefined && { gpsEnabled }),
         ...(checkinOpen && { checkinOpen: new Date(checkinOpen) }),
         ...(checkinClose && { checkinClose: new Date(checkinClose) }),
