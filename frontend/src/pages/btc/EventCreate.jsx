@@ -9,8 +9,7 @@ import { eventApi } from '../../services/api';
 import { getCurrentPosition, GPS_ERROR_MESSAGES } from '../../utils/gps';
 import Layout from '../../components/layout/Layout';
 import Spinner from '../../components/ui/Spinner';
-
-const today = new Date().toISOString().slice(0, 16);
+import { toLocalInput, localInputToISO } from '../../utils/date';
 
 async function reverseGeocode(lat, lng) {
   try {
@@ -38,7 +37,7 @@ export default function EventCreate() {
     lng: '',
     radius: '100',
     gpsEnabled: true,
-    checkinOpen: today,
+    checkinOpen: toLocalInput(new Date().toISOString()),
     checkinClose: '',
     checkoutOpen: '',
     checkoutClose: '',
@@ -78,7 +77,14 @@ export default function EventCreate() {
     }
     setLoading(true);
     try {
-      const { data } = await eventApi.create(form);
+      const payload = {
+        ...form,
+        checkinOpen: localInputToISO(form.checkinOpen),
+        checkinClose: localInputToISO(form.checkinClose),
+        checkoutOpen: localInputToISO(form.checkoutOpen),
+        checkoutClose: localInputToISO(form.checkoutClose),
+      };
+      const { data } = await eventApi.create(payload);
       toast.success('Tạo sự kiện thành công!');
       navigate(`/events/${data.data.id}`);
     } catch (err) {

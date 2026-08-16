@@ -64,6 +64,15 @@ async function createEvent(req, res) {
       isWhitelisted, memberIds,
     } = req.body;
 
+    const checkinOpenDate = new Date(checkinOpen);
+    const checkinCloseDate = new Date(checkinClose);
+    const checkoutOpenDate = new Date(checkoutOpen);
+    const checkoutCloseDate = new Date(checkoutClose);
+    if ([checkinOpenDate, checkinCloseDate, checkoutOpenDate, checkoutCloseDate]
+      .some((d) => Number.isNaN(d.getTime()))) {
+      return res.status(400).json({ success: false, message: 'Thời gian không hợp lệ' });
+    }
+
     const latVal = lat === undefined || lat === null || lat === '' ? null : Number(lat);
     const lngVal = lng === undefined || lng === null || lng === '' ? null : Number(lng);
     const gpsOn = gpsEnabled !== false;
@@ -88,10 +97,10 @@ async function createEvent(req, res) {
         lng: lngVal,
         radius: radiusVal,
         gpsEnabled: gpsOn,
-        checkinOpen: new Date(checkinOpen),
-        checkinClose: new Date(checkinClose),
-        checkoutOpen: new Date(checkoutOpen),
-        checkoutClose: new Date(checkoutClose),
+        checkinOpen: checkinOpenDate,
+        checkinClose: checkinCloseDate,
+        checkoutOpen: checkoutOpenDate,
+        checkoutClose: checkoutCloseDate,
         isWhitelisted: isWhitelisted || false,
         createdById: req.user.id,
         ...(memberIds?.length && {
@@ -142,6 +151,17 @@ async function updateEvent(req, res) {
       gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose, isWhitelisted,
     } = req.body;
 
+    const dateVals = {};
+    for (const [key, value] of Object.entries({ checkinOpen, checkinClose, checkoutOpen, checkoutClose })) {
+      if (value !== undefined && value !== null && value !== '') {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) {
+          return res.status(400).json({ success: false, message: 'Thời gian không hợp lệ' });
+        }
+        dateVals[key] = d;
+      }
+    }
+
     const latVal = lat !== undefined ? (lat === null || lat === '' ? null : Number(lat)) : event.lat;
     const lngVal = lng !== undefined ? (lng === null || lng === '' ? null : Number(lng)) : event.lng;
     const gpsOn = gpsEnabled !== undefined ? gpsEnabled : event.gpsEnabled;
@@ -169,10 +189,10 @@ async function updateEvent(req, res) {
         ...(lng !== undefined && { lng: lngVal }),
         ...(radiusVal !== undefined && { radius: radiusVal }),
         ...(gpsEnabled !== undefined && { gpsEnabled }),
-        ...(checkinOpen && { checkinOpen: new Date(checkinOpen) }),
-        ...(checkinClose && { checkinClose: new Date(checkinClose) }),
-        ...(checkoutOpen && { checkoutOpen: new Date(checkoutOpen) }),
-        ...(checkoutClose && { checkoutClose: new Date(checkoutClose) }),
+        ...(dateVals.checkinOpen && { checkinOpen: dateVals.checkinOpen }),
+        ...(dateVals.checkinClose && { checkinClose: dateVals.checkinClose }),
+        ...(dateVals.checkoutOpen && { checkoutOpen: dateVals.checkoutOpen }),
+        ...(dateVals.checkoutClose && { checkoutClose: dateVals.checkoutClose }),
         ...(isWhitelisted !== undefined && { isWhitelisted }),
       },
     });

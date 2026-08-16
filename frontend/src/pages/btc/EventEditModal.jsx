@@ -4,14 +4,7 @@ import toast from 'react-hot-toast';
 import { eventApi } from '../../services/api';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
-
-// ISO (UTC) → giá trị cho <input type="datetime-local"> theo giờ ĐỊA PHƯƠNG.
-function toLocalInput(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 16);
-}
+import { toLocalInput, localInputToISO } from '../../utils/date';
 
 export default function EventEditModal({ open, event, onClose, onSaved }) {
   const [form, setForm] = useState(null);
@@ -50,7 +43,14 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
     }
     setSaving(true);
     try {
-      await eventApi.update(event.id, form);
+      const payload = {
+        ...form,
+        checkinOpen: localInputToISO(form.checkinOpen),
+        checkinClose: localInputToISO(form.checkinClose),
+        checkoutOpen: localInputToISO(form.checkoutOpen),
+        checkoutClose: localInputToISO(form.checkoutClose),
+      };
+      await eventApi.update(event.id, payload);
       toast.success('Cập nhật sự kiện thành công');
       onSaved?.();
       onClose();
