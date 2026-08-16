@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const { generateToken, getExpiresIn } = require('../services/qr.service');
+const { loadEventForWrite } = require('../lib/eventAccess');
 
 async function listEvents(req, res) {
   try {
@@ -131,6 +132,13 @@ async function getEvent(req, res) {
 
     if (!event) return res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
 
+    // Toạ độ sự kiện chỉ dành cho ADMIN/người tạo (chống giả GPS từ xa).
+    if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
+      event.lat = null;
+      event.lng = null;
+      event.radius = null;
+    }
+
     return res.json({ success: true, data: event });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Lỗi server' });
@@ -254,6 +262,9 @@ async function getQRToken(req, res) {
 
 async function getAttendance(req, res) {
   try {
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
+
     const { search, status, page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -363,23 +374,11 @@ async function manualCheckin(req, res) {
 // Quản lý danh sách tham gia (whitelist) theo từng sự kiện
 // ───────────────────────────────────────────────────────────────
 
-// Kiểm tra quyền thao tác trên sự kiện (ADMIN hoặc người tạo).
-// Trả về event nếu OK, hoặc null kèm gửi response lỗi.
-async function loadEventForWrite(req, res) {
-  const event = await prisma.event.findUnique({ where: { id: req.params.id } });
-  if (!event) {
-    res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
-    return null;
-  }
-  if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
-    res.status(403).json({ success: false, message: 'Không có quyền thao tác sự kiện này' });
-    return null;
-  }
-  return event;
-}
-
 async function listMembers(req, res) {
   try {
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
+
     const { page = 1, limit = 20, search } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -455,6 +454,9 @@ async function removeMember(req, res) {
 // Tìm sinh viên CHƯA thuộc sự kiện để thêm vào danh sách tham gia.
 async function searchUsersForEvent(req, res) {
   try {
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
+
     const { q } = req.query;
     if (!q || !q.trim()) {
       return res.json({ success: true, data: [] });

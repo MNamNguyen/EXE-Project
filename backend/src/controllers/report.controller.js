@@ -1,13 +1,11 @@
 const ExcelJS = require('exceljs');
 const prisma = require('../lib/prisma');
+const { loadEventForWrite } = require('../lib/eventAccess');
 
 async function exportAttendance(req, res) {
   try {
-    const event = await prisma.event.findUnique({
-      where: { id: req.params.id },
-      select: { name: true, location: true, checkinOpen: true },
-    });
-    if (!event) return res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
 
     const attendances = await prisma.attendance.findMany({
       where: { eventId: req.params.id },
