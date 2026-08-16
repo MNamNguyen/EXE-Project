@@ -223,10 +223,14 @@ async function getQRToken(req, res) {
   try {
     const event = await prisma.event.findUnique({
       where: { id: req.params.id, isActive: true },
-      select: { id: true, name: true, checkinOpen: true, checkinClose: true, checkoutOpen: true, checkoutClose: true },
+      select: { id: true, name: true, createdById: true, checkinOpen: true, checkinClose: true, checkoutOpen: true, checkoutClose: true },
     });
 
     if (!event) return res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
+
+    if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Không có quyền lấy mã QR cho sự kiện này' });
+    }
 
     const checkinToken = generateToken(event.id, 'checkin');
     const checkoutToken = generateToken(event.id, 'checkout');
@@ -304,6 +308,17 @@ async function manualCheckin(req, res) {
     const { identifier, type } = req.body; // identifier = MSSV, email, or userId
     const eventId = req.params.id;
     const now = new Date();
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId, isActive: true },
+      select: { id: true, createdById: true },
+    });
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
+    }
+    if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Không có quyền thao tác sự kiện này' });
+    }
 
     // Resolve identifier → userId (supports MSSV, email, or raw cuid)
     const userRecord = await prisma.user.findFirst({
