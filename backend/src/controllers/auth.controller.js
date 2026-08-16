@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const prisma = require('../lib/prisma');
-const { sendOtpEmail } = require('../services/email.service');
+const emailService = require('../services/email.service');
 
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -58,7 +58,18 @@ async function login(req, res) {
         data: { userId: user.id, token: otp, deviceId, purpose: 'DEVICE_BIND', expiresAt },
       });
 
-      await sendOtpEmail(user.email, user.name, otp);
+      try {
+        await emailService.sendOtpEmail(user.email, user.name, otp);
+      } catch (emailErr) {
+        console.error('Failed to send OTP email:', emailErr);
+        await prisma.otpToken.deleteMany({
+          where: { userId: user.id, token: otp, purpose: 'DEVICE_BIND' },
+        });
+        return res.status(500).json({
+          success: false,
+          message: 'Không gửi được email OTP. Vui lòng thử lại sau.',
+        });
+      }
 
       return res.json({
         success: false,

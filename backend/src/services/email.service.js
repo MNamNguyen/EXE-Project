@@ -38,7 +38,14 @@ const sender = {
   email: process.env.BREVO_SENDER_EMAIL,
 };
 
+function assertConfigured() {
+  if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) {
+    throw new Error('Email chưa cấu hình: thiếu BREVO_API_KEY / BREVO_SENDER_EMAIL');
+  }
+}
+
 async function sendOtpEmail(email, name, otp) {
+  assertConfigured();
   await brevoRequest({
     sender,
     to: [{ email }],
@@ -62,6 +69,7 @@ async function sendOtpEmail(email, name, otp) {
 }
 
 async function sendWelcomeEmail(email, name, mssv, tempPassword) {
+  assertConfigured();
   await brevoRequest({
     sender,
     to: [{ email }],
