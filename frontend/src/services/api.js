@@ -120,6 +120,11 @@ export const adminApi = {
   resetPassword: (id, data) => api.post(`/api/admin/users/${id}/reset-password`, data),
   resetDevice: (id) => api.post(`/api/admin/users/${id}/reset-device`),
   importStudents: (formData) => api.post('/api/admin/users/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  // Thao tác hàng loạt — payload luôn có userIds; response luôn { updated, skipped[] }.
+  bulkUpdate: (userIds, patch) => api.post('/api/admin/users/bulk/update', { userIds, ...patch }),
+  bulkResetPassword: (userIds) => api.post('/api/admin/users/bulk/reset-password', { userIds }),
+  bulkResetDevice: (userIds) => api.post('/api/admin/users/bulk/reset-device', { userIds }),
+  bulkDelete: (userIds) => api.post('/api/admin/users/bulk/delete', { userIds }),
 };
 
 // Reports

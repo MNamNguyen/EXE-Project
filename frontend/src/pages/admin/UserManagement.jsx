@@ -1,27 +1,39 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Search, Upload, Smartphone, UserX, UserCheck, RefreshCw, AlertCircle,
-  Pencil, Trash2, ChevronLeft, ChevronRight, KeyRound, Copy,
+  Pencil, Trash2, ChevronLeft, ChevronRight, KeyRound, Copy, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import Layout from '../../components/layout/Layout';
 import Spinner from '../../components/ui/Spinner';
 import Badge, { roleBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import ImportStudents from './ImportStudents';
+import BulkUserActions, { MAX_BULK } from './BulkUserActions';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZES = [20, 50, 100];
 const EMPTY_FORM = { name: '', email: '', mssv: '', role: 'STUDENT', class: '', faculty: '', phone: '' };
 
 export default function UserManagement() {
+  const { user: currentUser } = useAuth();
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+
+  // Lựa chọn giữ theo id → user (không chỉ id) để thanh thao tác hiển thị được
+  // tên, và để lựa chọn SỐNG QUA phân trang: admin có thể gom người từ nhiều trang.
+  const [selected, setSelected] = useState(new Map());
+  const lastClickedIndex = useRef(null);
+  const [selectingAll, setSelectingAll] = useState(false);
 
   const [createModal, setCreateModal] = useState(false);
   const [importModal, setImportModal] = useState(false);
@@ -42,26 +54,103 @@ export default function UserManagement() {
   const [pwdResult, setPwdResult] = useState(null);
   const [resetting, setResetting] = useState(false);
 
-  const load = useCallback((p = 1, s = search, r = roleFilter) => {
+  const filtersRef = useRef({ search: '', role: '', status: '', pageSize: PAGE_SIZES[0] });
+  filtersRef.current = { search, role: roleFilter, status: statusFilter, pageSize };
+
+  const load = useCallback((p = 1, override = {}) => {
+    const f = { ...filtersRef.current, ...override };
     setLoadError(false);
     setLoading(true);
-    adminApi.listUsers({ search: s, role: r, page: p, limit: PAGE_SIZE })
+    lastClickedIndex.current = null;
+    return adminApi.listUsers({ search: f.search, role: f.role, status: f.status, page: p, limit: f.pageSize })
       .then(({ data }) => { setUsers(data.data || []); setTotal(data.total || 0); })
       .catch(() => { setLoadError(true); toast.error('Tải danh sách thất bại'); })
       .finally(() => setLoading(false));
-  }, [search, roleFilter]);
+  }, []);
 
   useEffect(() => { load(1); }, []); // eslint-disable-line
 
-  const applyFilters = (s, r) => {
+  // Gõ tìm kiếm bắn 1 request/ký tự là quá tốn với Render free tier → chờ 350ms.
+  const searchTimer = useRef(null);
+  const onSearchChange = (value) => {
+    setSearch(value);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => { setPage(1); load(1, { search: value }); }, 350);
+  };
+  useEffect(() => () => clearTimeout(searchTimer.current), []);
+
+  const applyFilter = (patch) => {
+    if ('role' in patch) setRoleFilter(patch.role);
+    if ('status' in patch) setStatusFilter(patch.status);
+    if ('pageSize' in patch) setPageSize(patch.pageSize);
     setPage(1);
-    load(1, s, r);
+    load(1, patch);
   };
 
   const goToPage = (p) => {
     setPage(p);
-    load(p, search, roleFilter);
+    load(p);
   };
+
+  // ── Lựa chọn ──────────────────────────────────────────────────
+
+  const isSelected = (id) => selected.has(id);
+  const pageAllSelected = users.length > 0 && users.every((u) => selected.has(u.id));
+  const pageSomeSelected = users.some((u) => selected.has(u.id));
+
+  const setMany = (list, on) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      list.forEach((u) => (on ? next.set(u.id, u) : next.delete(u.id)));
+      return next;
+    });
+  };
+
+  // Shift-click chọn cả dải giữa hai lần click — thao tác quen tay khi cần
+  // chọn vài chục dòng liên tiếp.
+  const toggleRow = (index, event) => {
+    const target = users[index];
+    const on = !selected.has(target.id);
+
+    if (event.shiftKey && lastClickedIndex.current !== null) {
+      const [from, to] = [lastClickedIndex.current, index].sort((a, b) => a - b);
+      setMany(users.slice(from, to + 1), on);
+    } else {
+      setMany([target], on);
+    }
+    lastClickedIndex.current = index;
+  };
+
+  const togglePage = () => {
+    setMany(users, !pageAllSelected);
+    lastClickedIndex.current = null;
+  };
+
+  const clearSelection = () => { setSelected(new Map()); lastClickedIndex.current = null; };
+
+  // Chọn toàn bộ kết quả khớp bộ lọc, không chỉ trang hiện tại. Backend chặn
+  // limit ở MAX_BULK nên đây cũng là trần của một lô thao tác.
+  const selectAllMatching = async () => {
+    setSelectingAll(true);
+    try {
+      const { data } = await adminApi.listUsers({
+        search, role: roleFilter, status: statusFilter, page: 1, limit: MAX_BULK,
+      });
+      const list = data.data || [];
+      setSelected(new Map(list.map((u) => [u.id, u])));
+      toast.success(
+        list.length < total
+          ? `Đã chọn ${list.length} tài khoản đầu tiên (tối đa ${MAX_BULK} mỗi lô)`
+          : `Đã chọn tất cả ${list.length} tài khoản`
+      );
+    } catch {
+      toast.error('Không chọn được toàn bộ kết quả');
+    } finally {
+      setSelectingAll(false);
+    }
+  };
+
+  // ── Thao tác từng người ───────────────────────────────────────
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -72,8 +161,8 @@ export default function UserManagement() {
       toast.success('Tạo tài khoản thành công. Email đã gửi.');
       setCreateModal(false);
       setForm(EMPTY_FORM);
-      load(1, search, roleFilter);
       setPage(1);
+      load(1);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Tạo thất bại');
     } finally {
@@ -104,7 +193,7 @@ export default function UserManagement() {
       toast.success('Cập nhật thành công');
       setEditModal(false);
       setEditUser(null);
-      load(page, search, roleFilter);
+      load(page);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Cập nhật thất bại');
     } finally {
@@ -117,10 +206,11 @@ export default function UserManagement() {
     try {
       await adminApi.deleteUser(u.id);
       toast.success('Đã xoá người dùng');
+      setMany([u], false);
       // Nếu xoá bản ghi cuối của trang, lùi 1 trang
       const nextPage = users.length === 1 && page > 1 ? page - 1 : page;
       setPage(nextPage);
-      load(nextPage, search, roleFilter);
+      load(nextPage);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Xoá thất bại');
     }
@@ -178,15 +268,16 @@ export default function UserManagement() {
     try {
       await adminApi.updateUser(id, { isActive: !isActive });
       toast.success(`Đã ${isActive ? 'khoá' : 'mở khoá'} tài khoản`);
-      load(page, search, roleFilter);
+      load(page);
     } catch {
       toast.error('Thao tác thất bại');
     }
   };
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-  const startRow = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const endRow = Math.min(page * PAGE_SIZE, total);
+  const totalPages = Math.ceil(total / pageSize);
+  const startRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endRow = Math.min(page * pageSize, total);
+  const hasFilters = Boolean(search || roleFilter || statusFilter);
 
   const userFormFields = (state, setState) => (
     <>
@@ -219,7 +310,7 @@ export default function UserManagement() {
   return (
     <Layout>
       <div className="bg-gradient-brand px-6 py-8">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-white">Quản lý người dùng</h1>
             <p className="text-white/60 text-sm mt-1">{total} tài khoản</p>
@@ -237,20 +328,34 @@ export default function UserManagement() {
         </div>
       </div>
 
-      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
         {/* Filters */}
-        <div className="flex gap-3 mb-5">
-          <div className="relative flex-1">
+        <div className="flex gap-3 mb-5 flex-wrap">
+          <div className="relative flex-1 min-w-[220px]">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input className="input pl-10 text-sm" placeholder="Tìm theo tên, MSSV, email..."
-              value={search} onChange={(e) => { setSearch(e.target.value); applyFilters(e.target.value, roleFilter); }} />
+            <input className="input pl-10 pr-9 text-sm" placeholder="Tìm theo tên, MSSV, email..."
+              value={search} onChange={(e) => onSearchChange(e.target.value)} />
+            {search && (
+              <button onClick={() => onSearchChange('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500" title="Xoá tìm kiếm">
+                <X size={15} />
+              </button>
+            )}
           </div>
-          <select className="input text-sm w-36" value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); applyFilters(search, e.target.value); }}>
+          <select className="input text-sm w-36" value={roleFilter} onChange={(e) => applyFilter({ role: e.target.value })}>
             <option value="">Tất cả vai trò</option>
             <option value="STUDENT">Sinh viên</option>
             <option value="BTC">Ban TC</option>
             <option value="LECTURER">Giảng viên</option>
             <option value="ADMIN">Admin</option>
+          </select>
+          <select className="input text-sm w-36" value={statusFilter} onChange={(e) => applyFilter({ status: e.target.value })}>
+            <option value="">Mọi trạng thái</option>
+            <option value="active">Hoạt động</option>
+            <option value="locked">Bị khoá</option>
+          </select>
+          <select className="input text-sm w-28" value={pageSize} onChange={(e) => applyFilter({ pageSize: Number(e.target.value) })}>
+            {PAGE_SIZES.map((n) => <option key={n} value={n}>{n} / trang</option>)}
           </select>
         </div>
 
@@ -261,19 +366,36 @@ export default function UserManagement() {
             <AlertCircle size={36} className="text-red-400" />
             <p className="text-sm font-medium text-gray-500">Không thể tải danh sách người dùng</p>
             <p className="text-xs text-gray-400">Server có thể đang khởi động lại. Vui lòng thử lại.</p>
-            <button
-              onClick={() => load(page, search, roleFilter)}
-              className="flex items-center gap-2 btn-primary btn-sm mt-1"
-            >
+            <button onClick={() => load(page)} className="flex items-center gap-2 btn-primary btn-sm mt-1">
               <RefreshCw size={14} /> Thử lại
             </button>
           </div>
         ) : (
           <div className="card overflow-hidden">
+            {/* Chọn cả trang rồi thì mời chọn luôn toàn bộ kết quả khớp bộ lọc */}
+            {pageAllSelected && total > users.length && (
+              <div className="px-4 py-2.5 bg-primary-50 border-b border-primary-100 text-xs text-primary-800 flex items-center justify-center gap-2 flex-wrap">
+                <span>Đã chọn {selected.size} tài khoản.</span>
+                {selected.size < total && (
+                  <button onClick={selectAllMatching} disabled={selectingAll}
+                    className="font-semibold underline underline-offset-2 hover:text-primary-900 disabled:opacity-50">
+                    {selectingAll ? 'Đang chọn…' : `Chọn tất cả ${total} kết quả${hasFilters ? ' khớp bộ lọc' : ''}`}
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="table">
                 <thead>
                   <tr>
+                    <th className="w-10">
+                      <input type="checkbox" className="w-4 h-4 rounded accent-primary-600 cursor-pointer"
+                        checked={pageAllSelected}
+                        ref={(el) => { if (el) el.indeterminate = !pageAllSelected && pageSomeSelected; }}
+                        onChange={togglePage}
+                        title="Chọn tất cả trên trang này" />
+                    </th>
                     <th>Người dùng</th>
                     <th>MSSV</th>
                     <th>Lớp</th>
@@ -284,18 +406,31 @@ export default function UserManagement() {
                 </thead>
                 <tbody>
                   {users.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-10 text-gray-400">Không có dữ liệu</td></tr>
-                  ) : users.map((u) => {
+                    <tr><td colSpan={7} className="text-center py-10 text-gray-400">Không có dữ liệu</td></tr>
+                  ) : users.map((u, index) => {
                     const { label: roleLabel, variant: roleVariant } = roleBadge(u.role);
+                    const checked = isSelected(u.id);
                     return (
-                      <tr key={u.id}>
+                      <tr key={u.id} className={checked ? 'bg-primary-50/60' : undefined}>
+                        <td>
+                          <input type="checkbox" className="w-4 h-4 rounded accent-primary-600 cursor-pointer"
+                            checked={checked}
+                            onChange={() => {}}
+                            onClick={(e) => toggleRow(index, e)}
+                            title="Giữ Shift để chọn cả dải" />
+                        </td>
                         <td>
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm flex-shrink-0">
                               {u.name.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <p className="font-medium text-sm text-gray-900">{u.name}</p>
+                              <p className="font-medium text-sm text-gray-900">
+                                {u.name}
+                                {u.id === currentUser?.id && (
+                                  <span className="ml-1.5 text-xs font-normal text-gray-400">(bạn)</span>
+                                )}
+                              </p>
                               <p className="text-xs text-gray-400">{u.email}</p>
                             </div>
                           </div>
@@ -344,6 +479,7 @@ export default function UserManagement() {
             <div className="px-4 py-3 border-t border-border flex items-center justify-between flex-wrap gap-2">
               <p className="text-xs text-gray-400">
                 {total === 0 ? 'Không có bản ghi' : `Hiển thị ${startRow}–${endRow} / ${total} tài khoản`}
+                {selected.size > 0 && ` · đang chọn ${selected.size}`}
               </p>
               {totalPages > 1 && (
                 <div className="flex items-center gap-1">
@@ -377,6 +513,13 @@ export default function UserManagement() {
             </div>
           </div>
         )}
+
+        <BulkUserActions
+          selected={[...selected.values()]}
+          currentUserId={currentUser?.id}
+          onClear={clearSelection}
+          onDone={() => load(page)}
+        />
       </div>
 
       {/* Create modal */}
@@ -485,7 +628,7 @@ export default function UserManagement() {
 
       {/* Import modal */}
       <Modal open={importModal} onClose={() => setImportModal(false)} title="Import sinh viên từ Excel" size="sm">
-        <ImportStudents onSuccess={() => { setImportModal(false); load(1, search, roleFilter); setPage(1); }} />
+        <ImportStudents onSuccess={() => { setImportModal(false); setPage(1); load(1); }} />
       </Modal>
     </Layout>
   );
