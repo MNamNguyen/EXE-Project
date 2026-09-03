@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
+const { addUsersToEvent } = require('../lib/eventMembership');
 const emailService = require('../services/email.service');
 
 // Các trường sự kiện an toàn để lộ ra endpoint công khai (KHÔNG kèm lat/lng/radius
@@ -49,21 +50,9 @@ function registrationWindowError(event, now = new Date()) {
   return null;
 }
 
-// Ghi người dùng vào danh sách tham gia + tạo bản ghi điểm danh REGISTERED.
-// Idempotent: gọi lại không tạo trùng và không ghi đè trạng thái đã check-in.
 async function joinEvent(eventId, userId) {
-  const [memberResult] = await prisma.$transaction([
-    prisma.eventMember.createMany({
-      data: [{ eventId, userId }],
-      skipDuplicates: true,
-    }),
-    prisma.attendance.upsert({
-      where: { userId_eventId: { userId, eventId } },
-      create: { userId, eventId, status: 'REGISTERED' },
-      update: {},
-    }),
-  ]);
-  return { alreadyRegistered: memberResult.count === 0 };
+  const { added } = await addUsersToEvent(eventId, [userId]);
+  return { alreadyRegistered: added === 0 };
 }
 
 // ───────────────────────────────────────────────────────────────

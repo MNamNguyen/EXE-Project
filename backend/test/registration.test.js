@@ -39,9 +39,9 @@ function mockEvent(overrides = {}) {
 // createMany.count = 0 → đã là thành viên từ trước.
 function mockJoin({ memberCount = 1 } = {}) {
   const createMany = stubMethod(prisma.eventMember, 'createMany', async () => ({ count: memberCount }));
-  const upsert = stubMethod(prisma.attendance, 'upsert', async () => ({ id: 'att-1', status: 'REGISTERED' }));
+  const attendance = stubMethod(prisma.attendance, 'createMany', async () => ({ count: memberCount }));
   stubMethod(prisma, '$transaction', async (ops) => Promise.all(ops));
-  return { createMany, upsert };
+  return { createMany, attendance };
 }
 
 function mockEmailOk() {
@@ -64,7 +64,7 @@ test('người chưa có trong hệ thống được tạo tài khoản mới v�
   const createUser = stubMethod(prisma.user, 'create', async ({ data }) => ({
     id: 'u-new', email: data.email, mssv: data.mssv, name: data.name, isActive: true,
   }));
-  const { createMany, upsert } = mockJoin();
+  const { createMany, attendance } = mockJoin();
   const sendMail = mockEmailOk();
 
   const res = await post();
@@ -85,7 +85,8 @@ test('người chưa có trong hệ thống được tạo tài khoản mới v�
   // Được ghi vào danh sách tham gia + có bản ghi điểm danh REGISTERED.
   assert.deepStrictEqual(createMany.calls[0][0].data, [{ eventId: 'evt-1', userId: 'u-new' }]);
   assert.strictEqual(createMany.calls[0][0].skipDuplicates, true);
-  assert.strictEqual(upsert.calls[0][0].create.status, 'REGISTERED');
+  assert.deepStrictEqual(attendance.calls[0][0].data, [{ eventId: 'evt-1', userId: 'u-new', status: 'REGISTERED' }]);
+  assert.strictEqual(attendance.calls[0][0].skipDuplicates, true);
 
   // Mật khẩu tạm chỉ đi qua email, không trả về response.
   assert.ok(sendMail.calls[0][3].tempPassword);

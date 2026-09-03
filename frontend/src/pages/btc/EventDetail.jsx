@@ -335,7 +335,7 @@ export default function EventDetail() {
         open={membersModal}
         eventId={id}
         onClose={() => setMembersModal(false)}
-        onChanged={reloadEvent}
+        onChanged={() => { reloadEvent(); loadAttendance(page); }}
       />
     </Layout>
   );

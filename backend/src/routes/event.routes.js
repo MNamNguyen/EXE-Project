@@ -4,6 +4,7 @@ const {
   listEvents, createEvent, getEvent, updateEvent, deleteEvent,
   getQRToken, getAttendance, manualCheckin,
   listMembers, addMembers, removeMember, searchUsersForEvent,
+  listClasses, addMembersByClass,
 } = require('../controllers/event.controller');
 const { registerSelf } = require('../controllers/registration.controller');
 
@@ -23,7 +24,9 @@ router.post('/:id/register', registerSelf);
 
 router.get('/:id/members', authorize('ADMIN', 'BTC', 'LECTURER'), listMembers);
 router.get('/:id/members/search', authorize('ADMIN', 'BTC'), searchUsersForEvent);
+router.get('/:id/classes', authorize('ADMIN', 'BTC'), listClasses);
 router.post('/:id/members', authorize('ADMIN', 'BTC'), addMembers);
+router.post('/:id/members/by-class', authorize('ADMIN', 'BTC'), addMembersByClass);
 router.delete('/:id/members/:userId', authorize('ADMIN', 'BTC'), removeMember);
 
 module.exports = router;

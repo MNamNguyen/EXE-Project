@@ -75,6 +75,8 @@ export const eventApi = {
   listMembers: (id, params) => api.get(`/api/events/${id}/members`, { params }),
   searchMembers: (id, q) => api.get(`/api/events/${id}/members/search`, { params: { q } }),
   addMembers: (id, userIds) => api.post(`/api/events/${id}/members`, { userIds }),
+  listClasses: (id) => api.get(`/api/events/${id}/classes`),
+  addMembersByClass: (id, classes) => api.post(`/api/events/${id}/members/by-class`, { classes }),
   removeMember: (id, userId) => api.delete(`/api/events/${id}/members/${userId}`),
   // Người dùng đã đăng nhập tự ghi tên vào danh sách tham gia.
   register: (id) => api.post(`/api/events/${id}/register`),

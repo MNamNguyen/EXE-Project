@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
 const { generateToken, getExpiresIn } = require('../services/qr.service');
 const { loadEventForWrite } = require('../lib/eventAccess');
+const { addUsersToEvent, removeUserFromEvent } = require('../lib/eventMembership');
 
 async function listEvents(req, res) {
   try {
@@ -437,12 +438,9 @@ async function addMembers(req, res) {
       return res.status(400).json({ success: false, message: 'Chưa chọn người dùng để thêm' });
     }
 
-    const result = await prisma.eventMember.createMany({
-      data: userIds.map((userId) => ({ eventId: req.params.id, userId })),
-      skipDuplicates: true,
-    });
+    const { added } = await addUsersToEvent(req.params.id, userIds);
 
-    return res.json({ success: true, message: `Đã thêm ${result.count} thành viên`, added: result.count });
+    return res.json({ success: true, message: `Đã thêm ${added} thành viên`, added });
   } catch (err) {
     console.error('Add members error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi server' });
@@ -454,13 +452,100 @@ async function removeMember(req, res) {
     const event = await loadEventForWrite(req, res);
     if (!event) return;
 
-    await prisma.eventMember.deleteMany({
-      where: { eventId: req.params.id, userId: req.params.userId },
-    });
+    await removeUserFromEvent(req.params.id, req.params.userId);
 
     return res.json({ success: true, message: 'Đã xoá thành viên khỏi sự kiện' });
   } catch (err) {
     console.error('Remove member error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+}
+
+// Danh sách lớp kèm sĩ số, để BTC thêm nhanh nguyên lớp vào sự kiện.
+// `remaining` = số sinh viên của lớp chưa có trong danh sách tham gia.
+async function listClasses(req, res) {
+  try {
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
+
+    const [groups, members] = await Promise.all([
+      prisma.user.groupBy({
+        by: ['class'],
+        where: { isActive: true, role: 'STUDENT', class: { not: null } },
+        _count: { _all: true },
+        orderBy: { class: 'asc' },
+      }),
+      prisma.eventMember.findMany({
+        where: { eventId: req.params.id },
+        select: { user: { select: { class: true } } },
+      }),
+    ]);
+
+    const inEventByClass = {};
+    for (const { user } of members) {
+      if (user?.class) inEventByClass[user.class] = (inEventByClass[user.class] || 0) + 1;
+    }
+
+    const data = groups
+      .filter((g) => g.class && g.class.trim())
+      .map((g) => {
+        const total = g._count._all;
+        const inEvent = inEventByClass[g.class] || 0;
+        return { class: g.class, total, inEvent, remaining: Math.max(0, total - inEvent) };
+      });
+
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('List classes error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+}
+
+// Thêm toàn bộ sinh viên đang hoạt động của một hoặc nhiều lớp vào danh sách tham gia.
+async function addMembersByClass(req, res) {
+  try {
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
+
+    const raw = req.body?.classes ?? req.body?.class;
+    const classes = [...new Set(
+      (Array.isArray(raw) ? raw : [raw])
+        .filter((c) => typeof c === 'string')
+        .map((c) => c.trim())
+        .filter(Boolean)
+    )];
+
+    if (classes.length === 0) {
+      return res.status(400).json({ success: false, message: 'Chưa chọn lớp nào để thêm' });
+    }
+
+    const users = await prisma.user.findMany({
+      where: { isActive: true, role: 'STUDENT', class: { in: classes } },
+      select: { id: true },
+    });
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy sinh viên nào đang hoạt động trong lớp đã chọn',
+      });
+    }
+
+    const { added } = await addUsersToEvent(req.params.id, users.map((u) => u.id));
+    const skipped = users.length - added;
+
+    return res.json({
+      success: true,
+      added,
+      skipped,
+      matched: users.length,
+      classes,
+      message: skipped > 0
+        ? `Đã thêm ${added} sinh viên (${skipped} người đã có sẵn trong danh sách)`
+        : `Đã thêm ${added} sinh viên vào danh sách tham gia`,
+    });
+  } catch (err) {
+    console.error('Add members by class error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi server' });
   }
 }
@@ -508,4 +593,5 @@ module.exports = {
   listEvents, createEvent, getEvent, updateEvent, deleteEvent,
   getQRToken, getAttendance, manualCheckin,
   listMembers, addMembers, removeMember, searchUsersForEvent,
+  listClasses, addMembersByClass,
 };
