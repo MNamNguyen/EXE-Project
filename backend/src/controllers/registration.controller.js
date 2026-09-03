@@ -39,12 +39,14 @@ function normalizeInput(body = {}) {
 }
 
 // Sự kiện còn nhận đăng ký khi: đang hoạt động, bật cho phép đăng ký và
-// chưa đóng cổng check-in.
+// chưa đóng cổng check-in. checkinClose giờ là tuỳ chọn (BTC có thể chủ động
+// mở/đóng điểm danh thay vì đặt lịch) — null nghĩa là KHÔNG có hạn đăng ký,
+// không phải "đã đóng".
 function registrationWindowError(event, now = new Date()) {
   if (!event.allowRegistration) {
     return 'Sự kiện này không mở đăng ký trực tuyến. Vui lòng liên hệ Ban tổ chức.';
   }
-  if (now > event.checkinClose) {
+  if (event.checkinClose && now > event.checkinClose) {
     return 'Sự kiện đã đóng cổng đăng ký.';
   }
   return null;
@@ -69,11 +71,12 @@ async function listOpenEvents(req, res) {
       where: {
         isActive: true,
         allowRegistration: true,
-        checkinClose: { gte: new Date() },
+        // checkinClose = null → không có hạn đăng ký, vẫn phải liệt kê.
+        OR: [{ checkinClose: null }, { checkinClose: { gte: new Date() } }],
         ...(search && { name: { contains: search, mode: 'insensitive' } }),
       },
       select: PUBLIC_EVENT_FIELDS,
-      orderBy: { checkinOpen: 'asc' },
+      orderBy: { checkinOpen: { sort: 'asc', nulls: 'first' } },
       take,
     });
 

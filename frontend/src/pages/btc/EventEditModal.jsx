@@ -36,8 +36,13 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.location || !form.checkinOpen || !form.checkinClose || !form.checkoutOpen || !form.checkoutClose) {
+    if (!form.name || !form.location) {
       return toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
+    }
+    const timeFields = [form.checkinOpen, form.checkinClose, form.checkoutOpen, form.checkoutClose];
+    const filledCount = timeFields.filter(Boolean).length;
+    if (filledCount > 0 && filledCount < 4) {
+      return toast.error('Vui lòng điền đủ cả 4 mốc giờ, hoặc để trống tất cả để tự mở/đóng điểm danh thủ công');
     }
     if (form.gpsEnabled && (!form.lat || !form.lng)) {
       return toast.error('Vui lòng nhập toạ độ GPS hoặc tắt tính năng GPS');
@@ -46,10 +51,10 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
     try {
       const payload = {
         ...form,
-        checkinOpen: localInputToISO(form.checkinOpen),
-        checkinClose: localInputToISO(form.checkinClose),
-        checkoutOpen: localInputToISO(form.checkoutOpen),
-        checkoutClose: localInputToISO(form.checkoutClose),
+        checkinOpen: form.checkinOpen ? localInputToISO(form.checkinOpen) : null,
+        checkinClose: form.checkinClose ? localInputToISO(form.checkinClose) : null,
+        checkoutOpen: form.checkoutOpen ? localInputToISO(form.checkoutOpen) : null,
+        checkoutClose: form.checkoutClose ? localInputToISO(form.checkoutClose) : null,
       };
       await eventApi.update(event.id, payload);
       toast.success('Cập nhật sự kiện thành công');
@@ -91,9 +96,12 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
 
         {/* Thời gian */}
         <div>
-          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
+          <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2 text-sm">
             <Clock size={16} className="text-primary-600" /> Thời gian check-in / check-out
           </h3>
+          <p className="text-xs text-gray-400 mb-3">
+            Tuỳ chọn — để trống cả 4 ô để chủ động mở/đóng điểm danh thủ công thay vì đặt lịch.
+          </p>
           <div className="grid grid-cols-2 gap-3">
             {[
               { key: 'checkinOpen', label: 'Check-in mở' },
@@ -102,7 +110,7 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
               { key: 'checkoutClose', label: 'Check-out đóng' },
             ].map(({ key, label }) => (
               <div key={key}>
-                <label className="label">{label} <span className="text-red-500">*</span></label>
+                <label className="label">{label}</label>
                 <input className="input text-sm" type="datetime-local" value={form[key]} onChange={(e) => set(key, e.target.value)} />
               </div>
             ))}

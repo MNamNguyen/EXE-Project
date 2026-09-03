@@ -1,5 +1,7 @@
 const prisma = require('../lib/prisma');
 const { addUsersToEvent } = require('../lib/eventMembership');
+const { parseEventDates, parseGateState } = require('../lib/parseOptionalDate');
+const { gateSummary } = require('../lib/attendanceGate');
 
 const CLASS_NOT_FOUND = { success: false, message: 'Không tìm thấy lớp' };
 
@@ -297,6 +299,8 @@ async function removeMembers(req, res) {
 // Buổi điểm danh (Event gắn classId) — "mã điểm danh theo buổi học"
 // ───────────────────────────────────────────────────────────────
 
+// Khung giờ TUỲ CHỌN — buổi học không cần đặt lịch, BTC có thể tạo và điểm
+// danh ngay (xem createSession: không đặt giờ nào → tự mở điểm danh luôn).
 function parseSessionInput(body) {
   const { name, location, checkinOpen, checkinClose, checkoutOpen, checkoutClose } = body;
 
@@ -304,13 +308,8 @@ function parseSessionInput(body) {
     return { error: 'Vui lòng nhập địa điểm buổi học' };
   }
 
-  const dates = { checkinOpen, checkinClose, checkoutOpen, checkoutClose };
-  const parsed = {};
-  for (const [key, value] of Object.entries(dates)) {
-    const d = new Date(value);
-    if (!value || Number.isNaN(d.getTime())) return { error: 'Thời gian không hợp lệ' };
-    parsed[key] = d;
-  }
+  const { value: parsed, error: dateError } = parseEventDates({ checkinOpen, checkinClose, checkoutOpen, checkoutClose });
+  if (dateError) return { error: dateError };
 
   const { lat, lng, radius, gpsEnabled } = body;
   const latVal = lat === undefined || lat === null || lat === '' ? null : Number(lat);
@@ -347,7 +346,16 @@ async function createSession(req, res) {
     const { value, error } = parseSessionInput(req.body || {});
     if (error) return res.status(400).json({ success: false, message: error });
 
-    const sessionName = value.name || `${cls.name} - Buổi điểm danh ${value.checkinOpen.toLocaleDateString('vi-VN')}`;
+    const sessionDate = value.checkinOpen || new Date();
+    const sessionName = value.name || `${cls.name} - Buổi điểm danh ${sessionDate.toLocaleDateString('vi-VN')}`;
+
+    // Không đặt khung giờ check-in nào → mặc định MỞ điểm danh ngay khi tạo,
+    // đúng tinh thần "buổi học không cần đặt lịch trước". Có đặt giờ thì theo
+    // lịch (AUTO) như bình thường; BTC truyền checkinState rõ ràng thì ưu tiên.
+    const noSchedule = !value.checkinOpen && !value.checkinClose;
+    const checkinState = req.body.checkinState !== undefined
+      ? parseGateState(req.body.checkinState)
+      : (noSchedule ? 'OPEN' : 'AUTO');
 
     const event = await prisma.event.create({
       data: {
@@ -356,6 +364,8 @@ async function createSession(req, res) {
         lat: value.lat, lng: value.lng, radius: value.radius, gpsEnabled: value.gpsEnabled,
         checkinOpen: value.checkinOpen, checkinClose: value.checkinClose,
         checkoutOpen: value.checkoutOpen, checkoutClose: value.checkoutClose,
+        checkinState,
+        checkoutState: parseGateState(req.body.checkoutState),
         isWhitelisted: true,
         allowRegistration: false,
         createdById: req.user.id,
@@ -371,7 +381,7 @@ async function createSession(req, res) {
 
     return res.status(201).json({
       success: true,
-      data: event,
+      data: { ...event, gate: gateSummary(event) },
       enrolled: added,
       message: `Đã tạo buổi điểm danh và thêm ${added} sinh viên của lớp ${cls.name}`,
     });
@@ -388,11 +398,11 @@ async function listSessions(req, res) {
 
     const sessions = await prisma.event.findMany({
       where: { classId: cls.id },
-      orderBy: { checkinOpen: 'desc' },
+      orderBy: { checkinOpen: { sort: 'desc', nulls: 'first' } },
       include: { _count: { select: { attendances: true, eventMembers: true } } },
     });
 
-    return res.json({ success: true, data: sessions });
+    return res.json({ success: true, data: sessions.map((s) => ({ ...s, gate: gateSummary(s) })) });
   } catch (err) {
     console.error('List class sessions error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi server' });

@@ -337,6 +337,63 @@ test('tạo buổi điểm danh dùng tên tuỳ chỉnh nếu có', async () =>
   assert.strictEqual(create.calls[0][0].data.name, 'Buổi 5 - Lập trình Web');
 });
 
+test('không đặt khung giờ nào → tự động mở điểm danh ngay khi tạo', async () => {
+  mockAuth();
+  mockClass();
+  const create = stubMethod(prisma.event, 'create', async ({ data }) => ({ id: 'evt-1', ...data }));
+  stubMethod(prisma.user, 'findMany', async () => []);
+  stubMethod(prisma.eventMember, 'createMany', async () => ({ count: 0 }));
+  stubMethod(prisma.attendance, 'createMany', async () => ({ count: 0 }));
+  stubMethod(prisma, '$transaction', async (ops) => Promise.all(ops));
+
+  const res = await request(app).post('/api/classes/cls-1/sessions')
+    .set('Authorization', `Bearer ${btcToken}`)
+    .send({ location: 'Phòng A101', gpsEnabled: false }); // không gửi giờ nào
+
+  assert.strictEqual(res.status, 201);
+  const created = create.calls[0][0].data;
+  assert.strictEqual(created.checkinOpen, null);
+  assert.strictEqual(created.checkinClose, null);
+  assert.strictEqual(created.checkinState, 'OPEN');
+  // Không có lịch để suy ra ngày → dùng ngày tạo cho tên mặc định.
+  assert.match(created.name, /SE1701 - Buổi điểm danh/);
+  assert.strictEqual(res.body.data.gate.checkin.open, true);
+});
+
+test('có đặt khung giờ thì vẫn theo lịch (AUTO), không tự mở', async () => {
+  mockAuth();
+  mockClass();
+  const create = stubMethod(prisma.event, 'create', async ({ data }) => ({ id: 'evt-1', ...data }));
+  stubMethod(prisma.user, 'findMany', async () => []);
+  stubMethod(prisma.eventMember, 'createMany', async () => ({ count: 0 }));
+  stubMethod(prisma.attendance, 'createMany', async () => ({ count: 0 }));
+  stubMethod(prisma, '$transaction', async (ops) => Promise.all(ops));
+
+  const res = await request(app).post('/api/classes/cls-1/sessions')
+    .set('Authorization', `Bearer ${btcToken}`)
+    .send(sessionBody());
+
+  assert.strictEqual(res.status, 201);
+  assert.strictEqual(create.calls[0][0].data.checkinState, 'AUTO');
+});
+
+test('BTC truyền checkinState rõ ràng thì ưu tiên hơn suy luận mặc định', async () => {
+  mockAuth();
+  mockClass();
+  const create = stubMethod(prisma.event, 'create', async ({ data }) => ({ id: 'evt-1', ...data }));
+  stubMethod(prisma.user, 'findMany', async () => []);
+  stubMethod(prisma.eventMember, 'createMany', async () => ({ count: 0 }));
+  stubMethod(prisma.attendance, 'createMany', async () => ({ count: 0 }));
+  stubMethod(prisma, '$transaction', async (ops) => Promise.all(ops));
+
+  const res = await request(app).post('/api/classes/cls-1/sessions')
+    .set('Authorization', `Bearer ${btcToken}`)
+    .send(sessionBody({ checkinState: 'CLOSED' }));
+
+  assert.strictEqual(res.status, 201);
+  assert.strictEqual(create.calls[0][0].data.checkinState, 'CLOSED');
+});
+
 test('tạo buổi điểm danh bật GPS mà thiếu toạ độ bị chặn 400', async () => {
   mockAuth();
   mockClass();

@@ -25,6 +25,14 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
+-- AUTO = theo khung giờ đã đặt (chưa đặt đủ giờ thì coi là ĐÓNG cho tới khi
+-- BTC bấm mở tay); OPEN/CLOSED = BTC chủ động mở/đóng, bỏ qua khung giờ.
+DO $$ BEGIN
+  CREATE TYPE "GateState" AS ENUM ('AUTO', 'OPEN', 'CLOSED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
 -- ============================================================
 -- BƯỚC 3: Tạo các bảng
 -- ============================================================
@@ -81,10 +89,14 @@ CREATE TABLE IF NOT EXISTS "attendance_events" (
   "lng"           DOUBLE PRECISION,
   "radius"        DOUBLE PRECISION NOT NULL DEFAULT 100,
   "gpsEnabled"    BOOLEAN          NOT NULL DEFAULT TRUE,
-  "checkinOpen"   TIMESTAMPTZ      NOT NULL,
-  "checkinClose"  TIMESTAMPTZ      NOT NULL,
-  "checkoutOpen"  TIMESTAMPTZ      NOT NULL,
-  "checkoutClose" TIMESTAMPTZ      NOT NULL,
+  -- Khung giờ là TUỲ CHỌN — BTC có thể bỏ trống và chủ động mở/đóng điểm danh
+  -- bằng checkinState/checkoutState thay vì đặt lịch trước.
+  "checkinOpen"   TIMESTAMPTZ,
+  "checkinClose"  TIMESTAMPTZ,
+  "checkoutOpen"  TIMESTAMPTZ,
+  "checkoutClose" TIMESTAMPTZ,
+  "checkinState"  "GateState"      NOT NULL DEFAULT 'AUTO',
+  "checkoutState" "GateState"      NOT NULL DEFAULT 'AUTO',
   "bannerUrl"     TEXT,
   "isWhitelisted" BOOLEAN          NOT NULL DEFAULT FALSE,
   "allowRegistration" BOOLEAN      NOT NULL DEFAULT TRUE,
@@ -122,6 +134,20 @@ DO $$ BEGIN
 EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
+
+-- Nút "Mở điểm danh" / "Đóng điểm danh": khung giờ hết bắt buộc + cờ mở/đóng
+-- thủ công. DB cũ có 4 cột giờ NOT NULL nên phải nới ràng buộc, không chỉ thêm cột.
+ALTER TABLE "attendance_events"
+  ALTER COLUMN "checkinOpen" DROP NOT NULL,
+  ALTER COLUMN "checkinClose" DROP NOT NULL,
+  ALTER COLUMN "checkoutOpen" DROP NOT NULL,
+  ALTER COLUMN "checkoutClose" DROP NOT NULL;
+
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "checkinState" "GateState" NOT NULL DEFAULT 'AUTO';
+
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "checkoutState" "GateState" NOT NULL DEFAULT 'AUTO';
 
 -- Bảng whitelist thành viên sự kiện
 CREATE TABLE IF NOT EXISTS "attendance_event_members" (

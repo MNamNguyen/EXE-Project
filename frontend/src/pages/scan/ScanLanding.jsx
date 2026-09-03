@@ -93,6 +93,8 @@ export default function ScanLanding() {
       ALREADY_CHECKED_OUT: 'Đã check-out',
       NOT_CHECKED_IN: 'Chưa check-in',
       OUTSIDE_TIME_WINDOW: 'Ngoài giờ',
+      ATTENDANCE_NOT_OPEN: 'Chưa mở điểm danh',
+      ATTENDANCE_CLOSED: 'Đã đóng điểm danh',
       DEVICE_NOT_BOUND: 'Thiết bị chưa xác thực',
       NOT_REGISTERED: 'Chưa đăng ký tham gia',
     };

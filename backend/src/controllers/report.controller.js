@@ -1,17 +1,23 @@
 const ExcelJS = require('exceljs');
 const prisma = require('../lib/prisma');
 const { loadEventForWrite } = require('../lib/eventAccess');
+const { attachmentHeader } = require('../lib/contentDisposition');
+const { buildAttendanceHtmlReport } = require('../services/htmlReport.service');
+
+async function loadAttendanceRows(eventId) {
+  return prisma.attendance.findMany({
+    where: { eventId },
+    include: { user: { select: { mssv: true, name: true, email: true, class: true, faculty: true } } },
+    orderBy: { checkinTime: 'asc' },
+  });
+}
 
 async function exportAttendance(req, res) {
   try {
     const event = await loadEventForWrite(req, res);
     if (!event) return;
 
-    const attendances = await prisma.attendance.findMany({
-      where: { eventId: req.params.id },
-      include: { user: { select: { mssv: true, name: true, email: true, class: true, faculty: true } } },
-      orderBy: { checkinTime: 'asc' },
-    });
+    const attendances = await loadAttendanceRows(req.params.id);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Điểm danh');
@@ -60,12 +66,32 @@ async function exportAttendance(req, res) {
     });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="diemdanh-${event.name.replace(/\s/g, '_')}.xlsx"`);
+    res.setHeader('Content-Disposition', attachmentHeader(`diemdanh-${event.name}`, 'xlsx'));
 
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
     console.error('Export error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi xuất báo cáo' });
+  }
+}
+
+// Báo cáo HTML tự chứa (biểu đồ SVG + danh sách tham gia + danh sách vắng) —
+// xem services/htmlReport.service.js. Tải về như một file .html độc lập,
+// mở được offline, không phụ thuộc server sau khi đã xuất.
+async function exportAttendanceHtml(req, res) {
+  try {
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
+
+    const attendances = await loadAttendanceRows(req.params.id);
+    const html = buildAttendanceHtmlReport(event, attendances);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', attachmentHeader(`baocao-${event.name}`, 'html'));
+    return res.send(html);
+  } catch (err) {
+    console.error('Export HTML error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi xuất báo cáo' });
   }
 }
@@ -88,4 +114,4 @@ async function getFraudLogs(req, res) {
   }
 }
 
-module.exports = { exportAttendance, getFraudLogs };
+module.exports = { exportAttendance, exportAttendanceHtml, getFraudLogs };

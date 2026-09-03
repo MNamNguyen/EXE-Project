@@ -402,11 +402,18 @@ function SessionsTab({ classId, className }) {
                 <QrCode size={18} className="text-primary-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-900 text-sm truncate">{s.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-gray-900 text-sm truncate">{s.name}</p>
+                  {s.gate?.checkin?.open && (
+                    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase">
+                      Đang mở
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                   <span className="text-xs text-gray-400 flex items-center gap-1"><MapPin size={11} /> {s.location}</span>
                   <span className="text-xs text-gray-400 flex items-center gap-1">
-                    <Clock size={11} /> {format(new Date(s.checkinOpen), 'HH:mm dd/MM/yyyy')}
+                    <Clock size={11} /> {s.checkinOpen ? format(new Date(s.checkinOpen), 'HH:mm dd/MM/yyyy') : 'Điểm danh thủ công'}
                   </span>
                   <span className="text-xs text-gray-400 flex items-center gap-1">
                     <Users size={11} /> {s._count?.attendances ?? 0} / {s._count?.eventMembers ?? 0} đã điểm danh

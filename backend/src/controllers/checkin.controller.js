@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const { validateToken } = require('../services/qr.service');
+const { resolveGate } = require('../lib/attendanceGate');
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -69,23 +70,35 @@ async function processCheckin(req, res) {
       }
     }
 
-    // 4. Validate time window
-    if (type === 'checkin') {
-      if (now < event.checkinOpen || now > event.checkinClose) {
+    // 4. Validate cổng điểm danh — theo lịch (AUTO) hoặc BTC mở/đóng thủ công.
+    const label = type === 'checkin' ? 'Check-in' : 'Check-out';
+    const gate = type === 'checkin'
+      ? resolveGate(event.checkinState, event.checkinOpen, event.checkinClose, now)
+      : resolveGate(event.checkoutState, event.checkoutOpen, event.checkoutClose, now);
+
+    if (!gate.open) {
+      const openAt = type === 'checkin' ? event.checkinOpen : event.checkoutOpen;
+      const closeAt = type === 'checkin' ? event.checkinClose : event.checkoutClose;
+
+      if (gate.reason === 'NOT_STARTED' || gate.reason === 'ENDED') {
         return res.status(400).json({
           success: false,
           error: 'OUTSIDE_TIME_WINDOW',
-          message: `Check-in chỉ mở từ ${event.checkinOpen.toLocaleTimeString('vi-VN')} đến ${event.checkinClose.toLocaleTimeString('vi-VN')}`,
+          message: `${label} chỉ mở từ ${openAt.toLocaleTimeString('vi-VN')} đến ${closeAt.toLocaleTimeString('vi-VN')}`,
         });
       }
-    } else {
-      if (now < event.checkoutOpen || now > event.checkoutClose) {
+      if (gate.reason === 'MANUALLY_CLOSED') {
         return res.status(400).json({
           success: false,
-          error: 'OUTSIDE_TIME_WINDOW',
-          message: `Check-out chỉ mở từ ${event.checkoutOpen.toLocaleTimeString('vi-VN')} đến ${event.checkoutClose.toLocaleTimeString('vi-VN')}`,
+          error: 'ATTENDANCE_CLOSED',
+          message: `${label} hiện đang đóng. Vui lòng chờ Ban tổ chức mở lại.`,
         });
       }
+      return res.status(400).json({
+        success: false,
+        error: 'ATTENDANCE_NOT_OPEN',
+        message: `${label} chưa được mở. Vui lòng chờ Ban tổ chức.`,
+      });
     }
 
     // 5. Validate GPS

@@ -56,11 +56,14 @@ export default function EventList() {
 
   const now = new Date();
 
+  // Trạng thái ưu tiên cổng điểm danh đã tính sẵn từ server (event.gate —
+  // phản ánh đúng cả trường hợp BTC mở/đóng thủ công, không chỉ theo lịch).
   const getStatus = (event) => {
-    const open = new Date(event.checkinOpen);
-    const close = new Date(event.checkoutClose);
-    if (now < open) return { label: 'Sắp diễn ra', variant: 'blue' };
-    if (now >= open && now <= close) return { label: 'Đang diễn ra', variant: 'green' };
+    if (event.gate?.checkin?.open || event.gate?.checkout?.open) {
+      return { label: 'Đang diễn ra', variant: 'green' };
+    }
+    if (!event.checkinOpen) return { label: 'Chưa đặt lịch', variant: 'blue' };
+    if (now < new Date(event.checkinOpen)) return { label: 'Sắp diễn ra', variant: 'blue' };
     return { label: 'Đã kết thúc', variant: 'gray' };
   };
 
@@ -116,7 +119,7 @@ export default function EventList() {
           <div className="grid gap-4 md:grid-cols-2">
             {events.map((event) => {
               const status = getStatus(event);
-              const checkinOpen = new Date(event.checkinOpen);
+              const checkinOpen = event.checkinOpen ? new Date(event.checkinOpen) : null;
               return (
                 <div key={event.id} className="card-hover group overflow-hidden">
                   <div className="p-5">
@@ -126,8 +129,14 @@ export default function EventList() {
                         <h3 className="font-bold text-gray-900 leading-snug line-clamp-2">{event.name}</h3>
                       </div>
                       <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-primary-50 flex flex-col items-center justify-center">
-                        <span className="text-xl font-bold text-primary-700 leading-none">{format(checkinOpen, 'dd')}</span>
-                        <span className="text-xs text-primary-500 uppercase">{format(checkinOpen, 'MMM', { locale: vi })}</span>
+                        {checkinOpen ? (
+                          <>
+                            <span className="text-xl font-bold text-primary-700 leading-none">{format(checkinOpen, 'dd')}</span>
+                            <span className="text-xs text-primary-500 uppercase">{format(checkinOpen, 'MMM', { locale: vi })}</span>
+                          </>
+                        ) : (
+                          <CalendarDays size={20} className="text-primary-300" />
+                        )}
                       </div>
                     </div>
 
@@ -138,7 +147,11 @@ export default function EventList() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Clock size={13} className="text-gray-400 flex-shrink-0" />
-                        <span>Check-in {format(checkinOpen, 'HH:mm')} — Checkout {format(new Date(event.checkoutClose), 'HH:mm')}</span>
+                        <span>
+                          {checkinOpen && event.checkoutClose
+                            ? `Check-in ${format(checkinOpen, 'HH:mm')} — Checkout ${format(new Date(event.checkoutClose), 'HH:mm')}`
+                            : 'Điểm danh thủ công (không đặt lịch)'}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Users size={13} className="text-gray-400 flex-shrink-0" />

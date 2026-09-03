@@ -9,7 +9,7 @@ import { eventApi } from '../../services/api';
 import { getCurrentPosition, GPS_ERROR_MESSAGES } from '../../utils/gps';
 import Layout from '../../components/layout/Layout';
 import Spinner from '../../components/ui/Spinner';
-import { toLocalInput, localInputToISO } from '../../utils/date';
+import { localInputToISO } from '../../utils/date';
 
 async function reverseGeocode(lat, lng) {
   try {
@@ -37,7 +37,9 @@ export default function EventCreate() {
     lng: '',
     radius: '100',
     gpsEnabled: true,
-    checkinOpen: toLocalInput(new Date().toISOString()),
+    // Để trống mặc định — khung giờ giờ là TUỲ CHỌN, BTC có thể chủ động
+    // "Mở điểm danh"/"Đóng điểm danh" ở trang chi tiết thay vì đặt lịch trước.
+    checkinOpen: '',
     checkinClose: '',
     checkoutOpen: '',
     checkoutClose: '',
@@ -70,8 +72,13 @@ export default function EventCreate() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.location || !form.checkinOpen || !form.checkinClose || !form.checkoutOpen || !form.checkoutClose) {
+    if (!form.name || !form.location) {
       return toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
+    }
+    const timeFields = [form.checkinOpen, form.checkinClose, form.checkoutOpen, form.checkoutClose];
+    const filledCount = timeFields.filter(Boolean).length;
+    if (filledCount > 0 && filledCount < 4) {
+      return toast.error('Vui lòng điền đủ cả 4 mốc giờ, hoặc để trống tất cả để tự mở/đóng điểm danh thủ công');
     }
     if (form.gpsEnabled && (!form.lat || !form.lng)) {
       return toast.error('Vui lòng lấy vị trí GPS hoặc tắt tính năng GPS');
@@ -80,10 +87,10 @@ export default function EventCreate() {
     try {
       const payload = {
         ...form,
-        checkinOpen: localInputToISO(form.checkinOpen),
-        checkinClose: localInputToISO(form.checkinClose),
-        checkoutOpen: localInputToISO(form.checkoutOpen),
-        checkoutClose: localInputToISO(form.checkoutClose),
+        checkinOpen: form.checkinOpen ? localInputToISO(form.checkinOpen) : null,
+        checkinClose: form.checkinClose ? localInputToISO(form.checkinClose) : null,
+        checkoutOpen: form.checkoutOpen ? localInputToISO(form.checkoutOpen) : null,
+        checkoutClose: form.checkoutClose ? localInputToISO(form.checkoutClose) : null,
       };
       const { data } = await eventApi.create(payload);
       toast.success('Tạo sự kiện thành công!');
@@ -140,9 +147,13 @@ export default function EventCreate() {
 
           {/* Time */}
           <div className="card p-5">
-            <h2 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <h2 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
               <Clock size={18} className="text-primary-600" /> Thời gian
             </h2>
+            <p className="text-xs text-gray-400 mb-4">
+              Tuỳ chọn — để trống nếu muốn chủ động bấm "Mở điểm danh" / "Đóng điểm danh" ở trang chi tiết sự kiện
+              thay vì đặt lịch cố định. Nếu đặt, phải điền đủ cả 4 mốc giờ.
+            </p>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { key: 'checkinOpen', label: 'Check-in mở' },
@@ -151,7 +162,7 @@ export default function EventCreate() {
                 { key: 'checkoutClose', label: 'Check-out đóng' },
               ].map(({ key, label }) => (
                 <div key={key}>
-                  <label className="label">{label} <span className="text-red-500">*</span></label>
+                  <label className="label">{label}</label>
                   <input className="input text-sm" type="datetime-local" value={form[key]} onChange={(e) => set(key, e.target.value)} />
                 </div>
               ))}

@@ -46,7 +46,7 @@ export default function MyAttendance() {
                       <h3 className="font-semibold text-gray-900 text-sm">{event.name}</h3>
                       <p className="text-xs text-gray-400 mt-0.5">{event.location}</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {format(new Date(event.checkinOpen), 'dd/MM/yyyy', { locale: vi })}
+                        {event.checkinOpen ? format(new Date(event.checkinOpen), 'dd/MM/yyyy', { locale: vi }) : 'Điểm danh thủ công'}
                       </p>
                     </div>
                     <Badge variant={variant}>{label}</Badge>

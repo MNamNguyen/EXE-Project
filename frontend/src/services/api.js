@@ -125,6 +125,7 @@ export const adminApi = {
 // Reports
 export const reportApi = {
   exportAttendance: (eventId) => api.get(`/api/reports/events/${eventId}/export`, { responseType: 'blob' }),
+  exportAttendanceHtml: (eventId) => api.get(`/api/reports/events/${eventId}/export-html`, { responseType: 'blob' }),
   getFraudLogs: (params) => api.get('/api/reports/fraud-logs', { params }),
 };
 

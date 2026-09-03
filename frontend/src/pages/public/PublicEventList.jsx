@@ -106,7 +106,7 @@ export default function PublicEventList() {
 }
 
 function EventCard({ event }) {
-  const start = new Date(event.checkinOpen);
+  const start = event.checkinOpen ? new Date(event.checkinOpen) : null;
 
   return (
     <Link
@@ -114,8 +114,14 @@ function EventCard({ event }) {
       className="card p-5 flex items-start gap-4 hover:shadow-card-hover hover:-translate-y-0.5 transition-all group"
     >
       <div className="w-14 h-14 rounded-2xl bg-primary-50 text-primary-700 flex flex-col items-center justify-center flex-shrink-0 gap-0.5">
-        <span className="text-lg font-extrabold leading-none">{format(start, 'dd')}</span>
-        <span className="uppercase text-[10px] font-bold">{format(start, 'MMM', { locale: vi })}</span>
+        {start ? (
+          <>
+            <span className="text-lg font-extrabold leading-none">{format(start, 'dd')}</span>
+            <span className="uppercase text-[10px] font-bold">{format(start, 'MMM', { locale: vi })}</span>
+          </>
+        ) : (
+          <CalendarDays size={20} />
+        )}
       </div>
 
       <div className="flex-1 min-w-0">
@@ -129,7 +135,7 @@ function EventCard({ event }) {
           </span>
           <span className="text-xs text-gray-500 flex items-center gap-1.5">
             <Clock size={12} className="text-gray-400" />
-            {format(start, 'HH:mm, dd/MM/yyyy')}
+            {start ? format(start, 'HH:mm, dd/MM/yyyy') : 'Điểm danh thủ công'}
           </span>
           <span className="text-xs text-gray-500 flex items-center gap-1.5">
             <Users size={12} className="text-gray-400" />

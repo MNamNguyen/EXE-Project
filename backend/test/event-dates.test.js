@@ -51,3 +51,103 @@ test('updateEvent rejects unparseable dates with 400', async () => {
   assert.strictEqual(res.status, 400);
   assert.strictEqual(updateStub.calls.length, 0);
 });
+
+// ── Khung giờ tuỳ chọn + mở/đóng điểm danh thủ công ─────────────
+
+test('createEvent không còn bắt buộc phải đặt khung giờ nào', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => ADMIN_USER);
+  const createStub = stubMethod(prisma.event, 'create', async ({ data }) => ({ id: 'e1', ...data }));
+
+  const res = await request(app).post('/api/events').set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Buổi học tự do', location: 'Phòng A101', gpsEnabled: false });
+
+  assert.strictEqual(res.status, 201);
+  const data = createStub.calls[0][0].data;
+  assert.strictEqual(data.checkinOpen, null);
+  assert.strictEqual(data.checkinClose, null);
+  assert.strictEqual(data.checkoutOpen, null);
+  assert.strictEqual(data.checkoutClose, null);
+  // Không truyền checkinState/checkoutState → mặc định AUTO (chờ mở tay).
+  assert.strictEqual(data.checkinState, 'AUTO');
+  assert.strictEqual(data.checkoutState, 'AUTO');
+});
+
+test('createEvent nhận checkinState/checkoutState để mở điểm danh thủ công ngay từ đầu', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => ADMIN_USER);
+  const createStub = stubMethod(prisma.event, 'create', async ({ data }) => ({ id: 'e1', ...data }));
+
+  const res = await request(app).post('/api/events').set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Buổi học', location: 'Phòng A101', gpsEnabled: false, checkinState: 'OPEN' });
+
+  assert.strictEqual(res.status, 201);
+  assert.strictEqual(createStub.calls[0][0].data.checkinState, 'OPEN');
+});
+
+test('createEvent bỏ qua giá trị checkinState không hợp lệ, rơi về AUTO', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => ADMIN_USER);
+  const createStub = stubMethod(prisma.event, 'create', async ({ data }) => ({ id: 'e1', ...data }));
+
+  const res = await request(app).post('/api/events').set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Buổi học', location: 'Phòng A101', gpsEnabled: false, checkinState: 'HACKED' });
+
+  assert.strictEqual(res.status, 201);
+  assert.strictEqual(createStub.calls[0][0].data.checkinState, 'AUTO');
+});
+
+test('nút "Mở điểm danh" gửi PUT chỉ checkinState mà không đụng trường khác', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => ADMIN_USER);
+  stubMethod(prisma.event, 'findUnique', async () => ({
+    id: 'evt-1', name: 'Event', createdById: 'admin-1', gpsEnabled: false, lat: null, lng: null,
+    checkinOpen: null, checkinClose: null, checkoutOpen: null, checkoutClose: null,
+    checkinState: 'AUTO', checkoutState: 'AUTO',
+  }));
+  const updateStub = stubMethod(prisma.event, 'update', async ({ data }) => ({ id: 'evt-1', ...data }));
+
+  const res = await request(app).put('/api/events/evt-1').set('Authorization', `Bearer ${token}`)
+    .send({ checkinState: 'OPEN' });
+
+  assert.strictEqual(res.status, 200);
+  const data = updateStub.calls[0][0].data;
+  assert.strictEqual(data.checkinState, 'OPEN');
+  assert.ok(!('name' in data));
+  assert.ok(!('checkinOpen' in data));
+  assert.strictEqual(res.body.data.gate.checkin.open, true);
+});
+
+test('nút "Đóng điểm danh" đóng dù đang trong khung giờ hợp lệ', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => ADMIN_USER);
+  const now = new Date();
+  stubMethod(prisma.event, 'findUnique', async () => ({
+    id: 'evt-1', name: 'Event', createdById: 'admin-1', gpsEnabled: false, lat: null, lng: null,
+    checkinOpen: new Date(now.getTime() - 3600e3), checkinClose: new Date(now.getTime() + 3600e3),
+    checkoutOpen: null, checkoutClose: null, checkinState: 'AUTO', checkoutState: 'AUTO',
+  }));
+  stubMethod(prisma.event, 'update', async ({ data }) => ({
+    id: 'evt-1', checkinOpen: new Date(now.getTime() - 3600e3), checkinClose: new Date(now.getTime() + 3600e3),
+    checkoutOpen: null, checkoutClose: null, checkoutState: 'AUTO', ...data,
+  }));
+
+  const res = await request(app).put('/api/events/evt-1').set('Authorization', `Bearer ${token}`)
+    .send({ checkinState: 'CLOSED' });
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.data.gate.checkin.open, false);
+  assert.strictEqual(res.body.data.gate.checkin.reason, 'MANUALLY_CLOSED');
+});
+
+test('getEvent trả kèm trạng thái cổng điểm danh đã tính sẵn', async () => {
+  const token2 = jwt.sign({ userId: 'admin-1' }, process.env.JWT_SECRET);
+  stubMethod(prisma.user, 'findUnique', async () => ADMIN_USER);
+  stubMethod(prisma.event, 'findUnique', async () => ({
+    id: 'evt-1', name: 'Event', createdById: 'admin-1', lat: 10.8, lng: 106.7, radius: 100,
+    checkinOpen: null, checkinClose: null, checkoutOpen: null, checkoutClose: null,
+    checkinState: 'AUTO', checkoutState: 'AUTO',
+    createdBy: { name: 'Admin', email: 'admin@b.c' }, _count: { attendances: 0, eventMembers: 0 },
+  }));
+
+  const res = await request(app).get('/api/events/evt-1').set('Authorization', `Bearer ${token2}`);
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.data.gate.checkin.open, false);
+  assert.strictEqual(res.body.data.gate.checkin.reason, 'NOT_OPENED');
+});

@@ -2,6 +2,8 @@ const prisma = require('../lib/prisma');
 const { generateToken, getExpiresIn } = require('../services/qr.service');
 const { loadEventForWrite } = require('../lib/eventAccess');
 const { addUsersToEvent, removeUserFromEvent } = require('../lib/eventMembership');
+const { parseEventDates, parseGateState } = require('../lib/parseOptionalDate');
+const { gateSummary } = require('../lib/attendanceGate');
 
 async function listEvents(req, res) {
   try {
@@ -28,7 +30,7 @@ async function listEvents(req, res) {
         where,
         skip,
         take: parseInt(limit),
-        orderBy: { checkinOpen: 'desc' },
+        orderBy: { checkinOpen: { sort: 'desc', nulls: 'last' } },
         include: {
           createdBy: { select: { name: true, email: true } },
           _count: { select: { attendances: true, eventMembers: true } },
@@ -52,14 +54,17 @@ async function listEvents(req, res) {
       prisma.event.count({ where }),
     ]);
 
-    // Phẳng hoá attendances[]/eventMembers[] → attendance + isRegistered cho frontend.
+    // Phẳng hoá attendances[]/eventMembers[] → attendance + isRegistered cho frontend,
+    // và đính kèm trạng thái cổng điểm danh đã tính sẵn (frontend không tự suy ra
+    // được vì không biết checkinState/checkoutState theo hành vi mở/đóng thủ công).
+    const withGate = (e) => ({ ...e, gate: gateSummary(e) });
     const data = role === 'STUDENT'
       ? events.map(({ attendances, eventMembers, ...rest }) => ({
-          ...rest,
+          ...withGate(rest),
           attendance: attendances?.[0] || null,
           isRegistered: (eventMembers?.length || 0) > 0,
         }))
-      : events;
+      : events.map(withGate);
 
     return res.json({ success: true, data, total, page: parseInt(page), limit: parseInt(limit) });
   } catch (err) {
@@ -73,16 +78,16 @@ async function createEvent(req, res) {
     const {
       name, description, location, lat, lng, radius,
       gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose,
+      checkinState, checkoutState,
       isWhitelisted, allowRegistration, memberIds,
     } = req.body;
 
-    const checkinOpenDate = new Date(checkinOpen);
-    const checkinCloseDate = new Date(checkinClose);
-    const checkoutOpenDate = new Date(checkoutOpen);
-    const checkoutCloseDate = new Date(checkoutClose);
-    if ([checkinOpenDate, checkinCloseDate, checkoutOpenDate, checkoutCloseDate]
-      .some((d) => Number.isNaN(d.getTime()))) {
-      return res.status(400).json({ success: false, message: 'Thời gian không hợp lệ' });
+    // Khung giờ là TUỲ CHỌN — BTC có thể bỏ trống và chủ động mở/đóng điểm danh
+    // bằng checkinState/checkoutState (nút "Mở điểm danh"/"Đóng điểm danh")
+    // thay vì bắt buộc đặt lịch trước.
+    const { value: dates, error: dateError } = parseEventDates({ checkinOpen, checkinClose, checkoutOpen, checkoutClose });
+    if (dateError) {
+      return res.status(400).json({ success: false, message: dateError });
     }
 
     const latVal = lat === undefined || lat === null || lat === '' ? null : Number(lat);
@@ -109,10 +114,12 @@ async function createEvent(req, res) {
         lng: lngVal,
         radius: radiusVal,
         gpsEnabled: gpsOn,
-        checkinOpen: checkinOpenDate,
-        checkinClose: checkinCloseDate,
-        checkoutOpen: checkoutOpenDate,
-        checkoutClose: checkoutCloseDate,
+        checkinOpen: dates.checkinOpen,
+        checkinClose: dates.checkinClose,
+        checkoutOpen: dates.checkoutOpen,
+        checkoutClose: dates.checkoutClose,
+        checkinState: parseGateState(checkinState),
+        checkoutState: parseGateState(checkoutState),
         isWhitelisted: isWhitelisted || false,
         allowRegistration: allowRegistration !== false,
         createdById: req.user.id,
@@ -151,7 +158,7 @@ async function getEvent(req, res) {
       event.radius = null;
     }
 
-    return res.json({ success: true, data: event });
+    return res.json({ success: true, data: { ...event, gate: gateSummary(event) } });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Lỗi server' });
   }
@@ -169,6 +176,7 @@ async function updateEvent(req, res) {
     const {
       name, description, location, lat, lng, radius,
       gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose,
+      checkinState, checkoutState,
       isWhitelisted, allowRegistration,
     } = req.body;
 
@@ -216,10 +224,15 @@ async function updateEvent(req, res) {
         ...(dateVals.checkoutClose && { checkoutClose: dateVals.checkoutClose }),
         ...(isWhitelisted !== undefined && { isWhitelisted }),
         ...(allowRegistration !== undefined && { allowRegistration }),
+        // Đây là cách nút "Mở điểm danh" / "Đóng điểm danh" trên EventDetail
+        // hoạt động — gửi PUT chỉ với checkinState (hoặc checkoutState) mà
+        // không cần đụng tới các trường khác.
+        ...(checkinState !== undefined && { checkinState: parseGateState(checkinState) }),
+        ...(checkoutState !== undefined && { checkoutState: parseGateState(checkoutState) }),
       },
     });
 
-    return res.json({ success: true, data: updated });
+    return res.json({ success: true, data: { ...updated, gate: gateSummary(updated) } });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Lỗi server' });
   }

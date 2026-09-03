@@ -58,8 +58,10 @@ export default function StudentDashboard() {
     }
   };
 
-  const upcoming = events.filter((e) => new Date(e.checkinOpen) >= new Date());
-  const past     = events.filter((e) => new Date(e.checkinOpen) < new Date());
+  // Sự kiện không đặt lịch (checkinOpen null, điểm danh thủ công) luôn coi là
+  // "sắp diễn ra" — không có ngày để so sánh nên không thể xếp vào "đã qua".
+  const upcoming = events.filter((e) => !e.checkinOpen || new Date(e.checkinOpen) >= new Date());
+  const past     = events.filter((e) => e.checkinOpen && new Date(e.checkinOpen) < new Date());
 
   return (
     <Layout>
@@ -271,13 +273,16 @@ function EmptyState({ icon: Icon, title, desc, action }) {
 }
 
 function EventCard({ event, past, isAdminOrBtc, onRegister, registering }) {
-  const checkinOpen  = new Date(event.checkinOpen);
-  const checkinClose = new Date(event.checkinClose);
+  const checkinOpen  = event.checkinOpen ? new Date(event.checkinOpen) : null;
+  const checkinClose = event.checkinClose ? new Date(event.checkinClose) : null;
   const now          = new Date();
-  const isLive       = now >= checkinOpen && now <= checkinClose;
-  // Sinh viên chỉ thấy nút đăng ký khi sự kiện còn mở đăng ký và chưa có tên trong danh sách.
+  // Trạng thái LIVE lấy từ server (event.gate — phản ánh cả trường hợp BTC mở
+  // thủ công không đặt lịch), không tự suy luận theo giờ như trước.
+  const isLive       = Boolean(event.gate?.checkin?.open || event.gate?.checkout?.open);
+  // Sinh viên chỉ thấy nút đăng ký khi sự kiện còn mở đăng ký, chưa có tên
+  // trong danh sách, và chưa quá hạn đăng ký (không có hạn thì luôn còn mở).
   const canRegister  = !isAdminOrBtc && onRegister
-    && event.allowRegistration !== false && !event.isRegistered && now <= checkinClose;
+    && event.allowRegistration !== false && !event.isRegistered && (!checkinClose || now <= checkinClose);
 
   return (
     <div className={`card p-4 transition-all ${past ? 'opacity-60' : 'hover:shadow-card-hover'}`}>
@@ -290,8 +295,14 @@ function EventCard({ event, past, isAdminOrBtc, onRegister, registering }) {
           : past    ? 'bg-gray-100 text-gray-400'
                     : 'bg-primary-50 text-primary-700'}
         `}>
-          <span className="text-[17px] font-extrabold">{format(checkinOpen, 'dd')}</span>
-          <span className="uppercase text-[10px]">{format(checkinOpen, 'MMM', { locale: vi })}</span>
+          {checkinOpen ? (
+            <>
+              <span className="text-[17px] font-extrabold">{format(checkinOpen, 'dd')}</span>
+              <span className="uppercase text-[10px]">{format(checkinOpen, 'MMM', { locale: vi })}</span>
+            </>
+          ) : (
+            <CalendarDays size={18} />
+          )}
         </div>
 
         {/* Info */}
@@ -314,7 +325,9 @@ function EventCard({ event, past, isAdminOrBtc, onRegister, registering }) {
             </p>
             <p className="text-xs text-gray-400 flex items-center gap-1">
               <Clock size={11} />
-              {format(checkinOpen, 'HH:mm')} – {format(checkinClose, 'HH:mm')}
+              {checkinOpen && checkinClose
+                ? `${format(checkinOpen, 'HH:mm')} – ${format(checkinClose, 'HH:mm')}`
+                : 'Điểm danh thủ công'}
             </p>
           </div>
         </div>

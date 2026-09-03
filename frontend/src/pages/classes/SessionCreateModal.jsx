@@ -8,13 +8,20 @@ import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 
 function defaultForm() {
-  const now = new Date();
-  const plus = (mins) => toLocalInput(new Date(now.getTime() + mins * 60000).toISOString());
   return {
     name: '',
     location: '',
     lat: '', lng: '', radius: '100', gpsEnabled: false,
-    // Mặc định cửa sổ 15 phút để check-in, mở check-out ngay sau đó tới hết buổi.
+    // Mặc định để trống — buổi học không cần đặt lịch, tạo xong là mở điểm
+    // danh ngay (xem backend: không có giờ nào thì checkinState tự thành OPEN).
+    checkinOpen: '', checkinClose: '', checkoutOpen: '', checkoutClose: '',
+  };
+}
+
+function scheduleDefaults() {
+  const now = new Date();
+  const plus = (mins) => toLocalInput(new Date(now.getTime() + mins * 60000).toISOString());
+  return {
     checkinOpen: toLocalInput(now.toISOString()),
     checkinClose: plus(15),
     checkoutOpen: plus(15),
@@ -24,6 +31,7 @@ function defaultForm() {
 
 export default function SessionCreateModal({ open, classId, className, onClose, onCreated }) {
   const [form, setForm] = useState(defaultForm());
+  const [useSchedule, setUseSchedule] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -32,8 +40,19 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
   // Modal không unmount khi đóng — reset lại form mỗi lần mở để không giữ dữ
   // liệu buổi trước (địa điểm, giờ, GPS...) sang buổi mới.
   useEffect(() => {
-    if (open) setForm(defaultForm());
+    if (open) { setForm(defaultForm()); setUseSchedule(false); }
   }, [open]);
+
+  // Bật "Đặt lịch cố định" thì gợi ý sẵn khung giờ hợp lý; tắt thì xoá sạch để
+  // không lỡ gửi giờ cũ lên server.
+  const toggleSchedule = () => {
+    const next = !useSchedule;
+    setUseSchedule(next);
+    setForm((f) => ({
+      ...f,
+      ...(next ? scheduleDefaults() : { checkinOpen: '', checkinClose: '', checkoutOpen: '', checkoutClose: '' }),
+    }));
+  };
 
   const handleDetectLocation = async () => {
     setGpsLoading(true);
@@ -51,8 +70,8 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.location.trim()) return toast.error('Vui lòng nhập địa điểm');
-    if (!form.checkinOpen || !form.checkinClose || !form.checkoutOpen || !form.checkoutClose) {
-      return toast.error('Vui lòng điền đầy đủ thời gian');
+    if (useSchedule && (!form.checkinOpen || !form.checkinClose || !form.checkoutOpen || !form.checkoutClose)) {
+      return toast.error('Đã bật đặt lịch cố định thì cần điền đầy đủ cả 4 mốc giờ');
     }
     if (form.gpsEnabled && (!form.lat || !form.lng)) {
       return toast.error('Vui lòng lấy vị trí GPS hoặc tắt tính năng GPS');
@@ -62,10 +81,10 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
       const payload = {
         ...form,
         name: form.name.trim() || undefined,
-        checkinOpen: localInputToISO(form.checkinOpen),
-        checkinClose: localInputToISO(form.checkinClose),
-        checkoutOpen: localInputToISO(form.checkoutOpen),
-        checkoutClose: localInputToISO(form.checkoutClose),
+        checkinOpen: useSchedule ? localInputToISO(form.checkinOpen) : null,
+        checkinClose: useSchedule ? localInputToISO(form.checkinClose) : null,
+        checkoutOpen: useSchedule ? localInputToISO(form.checkoutOpen) : null,
+        checkoutClose: useSchedule ? localInputToISO(form.checkoutClose) : null,
       };
       const { data } = await classApi.createSession(classId, payload);
       onCreated?.(data.data);
@@ -89,7 +108,9 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
             <Info size={15} className="text-primary-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-primary-800 leading-relaxed">
               Toàn bộ sinh viên đang hoạt động của lớp <strong>{className}</strong> sẽ tự động được thêm vào danh sách
-              tham gia. Sau khi tạo, màn hình QR sẽ mở ngay để bắt đầu điểm danh.
+              tham gia. {useSchedule
+                ? 'Điểm danh sẽ mở/đóng đúng theo khung giờ bên dưới.'
+                : 'Không đặt lịch, điểm danh sẽ MỞ NGAY sau khi tạo — bạn có thể bấm đóng thủ công bất cứ lúc nào ở trang chi tiết.'}
             </p>
           </div>
 
@@ -108,22 +129,37 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
-              <Clock size={16} className="text-primary-600" /> Thời gian
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: 'checkinOpen', label: 'Check-in mở' },
-                { key: 'checkinClose', label: 'Check-in đóng' },
-                { key: 'checkoutOpen', label: 'Check-out mở' },
-                { key: 'checkoutClose', label: 'Check-out đóng' },
-              ].map(({ key, label }) => (
-                <div key={key}>
-                  <label className="label">{label} <span className="text-red-500">*</span></label>
-                  <input className="input text-sm" type="datetime-local" value={form[key]} onChange={(e) => set(key, e.target.value)} />
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
+                <Clock size={16} className="text-primary-600" /> Đặt lịch cố định
+              </h3>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-sm text-gray-600">{useSchedule ? 'Bật' : 'Tắt'}</span>
+                <div onClick={toggleSchedule}
+                  className={`w-11 h-6 rounded-full transition-colors cursor-pointer relative ${useSchedule ? 'bg-primary-600' : 'bg-gray-200'}`}>
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${useSchedule ? 'translate-x-6' : 'translate-x-1'}`} />
                 </div>
-              ))}
+              </label>
             </div>
+            {useSchedule ? (
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { key: 'checkinOpen', label: 'Check-in mở' },
+                  { key: 'checkinClose', label: 'Check-in đóng' },
+                  { key: 'checkoutOpen', label: 'Check-out mở' },
+                  { key: 'checkoutClose', label: 'Check-out đóng' },
+                ].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="label">{label} <span className="text-red-500">*</span></label>
+                    <input className="input text-sm" type="datetime-local" value={form[key]} onChange={(e) => set(key, e.target.value)} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
+                Điểm danh mở ngay khi tạo, không giới hạn giờ. Bật lên nếu buổi học có giờ bắt đầu/kết thúc cố định.
+              </p>
+            )}
           </div>
 
           <div>

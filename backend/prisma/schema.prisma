@@ -46,31 +46,46 @@ enum Role {
   STUDENT
 }
 
+// Trạng thái cổng điểm danh (check-in hoặc check-out) của một sự kiện.
+// AUTO   — theo khung giờ đã đặt (checkinOpen/Close hoặc checkoutOpen/Close);
+//          nếu chưa đặt giờ thì coi như ĐÓNG cho tới khi BTC bấm mở tay.
+// OPEN   — BTC chủ động mở, bỏ qua khung giờ hoàn toàn.
+// CLOSED — BTC chủ động đóng, bỏ qua khung giờ hoàn toàn.
+enum GateState {
+  AUTO
+  OPEN
+  CLOSED
+}
+
 model Event {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   name              String
   description       String?
   location          String
   lat               Float?
   lng               Float?
-  radius            Float    @default(100)
-  gpsEnabled        Boolean  @default(true)
-  checkinOpen       DateTime
-  checkinClose      DateTime
-  checkoutOpen      DateTime
-  checkoutClose     DateTime
+  radius            Float     @default(100)
+  gpsEnabled        Boolean   @default(true)
+  // Khung giờ điểm danh giờ là TUỲ CHỌN — BTC có thể bỏ trống và chủ động
+  // mở/đóng bằng checkinState/checkoutState thay vì phải đặt lịch trước.
+  checkinOpen       DateTime?
+  checkinClose      DateTime?
+  checkoutOpen      DateTime?
+  checkoutClose     DateTime?
+  checkinState      GateState @default(AUTO)
+  checkoutState     GateState @default(AUTO)
   bannerUrl         String?
-  isWhitelisted     Boolean  @default(false)
+  isWhitelisted     Boolean   @default(false)
   // Cho phép người ngoài tự đăng ký tham gia qua link công khai /dang-ky/:id.
-  allowRegistration Boolean  @default(true)
-  isActive          Boolean  @default(true)
+  allowRegistration Boolean   @default(true)
+  isActive          Boolean   @default(true)
   createdById       String
   // Gắn với Class khi sự kiện này là một buổi điểm danh của lớp (tạo qua
   // /api/classes/:id/sessions) — null với sự kiện thường. Xoá lớp không xoá
   // theo lịch sử buổi học nên dùng SetNull thay vì Cascade/Restrict.
   classId           String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   createdBy    User          @relation("EventCreator", fields: [createdById], references: [id])
   class        Class?        @relation(fields: [classId], references: [id], onDelete: SetNull)

@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import {
   QrCode, Download, Search, Users, CheckCircle, LogOut,
   RefreshCw, ExternalLink, UserCheck, ChevronLeft, ChevronRight,
-  Pencil, UserPlus, Link2, TicketCheck,
+  Pencil, UserPlus, Link2, TicketCheck, PlayCircle, StopCircle,
+  FileCode2, Circle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -28,6 +29,8 @@ export default function EventDetail() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [exportingHtml, setExportingHtml] = useState(false);
+  const [gateLoading, setGateLoading] = useState(null); // 'checkin' | 'checkout' | null
   const [manualModal, setManualModal] = useState(false);
   const [manualUser, setManualUser] = useState('');
   const [manualType, setManualType] = useState('checkin');
@@ -74,20 +77,56 @@ export default function EventDetail() {
     loadAttendance(p);
   };
 
+  const downloadBlob = (data, mime, filename) => {
+    const url = URL.createObjectURL(new Blob([data], { type: mime }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleExport = async () => {
     setExporting(true);
     try {
       const { data } = await reportApi.exportAttendance(id);
-      const url = URL.createObjectURL(new Blob([data]));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `diemdanh-${event.name}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', `diemdanh-${event.name}.xlsx`);
     } catch {
       toast.error('Xuất báo cáo thất bại');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleExportHtml = async () => {
+    setExportingHtml(true);
+    try {
+      const { data } = await reportApi.exportAttendanceHtml(id);
+      downloadBlob(data, 'text/html', `baocao-${event.name}.html`);
+    } catch {
+      toast.error('Xuất báo cáo thất bại');
+    } finally {
+      setExportingHtml(false);
+    }
+  };
+
+  // Nút "Mở điểm danh" / "Đóng điểm danh" — chủ động điều khiển cổng check-in
+  // hoặc check-out mà không cần đặt trước giờ bắt đầu/kết thúc.
+  const handleSetGate = async (type, state) => {
+    setGateLoading(type);
+    try {
+      const field = type === 'checkin' ? 'checkinState' : 'checkoutState';
+      const { data } = await eventApi.update(id, { [field]: state });
+      setEvent((e) => ({ ...e, [field]: data.data[field], gate: data.data.gate }));
+      toast.success(
+        state === 'OPEN'
+          ? `Đã mở ${type === 'checkin' ? 'điểm danh' : 'check-out'}`
+          : `Đã đóng ${type === 'checkin' ? 'điểm danh' : 'check-out'}`
+      );
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Thao tác thất bại');
+    } finally {
+      setGateLoading(null);
     }
   };
 
@@ -148,6 +187,11 @@ export default function EventDetail() {
               {exporting ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <Download size={16} />}
               Xuất Excel
             </button>
+            <button onClick={handleExportHtml} disabled={exportingHtml}
+              className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
+              {exportingHtml ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <FileCode2 size={16} />}
+              Báo cáo HTML
+            </button>
             <button onClick={() => setManualModal(true)}
               className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
               <UserCheck size={16} /> Check-in thủ công
@@ -171,6 +215,25 @@ export default function EventDetail() {
       </div>
 
       <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
+        {/* Điều khiển cổng điểm danh — mở/đóng thủ công, không cần đặt lịch */}
+        <div className="card p-4 space-y-3">
+          <GateControlRow
+            label="Điểm danh (check-in)"
+            gate={event.gate?.checkin}
+            loading={gateLoading === 'checkin'}
+            onOpen={() => handleSetGate('checkin', 'OPEN')}
+            onClose={() => handleSetGate('checkin', 'CLOSED')}
+          />
+          <div className="border-t border-border" />
+          <GateControlRow
+            label="Check-out"
+            gate={event.gate?.checkout}
+            loading={gateLoading === 'checkout'}
+            onOpen={() => handleSetGate('checkout', 'OPEN')}
+            onClose={() => handleSetGate('checkout', 'CLOSED')}
+          />
+        </div>
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {statCards.map(({ label, value, icon: Icon, color }) => (
@@ -338,5 +401,44 @@ export default function EventDetail() {
         onChanged={() => { reloadEvent(); loadAttendance(page); }}
       />
     </Layout>
+  );
+}
+
+// Một hàng điều khiển cổng điểm danh: trạng thái hiện tại (tính sẵn từ server,
+// xem attendanceGate.js) + hai nút Mở/Đóng ghi đè hoàn toàn khung giờ đã đặt
+// (nếu có) — BTC không cần huỷ lịch để chủ động mở/đóng.
+function GateControlRow({ label, gate, loading, onOpen, onClose }) {
+  const isOpen = gate?.open;
+  const statusText = {
+    MANUALLY_OPEN: 'Đang mở (thủ công)',
+    MANUALLY_CLOSED: 'Đang đóng (thủ công)',
+    SCHEDULED: 'Đang mở (theo lịch)',
+    NOT_STARTED: 'Chưa tới giờ mở',
+    ENDED: 'Đã hết giờ',
+    NOT_OPENED: 'Chưa mở',
+  }[gate?.reason] || '—';
+
+  return (
+    <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${
+          isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+        }`}>
+          <Circle size={7} className={isOpen ? 'fill-emerald-500 text-emerald-500' : 'fill-gray-400 text-gray-400'} />
+          {statusText}
+        </span>
+        <p className="text-sm font-medium text-gray-700 truncate">{label}</p>
+      </div>
+      <div className="flex gap-2 flex-shrink-0">
+        <button onClick={onOpen} disabled={loading}
+          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50">
+          {loading ? <Spinner size="sm" /> : <PlayCircle size={14} />} Mở
+        </button>
+        <button onClick={onClose} disabled={loading}
+          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50">
+          {loading ? <Spinner size="sm" /> : <StopCircle size={14} />} Đóng
+        </button>
+      </div>
+    </div>
   );
 }

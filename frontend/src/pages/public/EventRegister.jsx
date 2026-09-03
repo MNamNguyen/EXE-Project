@@ -220,8 +220,8 @@ function Field({ icon: Icon, label, required, children }) {
 }
 
 function EventSummary({ event }) {
-  const start = new Date(event.checkinOpen);
-  const end = new Date(event.checkinClose);
+  const start = event.checkinOpen ? new Date(event.checkinOpen) : null;
+  const end = event.checkinClose ? new Date(event.checkinClose) : null;
 
   return (
     <div className="card overflow-hidden">
@@ -236,8 +236,14 @@ function EventSummary({ event }) {
           <p className="text-sm text-gray-500 leading-relaxed">{event.description}</p>
         )}
         <InfoRow icon={MapPin} label="Địa điểm" value={event.location} />
-        <InfoRow icon={CalendarDays} label="Ngày" value={format(start, 'EEEE, dd/MM/yyyy', { locale: vi })} />
-        <InfoRow icon={Clock} label="Check-in" value={`${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`} />
+        {start ? (
+          <>
+            <InfoRow icon={CalendarDays} label="Ngày" value={format(start, 'EEEE, dd/MM/yyyy', { locale: vi })} />
+            <InfoRow icon={Clock} label="Check-in" value={end ? `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}` : format(start, 'HH:mm')} />
+          </>
+        ) : (
+          <InfoRow icon={Clock} label="Thời gian" value="Ban tổ chức sẽ chủ động mở điểm danh" />
+        )}
         <InfoRow icon={Users} label="Đã đăng ký" value={`${event._count?.eventMembers ?? 0} người`} />
       </div>
     </div>
@@ -278,7 +284,7 @@ function SuccessCard({ event, result, loggedIn }) {
           <p className="text-sm font-semibold text-gray-900">{event.name}</p>
           <p className="text-xs text-gray-500">{event.location}</p>
           <p className="text-xs text-gray-500">
-            {format(new Date(event.checkinOpen), "HH:mm 'ngày' dd/MM/yyyy")}
+            {event.checkinOpen ? format(new Date(event.checkinOpen), "HH:mm 'ngày' dd/MM/yyyy") : 'Ban tổ chức sẽ chủ động mở điểm danh'}
           </p>
           <p className="text-xs text-gray-400 pt-1">Người tham dự: {result.name} · {result.email}</p>
         </div>

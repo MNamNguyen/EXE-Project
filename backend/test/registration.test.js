@@ -306,7 +306,22 @@ test('danh sách công khai chỉ lấy sự kiện đang mở đăng ký và ch
   const where = findMany.calls[0][0].where;
   assert.strictEqual(where.isActive, true);
   assert.strictEqual(where.allowRegistration, true);
-  assert.ok(where.checkinClose.gte instanceof Date);
+  // checkinClose là tuỳ chọn — sự kiện chưa đặt hạn (null) vẫn phải được liệt kê.
+  assert.deepStrictEqual(where.OR[0], { checkinClose: null });
+  assert.ok(where.OR[1].checkinClose.gte instanceof Date);
+});
+
+test('sự kiện không đặt hạn đăng ký (checkinClose null) vẫn coi là đang mở', async () => {
+  mockEvent({ checkinClose: null, allowRegistration: true });
+  stubMethod(prisma.user, 'findMany', async () => []);
+  stubMethod(prisma.user, 'create', async () => ({ id: 'u-new', email: 'a@fpt.edu.vn', mssv: 'SE170001', name: 'A', isActive: true }));
+  const { createMany } = mockJoin();
+  mockEmailOk();
+
+  const res = await post();
+
+  assert.strictEqual(res.status, 201);
+  assert.strictEqual(createMany.calls.length, 1);
 });
 
 // ── Tự đăng ký khi đã đăng nhập ────────────────────────────────
