@@ -2,7 +2,7 @@ import { NavLink, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   LayoutDashboard, CalendarDays, Users,
-  LogOut, ShieldCheck, X,
+  LogOut, ShieldCheck, X, GraduationCap,
 } from 'lucide-react';
 
 const navItems = {
@@ -13,6 +13,7 @@ const navItems = {
   BTC: [
     { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/events',       icon: CalendarDays,    label: 'Quản lý sự kiện' },
+    { to: '/classes',      icon: GraduationCap,   label: 'Quản lý lớp' },
     { to: '/reports/fraud', icon: ShieldCheck,    label: 'Log gian lận' },
   ],
   LECTURER: [
@@ -22,6 +23,7 @@ const navItems = {
   ADMIN: [
     { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/events',        icon: CalendarDays,    label: 'Quản lý sự kiện' },
+    { to: '/classes',       icon: GraduationCap,   label: 'Quản lý lớp' },
     { to: '/admin/users',   icon: Users,           label: 'Quản lý người dùng' },
     { to: '/reports/fraud', icon: ShieldCheck,     label: 'Log gian lận' },
   ],

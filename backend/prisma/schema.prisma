@@ -9,21 +9,21 @@ datasource db {
 }
 
 model User {
-  id             String   @id @default(cuid())
-  mssv           String?  @unique
-  email          String   @unique
-  name           String
-  role           Role     @default(STUDENT)
-  passwordHash   String
-  class          String?
-  faculty        String?
-  phone          String?
-  isFirstLogin   Boolean  @default(true)
-  isActive       Boolean  @default(true)
-  failedLoginAttempts Int      @default(0)
-  lockedUntil        DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  mssv                String?   @unique
+  email               String    @unique
+  name                String
+  role                Role      @default(STUDENT)
+  passwordHash        String
+  class               String?
+  faculty             String?
+  phone               String?
+  isFirstLogin        Boolean   @default(true)
+  isActive            Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   deviceBindings DeviceBinding[]
   otpTokens      OtpToken[]
@@ -31,6 +31,7 @@ model User {
   attendances    Attendance[]
   fraudLogs      FraudLog[]
   eventMembers   EventMember[]
+  createdClasses Class[]         @relation("ClassCreator")
 
   @@index([role])
   @@index([isActive])
@@ -46,28 +47,33 @@ enum Role {
 }
 
 model Event {
-  id             String   @id @default(cuid())
-  name           String
-  description    String?
-  location       String
-  lat            Float?
-  lng            Float?
-  radius         Float    @default(100)
-  gpsEnabled     Boolean  @default(true)
-  checkinOpen    DateTime
-  checkinClose   DateTime
-  checkoutOpen   DateTime
-  checkoutClose  DateTime
-  bannerUrl      String?
-  isWhitelisted  Boolean  @default(false)
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  location          String
+  lat               Float?
+  lng               Float?
+  radius            Float    @default(100)
+  gpsEnabled        Boolean  @default(true)
+  checkinOpen       DateTime
+  checkinClose      DateTime
+  checkoutOpen      DateTime
+  checkoutClose     DateTime
+  bannerUrl         String?
+  isWhitelisted     Boolean  @default(false)
   // Cho phép người ngoài tự đăng ký tham gia qua link công khai /dang-ky/:id.
-  allowRegistration Boolean @default(true)
-  isActive       Boolean  @default(true)
-  createdById    String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  allowRegistration Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  createdById       String
+  // Gắn với Class khi sự kiện này là một buổi điểm danh của lớp (tạo qua
+  // /api/classes/:id/sessions) — null với sự kiện thường. Xoá lớp không xoá
+  // theo lịch sử buổi học nên dùng SetNull thay vì Cascade/Restrict.
+  classId           String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   createdBy    User          @relation("EventCreator", fields: [createdById], references: [id])
+  class        Class?        @relation(fields: [classId], references: [id], onDelete: SetNull)
   attendances  Attendance[]
   fraudLogs    FraudLog[]
   eventMembers EventMember[]
@@ -79,7 +85,28 @@ model Event {
   @@index([isActive, checkinOpen])
   @@index([isActive, isWhitelisted])
   @@index([isActive, allowRegistration, checkinClose])
+  @@index([classId])
   @@map("attendance_events")
+}
+
+// Đơn vị lớp học chính thức (tách khỏi User.class là chuỗi tự do) để BTC/Admin
+// có thể tạo, đổi tên và quản lý danh sách lớp thay vì chỉnh từng sinh viên.
+// User.class vẫn là chuỗi — Class.name là "nguồn sự thật" cho tên lớp; đổi tên
+// một Class sẽ cập nhật lại chuỗi này trên mọi thành viên (xem class.controller).
+model Class {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User    @relation("ClassCreator", fields: [createdById], references: [id])
+  sessions  Event[]
+
+  @@index([isActive])
+  @@map("attendance_classes")
 }
 
 model EventMember {

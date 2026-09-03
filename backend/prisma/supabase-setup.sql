@@ -47,6 +47,30 @@ CREATE TABLE IF NOT EXISTS "attendance_users" (
   CONSTRAINT "attendance_users_pkey" PRIMARY KEY ("id")
 );
 
+-- Bảng lớp học (đơn vị chính thức, tách khỏi cột "class" dạng chuỗi tự do
+-- trên attendance_users). Tạo trước attendance_events vì event tham chiếu tới đây.
+CREATE TABLE IF NOT EXISTS "attendance_classes" (
+  "id"          TEXT        NOT NULL,
+  "name"        TEXT        NOT NULL,
+  "description" TEXT,
+  "isActive"    BOOLEAN     NOT NULL DEFAULT TRUE,
+  "createdById" TEXT        NOT NULL,
+  "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "attendance_classes_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_classes_createdById_fkey"
+    FOREIGN KEY ("createdById")
+    REFERENCES "attendance_users"("id")
+    ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+DO $$ BEGIN
+  ALTER TABLE "attendance_classes"
+    ADD CONSTRAINT "attendance_classes_name_key" UNIQUE ("name");
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
 -- Bảng sự kiện
 CREATE TABLE IF NOT EXISTS "attendance_events" (
   "id"            TEXT             NOT NULL,
@@ -66,19 +90,38 @@ CREATE TABLE IF NOT EXISTS "attendance_events" (
   "allowRegistration" BOOLEAN      NOT NULL DEFAULT TRUE,
   "isActive"      BOOLEAN          NOT NULL DEFAULT TRUE,
   "createdById"   TEXT             NOT NULL,
+  -- Gắn với attendance_classes khi sự kiện này là một buổi điểm danh của lớp
+  -- (tạo qua /api/classes/:id/sessions) — NULL với sự kiện thường.
+  "classId"       TEXT,
   "createdAt"     TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
   "updatedAt"     TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
   CONSTRAINT "attendance_events_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "attendance_events_createdById_fkey"
     FOREIGN KEY ("createdById")
     REFERENCES "attendance_users"("id")
-    ON DELETE RESTRICT ON UPDATE CASCADE
+    ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "attendance_events_classId_fkey"
+    FOREIGN KEY ("classId")
+    REFERENCES "attendance_classes"("id")
+    ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- CREATE TABLE IF NOT EXISTS ở trên bỏ qua bảng đã tồn tại, nên DB đang chạy cần
 -- ALTER để có cột mới. Idempotent: chạy lại file này nhiều lần vẫn an toàn.
 ALTER TABLE "attendance_events"
   ADD COLUMN IF NOT EXISTS "allowRegistration" BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "classId" TEXT;
+
+DO $$ BEGIN
+  ALTER TABLE "attendance_events"
+    ADD CONSTRAINT "attendance_events_classId_fkey"
+    FOREIGN KEY ("classId") REFERENCES "attendance_classes"("id")
+    ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Bảng whitelist thành viên sự kiện
 CREATE TABLE IF NOT EXISTS "attendance_event_members" (
@@ -244,6 +287,14 @@ CREATE INDEX IF NOT EXISTS "idx_events_isActive_isWhitelisted"
 -- Query danh sách sự kiện công khai đang mở đăng ký (/api/public/events)
 CREATE INDEX IF NOT EXISTS "idx_events_isActive_allowRegistration_checkinClose"
   ON "attendance_events"("isActive", "allowRegistration", "checkinClose");
+
+-- FK lookup + liệt kê buổi điểm danh theo lớp (/api/classes/:id/sessions)
+CREATE INDEX IF NOT EXISTS "idx_events_classId"
+  ON "attendance_events"("classId");
+
+-- ----- attendance_classes -----
+CREATE INDEX IF NOT EXISTS "idx_classes_isActive"
+  ON "attendance_classes"("isActive");
 
 -- ----- attendance_event_members -----
 -- FK lookup eventId (kiểm tra whitelist theo event)

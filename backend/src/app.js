@@ -36,6 +36,7 @@ app.use('/api/auth', require('./routes/auth.routes'));
 // Đăng ký tham gia sự kiện từ bên ngoài — không cần đăng nhập.
 app.use('/api/public', require('./routes/public.routes'));
 app.use('/api/events', require('./routes/event.routes'));
+app.use('/api/classes', require('./routes/class.routes'));
 app.use('/api/checkin', require('./routes/checkin.routes'));
 app.use('/api/admin', require('./routes/admin.routes'));
 app.use('/api/reports', require('./routes/report.routes'));

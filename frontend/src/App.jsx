@@ -16,6 +16,8 @@ import FraudLogs from './pages/FraudLogs';
 import MyAttendance from './pages/student/MyAttendance';
 import PublicEventList from './pages/public/PublicEventList';
 import EventRegister from './pages/public/EventRegister';
+import ClassManagement from './pages/classes/ClassManagement';
+import ClassDetail from './pages/classes/ClassDetail';
 
 function RequireAuth({ children, roles }) {
   const { user, loading } = useAuth();
@@ -75,6 +77,10 @@ export default function App() {
       <Route path="/events" element={<RequireAuth roles={['ADMIN', 'BTC', 'LECTURER']}><EventList /></RequireAuth>} />
       <Route path="/events/new" element={<RequireAuth roles={['ADMIN', 'BTC']}><EventCreate /></RequireAuth>} />
       <Route path="/events/:id" element={<RequireAuth roles={['ADMIN', 'BTC', 'LECTURER']}><EventDetail /></RequireAuth>} />
+
+      {/* Lớp học — BTC/Admin */}
+      <Route path="/classes" element={<RequireAuth roles={['ADMIN', 'BTC']}><ClassManagement /></RequireAuth>} />
+      <Route path="/classes/:id" element={<RequireAuth roles={['ADMIN', 'BTC']}><ClassDetail /></RequireAuth>} />
 
       {/* Admin */}
       <Route path="/admin/users" element={<RequireAuth roles={['ADMIN']}><UserManagement /></RequireAuth>} />

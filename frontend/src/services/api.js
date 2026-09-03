@@ -82,6 +82,21 @@ export const eventApi = {
   register: (id) => api.post(`/api/events/${id}/register`),
 };
 
+// Quản lý lớp học (ADMIN/BTC)
+export const classApi = {
+  list: (params) => api.get('/api/classes', { params }),
+  create: (data) => api.post('/api/classes', data),
+  get: (id) => api.get(`/api/classes/${id}`),
+  update: (id, data) => api.put(`/api/classes/${id}`, data),
+  remove: (id) => api.delete(`/api/classes/${id}`),
+  listMembers: (id, params) => api.get(`/api/classes/${id}/members`, { params }),
+  searchAssignable: (id, params) => api.get(`/api/classes/${id}/members/search`, { params }),
+  addMembers: (id, userIds) => api.post(`/api/classes/${id}/members`, { userIds }),
+  removeMembers: (id, userIds) => api.post(`/api/classes/${id}/members/remove`, { userIds }),
+  listSessions: (id) => api.get(`/api/classes/${id}/sessions`),
+  createSession: (id, data) => api.post(`/api/classes/${id}/sessions`, data),
+};
+
 // Đăng ký tham gia sự kiện — không cần đăng nhập.
 export const publicApi = {
   listEvents: (params) => api.get('/api/public/events', { params }),
