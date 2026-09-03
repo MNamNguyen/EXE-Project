@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS "attendance_events" (
   "checkoutClose" TIMESTAMPTZ      NOT NULL,
   "bannerUrl"     TEXT,
   "isWhitelisted" BOOLEAN          NOT NULL DEFAULT FALSE,
+  "allowRegistration" BOOLEAN      NOT NULL DEFAULT TRUE,
   "isActive"      BOOLEAN          NOT NULL DEFAULT TRUE,
   "createdById"   TEXT             NOT NULL,
   "createdAt"     TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
@@ -73,6 +74,11 @@ CREATE TABLE IF NOT EXISTS "attendance_events" (
     REFERENCES "attendance_users"("id")
     ON DELETE RESTRICT ON UPDATE CASCADE
 );
+
+-- CREATE TABLE IF NOT EXISTS ở trên bỏ qua bảng đã tồn tại, nên DB đang chạy cần
+-- ALTER để có cột mới. Idempotent: chạy lại file này nhiều lần vẫn an toàn.
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "allowRegistration" BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- Bảng whitelist thành viên sự kiện
 CREATE TABLE IF NOT EXISTS "attendance_event_members" (
@@ -234,6 +240,10 @@ CREATE INDEX IF NOT EXISTS "idx_events_isActive_checkinOpen"
 -- Query BTC event list: active + whitelist filter
 CREATE INDEX IF NOT EXISTS "idx_events_isActive_isWhitelisted"
   ON "attendance_events"("isActive", "isWhitelisted");
+
+-- Query danh sách sự kiện công khai đang mở đăng ký (/api/public/events)
+CREATE INDEX IF NOT EXISTS "idx_events_isActive_allowRegistration_checkinClose"
+  ON "attendance_events"("isActive", "allowRegistration", "checkinClose");
 
 -- ----- attendance_event_members -----
 -- FK lookup eventId (kiểm tra whitelist theo event)
