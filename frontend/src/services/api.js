@@ -91,6 +91,7 @@ export const adminApi = {
   createUser: (data) => api.post('/api/admin/users', data),
   updateUser: (id, data) => api.put(`/api/admin/users/${id}`, data),
   deleteUser: (id) => api.delete(`/api/admin/users/${id}`),
+  resetPassword: (id, data) => api.post(`/api/admin/users/${id}/reset-password`, data),
   resetDevice: (id) => api.post(`/api/admin/users/${id}/reset-device`),
   importStudents: (formData) => api.post('/api/admin/users/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };

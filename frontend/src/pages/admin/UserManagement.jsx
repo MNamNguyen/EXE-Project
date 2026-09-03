@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Upload, Smartphone, UserX, UserCheck, RefreshCw, AlertCircle,
-  Pencil, Trash2, ChevronLeft, ChevronRight,
+  Pencil, Trash2, ChevronLeft, ChevronRight, KeyRound, Copy,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi } from '../../services/api';
@@ -33,6 +33,14 @@ export default function UserManagement() {
   const [editUser, setEditUser] = useState(null);
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+
+  // Đặt lại mật khẩu (admin)
+  const [pwdModal, setPwdModal] = useState(false);
+  const [pwdUser, setPwdUser] = useState(null);
+  const [pwdMode, setPwdMode] = useState('auto');
+  const [pwdValue, setPwdValue] = useState('');
+  const [pwdResult, setPwdResult] = useState(null);
+  const [resetting, setResetting] = useState(false);
 
   const load = useCallback((p = 1, s = search, r = roleFilter) => {
     setLoadError(false);
@@ -115,6 +123,43 @@ export default function UserManagement() {
       load(nextPage, search, roleFilter);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Xoá thất bại');
+    }
+  };
+
+  const openResetPassword = (u) => {
+    setPwdUser(u);
+    setPwdMode('auto');
+    setPwdValue('');
+    setPwdResult(null);
+    setPwdModal(true);
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (pwdMode === 'manual' && pwdValue.length < 6) {
+      return toast.error('Mật khẩu mới phải ít nhất 6 ký tự');
+    }
+    setResetting(true);
+    try {
+      const { data } = await adminApi.resetPassword(
+        pwdUser.id,
+        pwdMode === 'manual' ? { newPassword: pwdValue } : {}
+      );
+      setPwdResult(data);
+      toast[data.emailSent ? 'success' : 'error'](data.message);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Đặt lại mật khẩu thất bại');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const copyPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(pwdResult.password);
+      toast.success('Đã sao chép mật khẩu');
+    } catch {
+      toast.error('Trình duyệt không cho phép sao chép. Hãy chọn và copy thủ công.');
     }
   };
 
@@ -269,6 +314,10 @@ export default function UserManagement() {
                               className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors" title="Sửa thông tin">
                               <Pencil size={15} />
                             </button>
+                            <button onClick={() => openResetPassword(u)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Đặt lại mật khẩu">
+                              <KeyRound size={15} />
+                            </button>
                             <button onClick={() => handleResetDevice(u.id, u.name)}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors" title="Reset thiết bị">
                               <Smartphone size={15} />
@@ -359,6 +408,79 @@ export default function UserManagement() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Reset password modal */}
+      <Modal open={pwdModal} onClose={() => setPwdModal(false)} title="Đặt lại mật khẩu" size="sm">
+        {pwdResult ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Mật khẩu mới của <strong>{pwdUser?.name}</strong> đã được đặt lại. Người dùng sẽ buộc phải
+              đổi mật khẩu ngay sau lần đăng nhập kế tiếp.
+            </p>
+            <div className="bg-surface rounded-lg p-4">
+              <p className="text-xs text-gray-400 mb-1">Mật khẩu mới</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 font-mono text-base text-primary-700 break-all select-all">{pwdResult.password}</code>
+                <button type="button" onClick={copyPassword}
+                  className="p-2 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors" title="Sao chép">
+                  <Copy size={15} />
+                </button>
+              </div>
+            </div>
+            <p className={`text-xs rounded-lg p-3 ${pwdResult.emailSent ? 'text-gray-400 bg-surface' : 'text-red-600 bg-red-50'}`}>
+              {pwdResult.emailSent
+                ? `Email kèm mật khẩu mới đã được gửi đến ${pwdUser?.email}.`
+                : 'Không gửi được email. Hãy sao chép mật khẩu và bàn giao cho người dùng theo cách khác.'}
+            </p>
+            <button type="button" onClick={() => setPwdModal(false)} className="btn-primary btn-md w-full">Đóng</button>
+          </div>
+        ) : (
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div className="bg-surface rounded-lg p-3">
+              <p className="text-sm font-medium text-gray-900">{pwdUser?.name}</p>
+              <p className="text-xs text-gray-400">{pwdUser?.email}</p>
+            </div>
+
+            <div className="space-y-2">
+              {[
+                { value: 'auto', label: 'Sinh mật khẩu tạm ngẫu nhiên', hint: 'Hệ thống tự tạo và gửi email cho người dùng' },
+                { value: 'manual', label: 'Tự nhập mật khẩu', hint: 'Tối thiểu 6 ký tự' },
+              ].map((opt) => (
+                <label key={opt.value}
+                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${pwdMode === opt.value ? 'border-primary-500 bg-primary-50' : 'border-border hover:bg-gray-50'}`}>
+                  <input type="radio" name="pwdMode" className="mt-1" value={opt.value}
+                    checked={pwdMode === opt.value} onChange={() => setPwdMode(opt.value)} />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-900">{opt.label}</span>
+                    <span className="block text-xs text-gray-400">{opt.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {pwdMode === 'manual' && (
+              <div>
+                <label className="label">Mật khẩu mới <span className="text-red-500">*</span></label>
+                <input className="input" type="text" autoComplete="new-password" placeholder="Ít nhất 6 ký tự"
+                  value={pwdValue} onChange={(e) => setPwdValue(e.target.value)} />
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
+              Người dùng sẽ nhận email kèm mật khẩu mới và buộc phải đổi mật khẩu ở lần đăng nhập kế tiếp.
+              Tài khoản đang bị tạm khoá do đăng nhập sai nhiều lần cũng được mở khoá.
+            </p>
+
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setPwdModal(false)} className="btn-secondary btn-md flex-1">Huỷ</button>
+              <button type="submit" disabled={resetting} className="btn-primary btn-md flex-1">
+                {resetting ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
+                Đặt lại mật khẩu
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* Import modal */}

@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const XLSX = require('xlsx');
 const prisma = require('../lib/prisma');
-const { sendWelcomeEmail } = require('../services/email.service');
+const emailService = require('../services/email.service');
 
 function generateTempPassword() {
   return 'Fpt@' + crypto.randomInt(100000, 1000000).toString();
@@ -61,7 +61,7 @@ async function createUser(req, res) {
     });
 
     try {
-      await sendWelcomeEmail(email, name, mssv, tempPassword);
+      await emailService.sendWelcomeEmail(email, name, mssv, tempPassword);
     } catch (emailErr) {
       console.error('Failed to send welcome email:', emailErr);
     }
@@ -154,6 +154,65 @@ async function deleteUser(req, res) {
   }
 }
 
+// Admin đặt lại mật khẩu cho BẤT KỲ tài khoản nào — không cần mật khẩu cũ.
+// Bỏ trống newPassword → sinh mật khẩu tạm. Mật khẩu luôn được gửi email cho
+// người dùng và trả về cho admin để bàn giao thủ công khi email lỗi.
+// Lưu ý: JWT đang phát hành không có cơ chế thu hồi nên phiên đăng nhập cũ của
+// người dùng vẫn còn hiệu lực tới khi token hết hạn (1 ngày).
+async function resetPassword(req, res) {
+  try {
+    const { newPassword } = req.body || {};
+
+    if (newPassword) {
+      if (typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({ success: false, message: 'Mật khẩu mới phải ít nhất 6 ký tự' });
+      }
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true, name: true },
+    });
+    if (!target) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+    }
+
+    const password = newPassword || generateTempPassword();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await prisma.user.update({
+      where: { id: target.id },
+      data: {
+        passwordHash,
+        // Buộc đổi mật khẩu ở lần đăng nhập kế tiếp + gỡ khoá do đăng nhập sai.
+        isFirstLogin: true,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+
+    let emailSent = true;
+    try {
+      await emailService.sendPasswordResetEmail(target.email, target.name, password);
+    } catch (emailErr) {
+      emailSent = false;
+      console.error('Failed to send password reset email:', emailErr);
+    }
+
+    return res.json({
+      success: true,
+      emailSent,
+      password,
+      message: emailSent
+        ? `Đã đặt lại mật khẩu và gửi email đến ${target.email}`
+        : 'Đã đặt lại mật khẩu nhưng KHÔNG gửi được email. Hãy chuyển mật khẩu cho người dùng theo cách khác.',
+    });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+}
+
 async function resetDeviceBinding(req, res) {
   try {
     await prisma.deviceBinding.deleteMany({ where: { userId: req.params.id } });
@@ -210,7 +269,7 @@ async function importStudents(req, res) {
         });
 
         try {
-          await sendWelcomeEmail(email, name, mssv, tempPassword);
+          await emailService.sendWelcomeEmail(email, name, mssv, tempPassword);
         } catch {}
 
         results.success++;
@@ -244,4 +303,4 @@ async function getStats(req, res) {
   }
 }
 
-module.exports = { listUsers, createUser, updateUser, deleteUser, resetDeviceBinding, importStudents, getStats };
+module.exports = { listUsers, createUser, updateUser, deleteUser, resetPassword, resetDeviceBinding, importStudents, getStats };

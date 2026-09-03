@@ -95,4 +95,30 @@ async function sendWelcomeEmail(email, name, mssv, tempPassword) {
   });
 }
 
-module.exports = { sendOtpEmail, sendWelcomeEmail };
+
+async function sendPasswordResetEmail(email, name, newPassword) {
+  assertConfigured();
+  await brevoRequest({
+    sender,
+    to: [{ email }],
+    subject: '[FPT Event] Mật khẩu của bạn đã được đặt lại',
+    htmlContent: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #1A6BFF, #00A3FF); padding: 32px; border-radius: 12px 12px 0 0; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">FPT Event System</h1>
+        </div>
+        <div style="background: #fff; padding: 32px; border-radius: 0 0 12px 12px; border: 1px solid #e2eaff;">
+          <p style="color: #0d1b2e; font-size: 16px;">Xin chào <strong>${name}</strong>,</p>
+          <p style="color: #6b7b9a;">Quản trị viên vừa đặt lại mật khẩu cho tài khoản của bạn.</p>
+          <div style="background: #f0f7ff; border-radius: 8px; padding: 20px; margin: 24px 0;">
+            <p style="margin: 0 0 8px; color: #6b7b9a; font-size: 14px;">Mật khẩu mới:</p>
+            <p style="margin: 0;"><span style="color: #1a6bff; font-family: monospace; font-size: 18px;">${newPassword}</span></p>
+          </div>
+          <p style="color: #ff4d6a; font-size: 14px;">Bạn sẽ được yêu cầu đổi mật khẩu ngay sau khi đăng nhập lần tới. Nếu bạn không yêu cầu đặt lại mật khẩu, hãy liên hệ quản trị viên.</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+module.exports = { sendOtpEmail, sendWelcomeEmail, sendPasswordResetEmail };
