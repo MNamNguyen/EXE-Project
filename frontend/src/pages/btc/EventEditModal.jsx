@@ -25,6 +25,7 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
         checkoutOpen: toLocalInput(event.checkoutOpen),
         checkoutClose: toLocalInput(event.checkoutClose),
         isWhitelisted: event.isWhitelisted ?? false,
+        allowRegistration: event.allowRegistration ?? true,
       });
     }
   }, [open, event]);
@@ -140,15 +141,26 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
           )}
         </div>
 
-        {/* Whitelist */}
-        <label className="flex items-center gap-3 cursor-pointer bg-surface rounded-lg p-3">
-          <input type="checkbox" className="w-4 h-4 rounded accent-primary-600"
-            checked={form.isWhitelisted} onChange={(e) => set('isWhitelisted', e.target.checked)} />
-          <div>
-            <p className="text-sm font-medium text-gray-700">Chỉ cho phép danh sách đã đăng ký</p>
-            <p className="text-xs text-gray-400">Nếu bật, chỉ thành viên trong danh sách tham gia mới check-in được</p>
-          </div>
-        </label>
+        {/* Đăng ký & whitelist */}
+        <div className="space-y-2">
+          <label className="flex items-center gap-3 cursor-pointer bg-surface rounded-lg p-3">
+            <input type="checkbox" className="w-4 h-4 rounded accent-primary-600"
+              checked={form.allowRegistration} onChange={(e) => set('allowRegistration', e.target.checked)} />
+            <div>
+              <p className="text-sm font-medium text-gray-700">Cho phép tự đăng ký tham gia</p>
+              <p className="text-xs text-gray-400">Tắt để đóng link đăng ký công khai của sự kiện này</p>
+            </div>
+          </label>
+
+          <label className="flex items-center gap-3 cursor-pointer bg-surface rounded-lg p-3">
+            <input type="checkbox" className="w-4 h-4 rounded accent-primary-600"
+              checked={form.isWhitelisted} onChange={(e) => set('isWhitelisted', e.target.checked)} />
+            <div>
+              <p className="text-sm font-medium text-gray-700">Chỉ cho phép danh sách đã đăng ký</p>
+              <p className="text-xs text-gray-400">Nếu bật, chỉ thành viên trong danh sách tham gia mới check-in được</p>
+            </div>
+          </label>
+        </div>
 
         <div className="flex gap-3">
           <button type="button" onClick={onClose} className="btn-secondary btn-md flex-1">Huỷ</button>

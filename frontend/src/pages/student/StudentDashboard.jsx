@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import {
   CalendarDays, MapPin, Clock, ChevronRight,
   Users, BarChart3, CheckCircle2, Layers,
-  Sparkles, Circle, RefreshCw, AlertCircle,
+  Sparkles, Circle, RefreshCw, AlertCircle, TicketCheck, Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import toast from 'react-hot-toast';
 import { eventApi, adminApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import Layout from '../../components/layout/Layout';
@@ -21,6 +22,7 @@ export default function StudentDashboard() {
   const [stats,     setStats]     = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [registeringId, setRegisteringId] = useState(null);
 
   const fetchAll = async () => {
     setLoadError(false);
@@ -41,6 +43,20 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => { fetchAll(); }, [isAdminOrBtc]);
+
+  // Tự ghi tên vào danh sách tham gia sự kiện bằng chính tài khoản đang đăng nhập.
+  const handleRegister = async (eventId) => {
+    setRegisteringId(eventId);
+    try {
+      const { data } = await eventApi.register(eventId);
+      setEvents((list) => list.map((e) => (e.id === eventId ? { ...e, isRegistered: true } : e)));
+      toast.success(data.message || 'Đăng ký tham gia thành công!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Đăng ký thất bại');
+    } finally {
+      setRegisteringId(null);
+    }
+  };
 
   const upcoming = events.filter((e) => new Date(e.checkinOpen) >= new Date());
   const past     = events.filter((e) => new Date(e.checkinOpen) < new Date());
@@ -190,7 +206,13 @@ export default function StudentDashboard() {
               ) : (
                 <div className="space-y-3">
                   {upcoming.map((event) => (
-                    <EventCard key={event.id} event={event} isAdminOrBtc={isAdminOrBtc} />
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      isAdminOrBtc={isAdminOrBtc}
+                      onRegister={handleRegister}
+                      registering={registeringId === event.id}
+                    />
                   ))}
                 </div>
               )}
@@ -248,11 +270,14 @@ function EmptyState({ icon: Icon, title, desc, action }) {
   );
 }
 
-function EventCard({ event, past, isAdminOrBtc }) {
+function EventCard({ event, past, isAdminOrBtc, onRegister, registering }) {
   const checkinOpen  = new Date(event.checkinOpen);
   const checkinClose = new Date(event.checkinClose);
   const now          = new Date();
   const isLive       = now >= checkinOpen && now <= checkinClose;
+  // Sinh viên chỉ thấy nút đăng ký khi sự kiện còn mở đăng ký và chưa có tên trong danh sách.
+  const canRegister  = !isAdminOrBtc && onRegister
+    && event.allowRegistration !== false && !event.isRegistered && now <= checkinClose;
 
   return (
     <div className={`card p-4 transition-all ${past ? 'opacity-60' : 'hover:shadow-card-hover'}`}>
@@ -301,6 +326,25 @@ function EventCard({ event, past, isAdminOrBtc }) {
           </Link>
         )}
       </div>
+
+      {/* Đăng ký tham gia / trạng thái đã đăng ký (sinh viên) */}
+      {canRegister && (
+        <button
+          onClick={() => onRegister(event.id)}
+          disabled={registering}
+          className="btn-primary btn-sm btn-full mt-3"
+        >
+          {registering
+            ? <><Loader2 size={14} className="animate-spin" /> Đang đăng ký...</>
+            : <><TicketCheck size={14} /> Đăng ký tham gia</>}
+        </button>
+      )}
+
+      {!isAdminOrBtc && event.isRegistered && (
+        <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
+          <CheckCircle2 size={13} /> Bạn đã đăng ký tham gia sự kiện này
+        </div>
+      )}
 
       {/* Live CTA for students */}
       {isLive && !isAdminOrBtc && (

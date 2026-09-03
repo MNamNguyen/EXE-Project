@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  QrCode, Download, Search, Users, CheckCircle, LogOut, Clock,
+  QrCode, Download, Search, Users, CheckCircle, LogOut,
   RefreshCw, ExternalLink, UserCheck, ChevronLeft, ChevronRight,
-  Pencil, UserPlus,
+  Pencil, UserPlus, Link2, TicketCheck,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -91,6 +91,19 @@ export default function EventDetail() {
     }
   };
 
+  // Link công khai để BTC phát cho sinh viên tự đăng ký tham gia.
+  const registrationUrl = `${window.location.origin}/dang-ky/${id}`;
+
+  const handleCopyRegistrationLink = async () => {
+    try {
+      await navigator.clipboard.writeText(registrationUrl);
+      toast.success('Đã copy link đăng ký');
+    } catch {
+      // clipboard API cần HTTPS/quyền — hiện link để BTC copy tay.
+      toast(registrationUrl, { duration: 8000 });
+    }
+  };
+
   const handleManualCheckin = async () => {
     if (!manualUser.trim()) return toast.error('Nhập MSSV hoặc Email sinh viên');
     try {
@@ -112,10 +125,10 @@ export default function EventDetail() {
   const endRow = Math.min(page * PAGE_SIZE, total);
 
   const statCards = [
-    { label: 'Tổng điểm danh', value: stats.total || 0, icon: Users, color: 'text-primary-600 bg-primary-50' },
+    { label: 'Tổng đăng ký', value: stats.total || 0, icon: Users, color: 'text-primary-600 bg-primary-50' },
+    { label: 'Chưa check-in', value: stats.registered || 0, icon: TicketCheck, color: 'text-amber-600 bg-amber-50' },
     { label: 'Đã check-in', value: stats.checkedIn || 0, icon: CheckCircle, color: 'text-emerald-600 bg-emerald-50' },
     { label: 'Đã check-out', value: stats.checkedOut || 0, icon: LogOut, color: 'text-teal-600 bg-teal-50' },
-    { label: 'Vắng mặt', value: stats.absent || 0, icon: Clock, color: 'text-red-500 bg-red-50' },
   ];
 
   return (
@@ -143,6 +156,12 @@ export default function EventDetail() {
               className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
               <UserPlus size={16} /> Danh sách tham gia
             </button>
+            {event.allowRegistration !== false && (
+              <button onClick={handleCopyRegistrationLink}
+                className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
+                <Link2 size={16} /> Copy link đăng ký
+              </button>
+            )}
             <button onClick={() => setEditModal(true)}
               className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
               <Pencil size={16} /> Sửa sự kiện
@@ -178,6 +197,7 @@ export default function EventDetail() {
             <select className="input text-sm py-2.5 w-full sm:w-40" value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">Tất cả</option>
+              <option value="REGISTERED">Đã đăng ký</option>
               <option value="CHECKED_IN">Đã check-in</option>
               <option value="CHECKED_OUT">Đã check-out</option>
               <option value="ABSENT">Vắng</option>

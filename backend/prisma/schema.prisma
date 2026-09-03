@@ -60,6 +60,8 @@ model Event {
   checkoutClose  DateTime
   bannerUrl      String?
   isWhitelisted  Boolean  @default(false)
+  // Cho phép người ngoài tự đăng ký tham gia qua link công khai /dang-ky/:id.
+  allowRegistration Boolean @default(true)
   isActive       Boolean  @default(true)
   createdById    String
   createdAt      DateTime @default(now())
@@ -76,6 +78,7 @@ model Event {
   @@index([checkinOpen])
   @@index([isActive, checkinOpen])
   @@index([isActive, isWhitelisted])
+  @@index([isActive, allowRegistration, checkinClose])
   @@map("attendance_events")
 }
 

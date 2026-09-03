@@ -42,6 +42,7 @@ export default function EventCreate() {
     checkoutOpen: '',
     checkoutClose: '',
     isWhitelisted: false,
+    allowRegistration: true,
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -270,14 +271,27 @@ export default function EventCreate() {
             <h2 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Users size={18} className="text-primary-600" /> Danh sách tham dự
             </h2>
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" className="w-4 h-4 rounded accent-primary-600"
-                checked={form.isWhitelisted} onChange={(e) => set('isWhitelisted', e.target.checked)} />
-              <div>
-                <p className="text-sm font-medium text-gray-700">Chỉ cho phép danh sách đã đăng ký</p>
-                <p className="text-xs text-gray-400">Nếu bật, chỉ sinh viên trong whitelist mới check-in được</p>
-              </div>
-            </label>
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded accent-primary-600"
+                  checked={form.allowRegistration} onChange={(e) => set('allowRegistration', e.target.checked)} />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Cho phép tự đăng ký tham gia</p>
+                  <p className="text-xs text-gray-400">
+                    Sinh viên tự điền form (họ tên, MSSV, email) qua link công khai. Chưa có tài khoản sẽ được tạo tự động.
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded accent-primary-600"
+                  checked={form.isWhitelisted} onChange={(e) => set('isWhitelisted', e.target.checked)} />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Chỉ cho phép danh sách đã đăng ký</p>
+                  <p className="text-xs text-gray-400">Nếu bật, chỉ sinh viên trong whitelist mới check-in được</p>
+                </div>
+              </label>
+            </div>
           </div>
 
           <div className="flex gap-3 pb-6">

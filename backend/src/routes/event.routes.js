@@ -5,6 +5,7 @@ const {
   getQRToken, getAttendance, manualCheckin,
   listMembers, addMembers, removeMember, searchUsersForEvent,
 } = require('../controllers/event.controller');
+const { registerSelf } = require('../controllers/registration.controller');
 
 router.use(authenticate);
 
@@ -16,6 +17,9 @@ router.delete('/:id', authorize('ADMIN', 'BTC'), deleteEvent);
 router.get('/:id/qr', authorize('ADMIN', 'BTC'), getQRToken);
 router.get('/:id/attendance', authorize('ADMIN', 'BTC', 'LECTURER'), getAttendance);
 router.post('/:id/manual-checkin', authorize('ADMIN', 'BTC'), manualCheckin);
+
+// Người dùng đã đăng nhập tự ghi tên vào danh sách tham gia.
+router.post('/:id/register', registerSelf);
 
 router.get('/:id/members', authorize('ADMIN', 'BTC', 'LECTURER'), listMembers);
 router.get('/:id/members/search', authorize('ADMIN', 'BTC'), searchUsersForEvent);

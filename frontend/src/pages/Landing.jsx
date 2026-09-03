@@ -59,8 +59,8 @@ const steps = [
   },
   {
     num: '03',
-    title: 'Sinh viên quét & điểm danh',
-    desc: 'Quét QR bằng camera → đăng nhập nhanh → hệ thống xác thực GPS + thiết bị → ghi nhận tức thì.',
+    title: 'Sinh viên đăng ký & quét QR',
+    desc: 'Điền form đăng ký (họ tên, MSSV, email) → hệ thống tự tạo tài khoản nếu chưa có → quét QR để điểm danh.',
     icon: Smartphone,
   },
   {
@@ -92,6 +92,7 @@ export default function Landing() {
           <nav className="hidden md:flex items-center gap-8 text-sm text-gray-600">
             <a href="#features" className="hover:text-primary-600 transition-colors">Tính năng</a>
             <a href="#how-it-works" className="hover:text-primary-600 transition-colors">Cách hoạt động</a>
+            <Link to="/dang-ky" className="hover:text-primary-600 transition-colors">Đăng ký sự kiện</Link>
           </nav>
           <Link
             to="/login"
@@ -129,19 +130,19 @@ export default function Landing() {
             </p>
             <div className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
               <Link
-                to="/login"
+                to="/dang-ky"
                 className="inline-flex items-center gap-2 bg-white text-primary-700 font-bold px-7 py-3.5 rounded-xl hover:bg-blue-50 transition-colors shadow-lg text-sm"
               >
-                Bắt đầu ngay
+                Đăng ký tham gia sự kiện
                 <ArrowRight size={15} />
               </Link>
-              <a
-                href="#how-it-works"
-                className="inline-flex items-center gap-2 text-white/80 font-medium text-sm hover:text-white transition-colors"
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 bg-white/15 border border-white/25 text-white font-semibold px-7 py-3.5 rounded-xl hover:bg-white/25 transition-colors text-sm"
               >
-                Xem cách hoạt động
+                Đăng nhập
                 <ChevronRight size={14} />
-              </a>
+              </Link>
             </div>
           </div>
 
@@ -244,7 +245,7 @@ export default function Landing() {
               { role: 'Admin', color: 'border-red-200 bg-red-50', badge: 'bg-red-100 text-red-700', perms: ['Quản lý toàn bộ người dùng', 'Import sinh viên Excel', 'Xem log gian lận', 'Reset thiết bị'] },
               { role: 'BTC', color: 'border-blue-200 bg-blue-50', badge: 'bg-blue-100 text-blue-700', perms: ['Tạo & quản lý sự kiện', 'Hiển thị QR check-in', 'Xem báo cáo real-time', 'Export Excel'] },
               { role: 'Giảng viên', color: 'border-violet-200 bg-violet-50', badge: 'bg-violet-100 text-violet-700', perms: ['Xem danh sách sự kiện', 'Theo dõi điểm danh', 'Xem thống kê lớp', ''] },
-              { role: 'Sinh viên', color: 'border-emerald-200 bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700', perms: ['Quét QR check-in/out', 'Xem sự kiện sắp tới', 'Lịch sử tham dự', ''] },
+              { role: 'Sinh viên', color: 'border-emerald-200 bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700', perms: ['Đăng ký tham gia sự kiện', 'Quét QR check-in/out', 'Xem sự kiện sắp tới', 'Lịch sử tham dự'] },
             ].map(({ role, color, badge, perms }) => (
               <div key={role} className={`rounded-2xl border p-5 ${color}`}>
                 <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold mb-4 ${badge}`}>{role}</span>
@@ -269,15 +270,25 @@ export default function Landing() {
             Sẵn sàng triển khai?
           </h2>
           <p className="text-white/75 text-base mb-8">
-            Đăng nhập và tạo sự kiện đầu tiên của bạn ngay hôm nay.
+            Đăng ký tham gia sự kiện chỉ với họ tên, MSSV và email — chưa có tài khoản
+            hệ thống sẽ tự tạo và gửi thông tin đăng nhập cho bạn.
           </p>
-          <Link
-            to="/login"
-            className="inline-flex items-center gap-2 bg-white text-primary-700 font-bold px-8 py-4 rounded-xl hover:bg-blue-50 transition-colors shadow-xl text-sm"
-          >
-            Đăng nhập hệ thống
-            <ArrowRight size={16} />
-          </Link>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              to="/dang-ky"
+              className="inline-flex items-center gap-2 bg-white text-primary-700 font-bold px-8 py-4 rounded-xl hover:bg-blue-50 transition-colors shadow-xl text-sm"
+            >
+              Đăng ký tham gia sự kiện
+              <ArrowRight size={16} />
+            </Link>
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-2 bg-white/15 border border-white/25 text-white font-semibold px-8 py-4 rounded-xl hover:bg-white/25 transition-colors text-sm"
+            >
+              Đăng nhập hệ thống
+              <ChevronRight size={15} />
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -322,14 +333,20 @@ export default function Landing() {
                   { label: 'Chống gian lận đa lớp',  href: '#features' },
                   { label: 'Báo cáo & Export Excel', href: '#features' },
                   { label: 'Import sinh viên Excel', href: '#features' },
-                ].map(({ label, href }) => (
-                  <li key={label}>
-                    <a href={href} className="text-sm text-gray-500 hover:text-primary-600 transition-colors flex items-center gap-1.5 group">
-                      <ChevronRight size={12} className="text-gray-300 group-hover:text-primary-500 transition-colors" />
-                      {label}
-                    </a>
-                  </li>
-                ))}
+                  { label: 'Đăng ký tham gia sự kiện', href: '/dang-ky' },
+                ].map(({ label, href }) => {
+                  // Anchor trong trang dùng <a>, route nội bộ dùng <Link> để không reload trang.
+                  const Tag = href.startsWith('#') ? 'a' : Link;
+                  const linkProps = href.startsWith('#') ? { href } : { to: href };
+                  return (
+                    <li key={label}>
+                      <Tag {...linkProps} className="text-sm text-gray-500 hover:text-primary-600 transition-colors flex items-center gap-1.5 group">
+                        <ChevronRight size={12} className="text-gray-300 group-hover:text-primary-500 transition-colors" />
+                        {label}
+                      </Tag>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 

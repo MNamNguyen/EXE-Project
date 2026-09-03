@@ -32,11 +32,17 @@ async function listEvents(req, res) {
           createdBy: { select: { name: true, email: true } },
           _count: { select: { attendances: true, eventMembers: true } },
           // STUDENT: kèm record điểm danh của chính mình để trang "Lịch sử tham dự"
-          // (MyAttendance) hiển thị đúng trạng thái + giờ vào/ra.
+          // (MyAttendance) hiển thị đúng trạng thái + giờ vào/ra, và kèm suất
+          // đăng ký để dashboard biết có cần hiện nút "Đăng ký tham gia" không.
           ...(role === 'STUDENT' && {
             attendances: {
               where: { userId },
               select: { status: true, checkinTime: true, checkoutTime: true },
+              take: 1,
+            },
+            eventMembers: {
+              where: { userId },
+              select: { id: true },
               take: 1,
             },
           }),
@@ -45,9 +51,13 @@ async function listEvents(req, res) {
       prisma.event.count({ where }),
     ]);
 
-    // Phẳng hoá attendances[] → attendance (1 record của sinh viên) cho frontend.
+    // Phẳng hoá attendances[]/eventMembers[] → attendance + isRegistered cho frontend.
     const data = role === 'STUDENT'
-      ? events.map(({ attendances, ...rest }) => ({ ...rest, attendance: attendances?.[0] || null }))
+      ? events.map(({ attendances, eventMembers, ...rest }) => ({
+          ...rest,
+          attendance: attendances?.[0] || null,
+          isRegistered: (eventMembers?.length || 0) > 0,
+        }))
       : events;
 
     return res.json({ success: true, data, total, page: parseInt(page), limit: parseInt(limit) });
@@ -62,7 +72,7 @@ async function createEvent(req, res) {
     const {
       name, description, location, lat, lng, radius,
       gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose,
-      isWhitelisted, memberIds,
+      isWhitelisted, allowRegistration, memberIds,
     } = req.body;
 
     const checkinOpenDate = new Date(checkinOpen);
@@ -103,6 +113,7 @@ async function createEvent(req, res) {
         checkoutOpen: checkoutOpenDate,
         checkoutClose: checkoutCloseDate,
         isWhitelisted: isWhitelisted || false,
+        allowRegistration: allowRegistration !== false,
         createdById: req.user.id,
         ...(memberIds?.length && {
           eventMembers: {
@@ -156,7 +167,8 @@ async function updateEvent(req, res) {
 
     const {
       name, description, location, lat, lng, radius,
-      gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose, isWhitelisted,
+      gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose,
+      isWhitelisted, allowRegistration,
     } = req.body;
 
     const dateVals = {};
@@ -202,6 +214,7 @@ async function updateEvent(req, res) {
         ...(dateVals.checkoutOpen && { checkoutOpen: dateVals.checkoutOpen }),
         ...(dateVals.checkoutClose && { checkoutClose: dateVals.checkoutClose }),
         ...(isWhitelisted !== undefined && { isWhitelisted }),
+        ...(allowRegistration !== undefined && { allowRegistration }),
       },
     });
 
@@ -303,6 +316,7 @@ async function getAttendance(req, res) {
 
     const stats = {
       total: Object.values(statMap).reduce((a, b) => a + b, 0),
+      registered: statMap['REGISTERED'] || 0,
       checkedIn: (statMap['CHECKED_IN'] || 0) + (statMap['CHECKED_OUT'] || 0),
       checkedOut: statMap['CHECKED_OUT'] || 0,
       absent: statMap['ABSENT'] || 0,

@@ -14,6 +14,8 @@ import ScanLanding from './pages/scan/ScanLanding';
 import UserManagement from './pages/admin/UserManagement';
 import FraudLogs from './pages/FraudLogs';
 import MyAttendance from './pages/student/MyAttendance';
+import PublicEventList from './pages/public/PublicEventList';
+import EventRegister from './pages/public/EventRegister';
 
 function RequireAuth({ children, roles }) {
   const { user, loading } = useAuth();
@@ -50,6 +52,10 @@ export default function App() {
 
       {/* Auth */}
       <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+
+      {/* Đăng ký tham gia sự kiện — công khai, không cần đăng nhập */}
+      <Route path="/dang-ky" element={<PublicEventList />} />
+      <Route path="/dang-ky/:id" element={<EventRegister />} />
 
       {/* QR Scan — accessible but requires login (redirects to login if needed) */}
       <Route path="/scan" element={<ScanLanding />} />

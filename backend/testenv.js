@@ -4,6 +4,8 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-jwt-key-32-chars
 process.env.QR_SECRET = process.env.QR_SECRET || 'test-secret-qr-key-32-chars-min';
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@localhost:5432/test?pgbouncer=true';
 process.env.DIRECT_URL = process.env.DIRECT_URL || 'postgresql://test:test@localhost:5432/test';
+// Nới rate limit của form đăng ký công khai để chạy được nhiều case trong 1 file test.
+process.env.PUBLIC_REGISTER_MAX = process.env.PUBLIC_REGISTER_MAX || '1000';
 
 // Stub method cho Prisma delegate: node:test mock.method không chạy được với
 // Prisma client (delegate dùng Proxy, own-property value là undefined).
