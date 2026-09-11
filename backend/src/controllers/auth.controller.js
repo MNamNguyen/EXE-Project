@@ -198,8 +198,140 @@ async function changePassword(req, res) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Quên mật khẩu: gửi OTP về email → người dùng tự đặt mật khẩu mới.
+// Cố tình KHÔNG gửi mật khẩu thật qua email (khác admin reset) và luôn trả về
+// cùng một thông điệp dù tài khoản có tồn tại hay không, để không lộ danh sách
+// email/MSSV đang có trong hệ thống.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RESET_OTP_TTL_MS = 15 * 60 * 1000;
+const GENERIC_FORGOT_MESSAGE =
+  'Nếu tài khoản tồn tại, mã đặt lại mật khẩu đã được gửi tới email đăng ký. Hãy kiểm tra hộp thư đến và thư rác.';
+
+function findActiveUserByIdentifier(identifier) {
+  return prisma.user.findFirst({
+    where: {
+      OR: [{ mssv: identifier }, { email: identifier }],
+      isActive: true,
+    },
+  });
+}
+
+async function forgotPassword(req, res) {
+  try {
+    const { identifier, deviceId } = req.body || {};
+
+    if (!identifier || typeof identifier !== 'string') {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập MSSV hoặc email' });
+    }
+
+    const user = await findActiveUserByIdentifier(identifier.trim());
+
+    // Không có tài khoản → vẫn trả 200 với đúng thông điệp như trường hợp có.
+    if (!user) {
+      return res.json({ success: true, message: GENERIC_FORGOT_MESSAGE });
+    }
+
+    await prisma.otpToken.deleteMany({
+      where: { userId: user.id, purpose: 'PASSWORD_RESET', used: false },
+    });
+
+    const otp = generateOtp();
+    await prisma.otpToken.create({
+      data: {
+        userId: user.id,
+        token: otp,
+        // deviceId chỉ để truy vết — mã reset KHÔNG buộc phải nhập lại đúng
+        // thiết bị, vì người dùng có thể mở email trên máy khác.
+        deviceId: deviceId || 'unknown',
+        purpose: 'PASSWORD_RESET',
+        expiresAt: new Date(Date.now() + RESET_OTP_TTL_MS),
+      },
+    });
+
+    try {
+      await emailService.sendPasswordResetOtpEmail(user.email, user.name, otp);
+    } catch (emailErr) {
+      console.error('Failed to send password reset OTP email:', emailErr);
+      await prisma.otpToken.deleteMany({
+        where: { userId: user.id, token: otp, purpose: 'PASSWORD_RESET' },
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'EMAIL_FAILED',
+        message: 'Không gửi được email. Vui lòng thử lại sau.',
+      });
+    }
+
+    return res.json({ success: true, message: GENERIC_FORGOT_MESSAGE });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+}
+
+async function resetPassword(req, res) {
+  try {
+    const { identifier, otp, newPassword } = req.body || {};
+
+    if (!identifier || !otp || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Thiếu thông tin đặt lại mật khẩu' });
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Mật khẩu mới phải ít nhất 6 ký tự' });
+    }
+
+    const user = await findActiveUserByIdentifier(String(identifier).trim());
+
+    // Sai identifier và sai OTP trả về cùng một lỗi — không phân biệt được
+    // "không có tài khoản này" với "mã sai".
+    const otpRecord = user
+      ? await prisma.otpToken.findFirst({
+          where: {
+            userId: user.id,
+            token: String(otp).trim(),
+            purpose: 'PASSWORD_RESET',
+            used: false,
+            expiresAt: { gt: new Date() },
+          },
+        })
+      : null;
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_RESET_OTP',
+        message: 'Mã xác thực không đúng hoặc đã hết hạn',
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.otpToken.update({ where: { id: otpRecord.id }, data: { used: true } });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        // Người dùng vừa tự chọn mật khẩu nên không bắt đổi lại lần sau; đồng
+        // thời gỡ luôn khoá 15 phút do đăng nhập sai — quên mật khẩu và bị khoá
+        // thường đi cùng nhau.
+        isFirstLogin: false,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+
+    return res.json({ success: true, message: 'Đặt lại mật khẩu thành công. Hãy đăng nhập lại.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+}
+
 async function getMe(req, res) {
   return res.json({ success: true, user: req.user });
 }
 
-module.exports = { login, verifyOtp, changePassword, getMe };
+module.exports = { login, verifyOtp, changePassword, forgotPassword, resetPassword, getMe };

@@ -6,6 +6,9 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@l
 process.env.DIRECT_URL = process.env.DIRECT_URL || 'postgresql://test:test@localhost:5432/test';
 // Nới rate limit của form đăng ký công khai để chạy được nhiều case trong 1 file test.
 process.env.PUBLIC_REGISTER_MAX = process.env.PUBLIC_REGISTER_MAX || '1000';
+// Tương tự cho quên mật khẩu — mỗi test gửi nhiều request từ cùng một IP.
+process.env.FORGOT_PASSWORD_MAX = process.env.FORGOT_PASSWORD_MAX || '1000';
+process.env.RESET_PASSWORD_MAX = process.env.RESET_PASSWORD_MAX || '1000';
 
 // Stub method cho Prisma delegate: node:test mock.method không chạy được với
 // Prisma client (delegate dùng Proxy, own-property value là undefined).

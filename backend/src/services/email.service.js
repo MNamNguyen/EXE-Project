@@ -121,6 +121,34 @@ async function sendPasswordResetEmail(email, name, newPassword) {
   });
 }
 
+// OTP đặt lại mật khẩu (người dùng tự bấm "Quên mật khẩu"). Khác
+// sendPasswordResetEmail ở chỗ KHÔNG gửi mật khẩu thật qua email — chỉ gửi mã
+// để người dùng tự đặt mật khẩu mới trên trình duyệt.
+async function sendPasswordResetOtpEmail(email, name, otp) {
+  assertConfigured();
+  await brevoRequest({
+    sender,
+    to: [{ email }],
+    subject: '[FPT Event] Mã đặt lại mật khẩu',
+    htmlContent: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #1A6BFF, #00A3FF); padding: 32px; border-radius: 12px 12px 0 0; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">FPT Event System</h1>
+        </div>
+        <div style="background: #fff; padding: 32px; border-radius: 0 0 12px 12px; border: 1px solid #e2eaff;">
+          <p style="color: #0d1b2e; font-size: 16px;">Xin chào <strong>${name}</strong>,</p>
+          <p style="color: #6b7b9a;">Mã xác thực để đặt lại mật khẩu tài khoản của bạn:</p>
+          <div style="background: #f0f7ff; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
+            <span style="font-size: 40px; font-weight: bold; letter-spacing: 12px; color: #1a6bff;">${otp}</span>
+          </div>
+          <p style="color: #6b7b9a; font-size: 14px;">Mã có hiệu lực trong <strong>15 phút</strong>. Không chia sẻ mã này với bất kỳ ai.</p>
+          <p style="color: #ff4d6a; font-size: 14px;">Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này — mật khẩu hiện tại vẫn an toàn.</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
 // Xác nhận đăng ký tham gia sự kiện. Nếu tài khoản vừa được tạo từ form đăng ký
 // thì kèm luôn mật khẩu tạm để người dùng đăng nhập quét QR điểm danh.
 async function sendEventRegistrationEmail(email, name, event, { mssv, tempPassword } = {}) {
@@ -163,4 +191,10 @@ async function sendEventRegistrationEmail(email, name, event, { mssv, tempPasswo
   });
 }
 
-module.exports = { sendOtpEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEventRegistrationEmail };
+module.exports = {
+  sendOtpEmail,
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
+  sendPasswordResetOtpEmail,
+  sendEventRegistrationEmail,
+};

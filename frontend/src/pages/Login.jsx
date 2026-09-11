@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Eye, EyeOff, Lock, User, ShieldCheck,
-  QrCode, MapPin, Clock, Users, ChevronRight, ArrowLeft,
+  QrCode, MapPin, Clock, Users, ChevronRight, ArrowLeft, KeyRound, Mail,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { authApi } from '../services/api';
@@ -30,6 +30,11 @@ export default function Login() {
   const [form,    setForm]    = useState({ identifier: '', password: '' });
   const [otp,     setOtp]     = useState('');
   const [newPass, setNewPass] = useState({ current: '', new: '', confirm: '' });
+  // Quên mật khẩu: identifier được giữ lại qua bước nhập mã vì API reset cần
+  // gửi kèm (backend không trả về userId để tránh dò tài khoản tồn tại).
+  const [forgotId,  setForgotId]  = useState('');
+  const [resetForm, setResetForm] = useState({ otp: '', new: '', confirm: '' });
+  const [showResetPass, setShowResetPass] = useState(false);
 
   const redirectTo = new URLSearchParams(location.search).get('redirect') || '/dashboard';
 
@@ -63,6 +68,44 @@ export default function Login() {
       if (data.success) { login(data.token, data.user); navigate(redirectTo, { replace: true }); }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Mã OTP không đúng');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    if (!forgotId.trim()) return toast.error('Vui lòng nhập MSSV hoặc email');
+    setLoading(true);
+    try {
+      const { data } = await authApi.forgotPassword({ identifier: forgotId.trim() });
+      toast.success(data.message);
+      setStep('reset');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Không gửi được mã đặt lại mật khẩu');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async (e) => {
+    e.preventDefault();
+    if (resetForm.otp.length !== 6) return toast.error('Mã xác thực gồm 6 chữ số');
+    if (resetForm.new.length < 6) return toast.error('Mật khẩu mới phải ít nhất 6 ký tự');
+    if (resetForm.new !== resetForm.confirm) return toast.error('Mật khẩu xác nhận không khớp');
+    setLoading(true);
+    try {
+      await authApi.resetPassword({
+        identifier: forgotId.trim(),
+        otp: resetForm.otp,
+        newPassword: resetForm.new,
+      });
+      toast.success('Đặt lại mật khẩu thành công! Hãy đăng nhập lại.');
+      setForm({ identifier: forgotId.trim(), password: '' });
+      setResetForm({ otp: '', new: '', confirm: '' });
+      setStep('login');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Mã xác thực không đúng hoặc đã hết hạn');
     } finally {
       setLoading(false);
     }
@@ -223,7 +266,17 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <label className="label">Mật khẩu</label>
+                    <div className="flex items-center justify-between">
+                      <label className="label">Mật khẩu</label>
+                      <button
+                        type="button"
+                        onClick={() => { setForgotId(form.identifier); setStep('forgot'); }}
+                        className="text-xs font-medium text-primary-600 hover:text-primary-700
+                                   transition-colors mb-1.5"
+                      >
+                        Quên mật khẩu?
+                      </button>
+                    </div>
                     <div className="relative">
                       <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
@@ -300,6 +353,145 @@ export default function Login() {
                   >
                     <ArrowLeft size={14} />
                     Quay lại đăng nhập
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* ── Step: Forgot password — nhập MSSV/email để nhận mã ── */}
+            {step === 'forgot' && (
+              <div className="animate-fade-in">
+                <div className="mb-8">
+                  <div className="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center mb-4">
+                    <Mail size={24} className="text-primary-600" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-gray-900">Quên mật khẩu</h1>
+                  <p className="text-gray-500 text-sm mt-1.5">
+                    Nhập MSSV hoặc email của bạn. Chúng tôi sẽ gửi mã xác thực 6 chữ số
+                    đến email đã đăng ký.
+                  </p>
+                </div>
+
+                <form onSubmit={handleForgot} className="space-y-5">
+                  <div>
+                    <label className="label">MSSV hoặc Email</label>
+                    <div className="relative">
+                      <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        className="input pl-10"
+                        placeholder="SE123456 hoặc email@fpt.edu.vn"
+                        value={forgotId}
+                        onChange={(e) => setForgotId(e.target.value)}
+                        autoComplete="username"
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" disabled={loading} className="btn-primary btn-lg btn-full">
+                    {loading && <Spinner size="sm" className="border-white/30 border-t-white" />}
+                    {loading ? 'Đang gửi...' : 'Gửi mã xác thực'}
+                  </button>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setStep('login')}
+                      className="btn-ghost btn-md text-gray-500 flex items-center gap-1.5"
+                    >
+                      <ArrowLeft size={14} />
+                      Quay lại đăng nhập
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStep('reset')}
+                      className="text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
+                    >
+                      Đã có mã?
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* ── Step: Reset password — nhập mã + mật khẩu mới ── */}
+            {step === 'reset' && (
+              <div className="animate-fade-in">
+                <div className="mb-8">
+                  <div className="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center mb-4">
+                    <KeyRound size={24} className="text-primary-600" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-gray-900">Đặt lại mật khẩu</h1>
+                  <p className="text-gray-500 text-sm mt-1.5">
+                    Nhập mã 6 chữ số vừa gửi tới email của bạn (kiểm tra cả thư rác) và
+                    chọn mật khẩu mới. Mã có hiệu lực trong 15 phút.
+                  </p>
+                </div>
+
+                <form onSubmit={handleReset} className="space-y-4">
+                  <div>
+                    <label className="label text-center block">Mã xác thực</label>
+                    <input
+                      className="input text-center text-2xl font-bold tracking-[0.5em]"
+                      maxLength={6}
+                      value={resetForm.otp}
+                      onChange={(e) =>
+                        setResetForm({ ...resetForm, otp: e.target.value.replace(/\D/g, '').slice(0, 6) })
+                      }
+                      placeholder="······"
+                      inputMode="numeric"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Mật khẩu mới</label>
+                    <div className="relative">
+                      <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        className="input pl-10 pr-11"
+                        type={showResetPass ? 'text' : 'password'}
+                        placeholder="Ít nhất 6 ký tự"
+                        value={resetForm.new}
+                        onChange={(e) => setResetForm({ ...resetForm, new: e.target.value })}
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowResetPass(!showResetPass)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showResetPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label">Xác nhận mật khẩu mới</label>
+                    <div className="relative">
+                      <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        className="input pl-10"
+                        type="password"
+                        placeholder="••••••••"
+                        value={resetForm.confirm}
+                        onChange={(e) => setResetForm({ ...resetForm, confirm: e.target.value })}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || resetForm.otp.length !== 6}
+                    className="btn-primary btn-lg btn-full mt-2"
+                  >
+                    {loading && <Spinner size="sm" className="border-white/30 border-t-white" />}
+                    Đặt lại mật khẩu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep('forgot')}
+                    className="btn-ghost btn-md btn-full text-gray-500 flex items-center justify-center gap-1.5"
+                  >
+                    <ArrowLeft size={14} />
+                    Gửi lại mã
                   </button>
                 </form>
               </div>

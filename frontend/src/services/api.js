@@ -58,6 +58,8 @@ api.interceptors.response.use(
 export const authApi = {
   login: (data) => api.post('/api/auth/login', { ...data, deviceId: getDeviceId(), deviceInfo: getDeviceInfo() }),
   verifyOtp: (data) => api.post('/api/auth/verify-otp', { ...data, deviceId: getDeviceId(), deviceInfo: getDeviceInfo() }),
+  forgotPassword: (data) => api.post('/api/auth/forgot-password', { ...data, deviceId: getDeviceId() }),
+  resetPassword: (data) => api.post('/api/auth/reset-password', data),
   changePassword: (data) => api.post('/api/auth/change-password', data),
   getMe: () => api.get('/api/auth/me'),
 };
