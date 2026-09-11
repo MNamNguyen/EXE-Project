@@ -1,7 +1,11 @@
 const crypto = require('crypto');
 
 const QR_PERIOD = 30; // seconds per token slot
-const QR_WINDOW = 2;  // accept N slots before current (handles network lag ~60s)
+// Chấp nhận N slot trước slot hiện tại. QR_WINDOW = 3 × 30s nghĩa là một mã đã
+// sinh ra vẫn dùng được ÍT NHẤT 90 giây kể cả khi màn hình đã xoay sang mã mới
+// (tối đa 120s nếu mã được sinh đúng đầu slot) — sinh viên chụp màn hình hoặc
+// mạng chậm vẫn check-in được, không phải chờ quét lại.
+const QR_WINDOW = 3;
 
 function getTimeSlot() {
   return Math.floor(Date.now() / 1000 / QR_PERIOD);

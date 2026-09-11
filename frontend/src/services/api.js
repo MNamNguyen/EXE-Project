@@ -58,6 +58,8 @@ api.interceptors.response.use(
 export const authApi = {
   login: (data) => api.post('/api/auth/login', { ...data, deviceId: getDeviceId(), deviceInfo: getDeviceInfo() }),
   verifyOtp: (data) => api.post('/api/auth/verify-otp', { ...data, deviceId: getDeviceId(), deviceInfo: getDeviceInfo() }),
+  requestLoginOtp: (data) => api.post('/api/auth/login-otp/request', { ...data, deviceId: getDeviceId() }),
+  loginWithOtp: (data) => api.post('/api/auth/login-otp/verify', { ...data, deviceId: getDeviceId(), deviceInfo: getDeviceInfo() }),
   forgotPassword: (data) => api.post('/api/auth/forgot-password', { ...data, deviceId: getDeviceId() }),
   resetPassword: (data) => api.post('/api/auth/reset-password', data),
   changePassword: (data) => api.post('/api/auth/change-password', data),
@@ -108,6 +110,9 @@ export const publicApi = {
 
 // Checkin
 export const checkinApi = {
+  // Đổi token QR lấy vé quét NGAY khi vừa quét (chưa cần đăng nhập) — xem
+  // lib/scanTicket.js ở backend.
+  issueTicket: (data) => api.post('/api/public/scan-ticket', { ...data, deviceId: getDeviceId() }),
   process: (data) => api.post('/api/checkin', { ...data, deviceId: getDeviceId() }),
   getStatus: (eventId) => api.get(`/api/checkin/status/${eventId}`),
 };

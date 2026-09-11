@@ -7,6 +7,38 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getCurrentPosition, GPS_ERROR_MESSAGES } from '../../utils/gps';
 import Spinner from '../../components/ui/Spinner';
 
+// Vé quét được giữ qua vòng chuyển hướng sang trang đăng nhập, nên dùng
+// sessionStorage (sống theo tab, tự mất khi đóng) chứ không phải state.
+const TICKET_KEY = 'fpt_scan_ticket';
+
+function readStoredTicket(eventId, type) {
+  try {
+    const raw = sessionStorage.getItem(TICKET_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    const stillValid = saved.eventId === eventId && saved.type === type && saved.expiresAt > Date.now();
+    return stillValid ? saved.ticket : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeTicket(eventId, type, ticket, expiresAt) {
+  try {
+    sessionStorage.setItem(TICKET_KEY, JSON.stringify({ eventId, type, ticket, expiresAt }));
+  } catch {
+    // Chế độ riêng tư chặn sessionStorage — vẫn còn token QR gốc để thử.
+  }
+}
+
+function clearStoredTicket() {
+  try {
+    sessionStorage.removeItem(TICKET_KEY);
+  } catch {
+    // không sao
+  }
+}
+
 const STAGES = {
   INIT: 'init',
   GPS: 'gps',
@@ -41,15 +73,39 @@ export default function ScanLanding() {
       setErrorInfo({ title: 'Mã QR không hợp lệ', message: 'Link không đúng định dạng. Vui lòng quét lại mã QR.' });
       return;
     }
+    bootstrap();
+  }, [user, authLoading]);
+
+  // Đổi token QR lấy vé quét TRƯỚC khi làm bất cứ việc gì tốn thời gian (đăng
+  // nhập, xin quyền GPS). Mã QR chỉ sống ~90s tính từ lúc màn hình sinh ra nó;
+  // đổi sang vé 15 phút làm đồng hồ chạy từ lúc quét, nên sinh viên đăng nhập
+  // bằng OTP mất vài phút vẫn không phải quay ra quét lại.
+  const bootstrap = async () => {
+    let activeTicket = readStoredTicket(eventId, type);
+
+    if (!activeTicket) {
+      try {
+        const { data } = await checkinApi.issueTicket({ eventId, token, type });
+        activeTicket = data.ticket;
+        storeTicket(eventId, type, data.ticket, data.expiresAt);
+      } catch {
+        // Không đổi được vé (mất mạng, mã đã hết hạn sẵn) → vẫn thử bằng chính
+        // token QR như trước đây, backend chấp nhận cả hai.
+      }
+    }
+
     if (!user) {
-      // Per BRD CK-02: not logged in → redirect to login, then redirect back here
+      // Per BRD CK-02: not logged in → redirect to login, then redirect back here.
+      // Vé đã nằm trong sessionStorage nên quay lại đây vẫn dùng được dù token
+      // trên URL lúc đó đã hết hạn.
       navigate(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
       return;
     }
-    processCheckin();
-  }, [user, authLoading]);
 
-  const processCheckin = async () => {
+    processCheckin(activeTicket);
+  };
+
+  const processCheckin = async (activeTicket) => {
     setStage(STAGES.GPS);
     let gps = null;
 
@@ -69,11 +125,14 @@ export default function ScanLanding() {
     setStage(STAGES.PROCESSING);
 
     try {
-      const { data } = await checkinApi.process({ eventId, token, type, gps });
+      const { data } = await checkinApi.process({ eventId, token, ticket: activeTicket, type, gps });
+      clearStoredTicket();
       setResult(data);
       setStage(STAGES.SUCCESS);
     } catch (err) {
       const errData = err.response?.data;
+      // Vé hết hạn thì phải bỏ đi, nếu không lần quét mã mới vẫn lôi vé cũ ra dùng.
+      if (errData?.error === 'QR_EXPIRED') clearStoredTicket();
       setErrorInfo({
         title: getErrorTitle(errData?.error),
         message: errData?.message || 'Có lỗi xảy ra. Vui lòng thử lại.',

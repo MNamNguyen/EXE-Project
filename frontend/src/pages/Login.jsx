@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Eye, EyeOff, Lock, User, ShieldCheck,
-  QrCode, MapPin, Clock, Users, ChevronRight, ArrowLeft, KeyRound, Mail,
+  QrCode, MapPin, Clock, Users, ChevronRight, ArrowLeft, KeyRound, Mail, MailCheck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { authApi } from '../services/api';
@@ -32,6 +32,10 @@ export default function Login() {
   const [newPass, setNewPass] = useState({ current: '', new: '', confirm: '' });
   // Quên mật khẩu: identifier được giữ lại qua bước nhập mã vì API reset cần
   // gửi kèm (backend không trả về userId để tránh dò tài khoản tồn tại).
+  // 'password' = MSSV + mật khẩu như cũ; 'otp' = sinh viên nhận mã qua email,
+  // không cần nhớ mật khẩu (tiện khi vừa quét QR ở cửa hội trường).
+  const [loginMode, setLoginMode] = useState('password');
+  const [loginOtp,  setLoginOtp]  = useState('');
   const [forgotId,  setForgotId]  = useState('');
   const [resetForm, setResetForm] = useState({ otp: '', new: '', confirm: '' });
   const [showResetPass, setShowResetPass] = useState(false);
@@ -68,6 +72,43 @@ export default function Login() {
       if (data.success) { login(data.token, data.user); navigate(redirectTo, { replace: true }); }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Mã OTP không đúng');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestLoginOtp = async (e) => {
+    e.preventDefault();
+    if (!form.identifier.trim()) return toast.error('Vui lòng nhập MSSV hoặc email');
+    setLoading(true);
+    try {
+      const { data } = await authApi.requestLoginOtp({ identifier: form.identifier.trim() });
+      toast.success(data.message);
+      setStep('login-otp');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Không gửi được mã đăng nhập');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoginWithOtp = async (e) => {
+    e.preventDefault();
+    if (loginOtp.length !== 6) return toast.error('Mã đăng nhập gồm 6 chữ số');
+    setLoading(true);
+    try {
+      const { data } = await authApi.loginWithOtp({
+        identifier: form.identifier.trim(),
+        otp: loginOtp,
+      });
+      if (data.success) {
+        login(data.token, data.user);
+        // Không đẩy sang bước đổi mật khẩu: người dùng vào bằng mã email nên
+        // không có "mật khẩu hiện tại" để nhập.
+        navigate(redirectTo, { replace: true });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Mã đăng nhập không đúng');
     } finally {
       setLoading(false);
     }
@@ -250,7 +291,33 @@ export default function Login() {
                   </p>
                 </div>
 
-                <form onSubmit={handleLogin} className="space-y-5">
+                {/* Chọn cách đăng nhập */}
+                <div className="grid grid-cols-2 gap-1 p-1 mb-6 bg-gray-100 rounded-xl">
+                  {[
+                    { key: 'password', icon: Lock, label: 'Mật khẩu' },
+                    { key: 'otp',      icon: Mail, label: 'Mã OTP qua email' },
+                  ].map(({ key, icon: Icon, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setLoginMode(key)}
+                      className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold
+                                  transition-colors ${
+                        loginMode === key
+                          ? 'bg-white text-primary-600 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <Icon size={14} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <form
+                  onSubmit={loginMode === 'otp' ? handleRequestLoginOtp : handleLogin}
+                  className="space-y-5"
+                >
                   <div>
                     <label className="label">MSSV hoặc Email</label>
                     <div className="relative">
@@ -265,6 +332,7 @@ export default function Login() {
                     </div>
                   </div>
 
+                  {loginMode === 'password' && (
                   <div>
                     <div className="flex items-center justify-between">
                       <label className="label">Mật khẩu</label>
@@ -297,6 +365,15 @@ export default function Login() {
                       </button>
                     </div>
                   </div>
+                  )}
+
+                  {loginMode === 'otp' && (
+                    <p className="text-xs text-gray-500 bg-primary-50/60 border border-primary-100
+                                  rounded-xl px-3.5 py-3 leading-relaxed">
+                      Hệ thống sẽ gửi mã 6 chữ số tới email đã đăng ký của bạn — không cần nhớ
+                      mật khẩu. Chỉ áp dụng cho tài khoản sinh viên.
+                    </p>
+                  )}
 
                   <button
                     type="submit"
@@ -307,7 +384,10 @@ export default function Login() {
                       ? <Spinner size="sm" className="border-white/30 border-t-white" />
                       : <ChevronRight size={16} />
                     }
-                    {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                    {loading
+                      ? (loginMode === 'otp' ? 'Đang gửi mã...' : 'Đang đăng nhập...')
+                      : (loginMode === 'otp' ? 'Gửi mã đăng nhập' : 'Đăng nhập')
+                    }
                   </button>
                 </form>
               </div>
@@ -353,6 +433,53 @@ export default function Login() {
                   >
                     <ArrowLeft size={14} />
                     Quay lại đăng nhập
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* ── Step: Login OTP — nhập mã 6 số nhận qua email ── */}
+            {step === 'login-otp' && (
+              <div className="animate-fade-in">
+                <div className="mb-8">
+                  <div className="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center mb-4">
+                    <MailCheck size={24} className="text-primary-600" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-gray-900">Đăng nhập bằng OTP</h1>
+                  <p className="text-gray-500 text-sm mt-1.5">
+                    Mã 6 chữ số đã được gửi tới email đăng ký của <strong>{form.identifier}</strong>.
+                    Kiểm tra cả thư rác. Mã có hiệu lực 10 phút.
+                  </p>
+                </div>
+
+                <form onSubmit={handleLoginWithOtp} className="space-y-5">
+                  <div>
+                    <label className="label text-center block">Nhập mã đăng nhập</label>
+                    <input
+                      className="input text-center text-2xl font-bold tracking-[0.5em]"
+                      maxLength={6}
+                      value={loginOtp}
+                      onChange={(e) => setLoginOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="······"
+                      inputMode="numeric"
+                      autoFocus
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading || loginOtp.length !== 6}
+                    className="btn-primary btn-lg btn-full"
+                  >
+                    {loading && <Spinner size="sm" className="border-white/30 border-t-white" />}
+                    Đăng nhập
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setStep('login'); setLoginOtp(''); }}
+                    className="btn-ghost btn-md btn-full text-gray-500 flex items-center justify-center gap-1.5"
+                  >
+                    <ArrowLeft size={14} />
+                    Quay lại
                   </button>
                 </form>
               </div>
