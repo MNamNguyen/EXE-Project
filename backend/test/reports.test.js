@@ -6,6 +6,7 @@ const prisma = require('../src/lib/prisma');
 const app = require('../src/app');
 const { attachmentHeader, toAsciiFilename } = require('../src/lib/contentDisposition');
 const { buildAttendanceHtmlReport } = require('../src/services/htmlReport.service');
+const { fmtDateTime, fmtTime } = require('../src/lib/datetime');
 const { stubMethod, restoreStubs } = require('../testenv');
 
 const token = jwt.sign({ userId: 'btc-1' }, process.env.JWT_SECRET);
@@ -124,6 +125,23 @@ test('exportAttendanceHtml: không phải chủ sự kiện bị chặn 403', as
 
   const res = await request(app).get('/api/reports/events/evt-1/export-html').set('Authorization', `Bearer ${token}`);
   assert.strictEqual(res.status, 403);
+});
+
+// ── Múi giờ (bug thật: Render chạy UTC) ─────────────────────────
+
+test('giờ trong báo cáo in theo giờ VN, không theo TZ của máy chủ', () => {
+  // Render (và mọi PaaS mặc định) chạy Node với TZ=UTC. Trước khi vá, một lượt
+  // check-in 08:00 giờ VN hiện thành 01:00 trong báo cáo/email/Excel.
+  const at = new Date('2026-09-18T01:00:00Z'); // = 08:00 giờ VN
+  assert.strictEqual(fmtTime(at), '08:00');
+  assert.match(fmtDateTime(at), /08:00/);
+
+  const html = buildAttendanceHtmlReport(
+    { name: 'Sự kiện', location: 'Hall', checkinOpen: at, checkinClose: at },
+    [attendanceRow({ checkinTime: at })],
+  );
+  assert.match(html, /08:00/);
+  assert.ok(!html.includes('01:00'), 'không được in giờ UTC');
 });
 
 // ── buildAttendanceHtmlReport: nội dung báo cáo ─────────────────

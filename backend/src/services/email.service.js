@@ -1,4 +1,5 @@
 const https = require('https');
+const { fmtDateTime } = require('../lib/datetime');
 
 function brevoRequest(payload) {
   return new Promise((resolve, reject) => {
@@ -182,7 +183,7 @@ async function sendLoginOtpEmail(email, name, otp) {
 async function sendEventRegistrationEmail(email, name, event, { mssv, tempPassword } = {}) {
   assertConfigured();
 
-  const fmt = (d) => new Date(d).toLocaleString('vi-VN', { dateStyle: 'full', timeStyle: 'short' });
+  const fmt = (d) => fmtDateTime(d, { dateStyle: 'full', timeStyle: 'short' });
 
   const credentialsBlock = tempPassword
     ? `

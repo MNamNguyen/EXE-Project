@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma');
 const { addUsersToEvent } = require('../lib/eventMembership');
 const { parseEventDates, parseGateState } = require('../lib/parseOptionalDate');
 const { gateSummary } = require('../lib/attendanceGate');
+const { fmtDate } = require('../lib/datetime');
 
 const CLASS_NOT_FOUND = { success: false, message: 'Không tìm thấy lớp' };
 
@@ -347,7 +348,7 @@ async function createSession(req, res) {
     if (error) return res.status(400).json({ success: false, message: error });
 
     const sessionDate = value.checkinOpen || new Date();
-    const sessionName = value.name || `${cls.name} - Buổi điểm danh ${sessionDate.toLocaleDateString('vi-VN')}`;
+    const sessionName = value.name || `${cls.name} - Buổi điểm danh ${fmtDate(sessionDate)}`;
 
     // Không đặt khung giờ check-in nào → mặc định MỞ điểm danh ngay khi tạo,
     // đúng tinh thần "buổi học không cần đặt lịch trước". Có đặt giờ thì theo

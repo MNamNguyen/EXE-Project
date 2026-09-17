@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma');
 const { validateToken } = require('../services/qr.service');
 const { issueTicket, validateTicket } = require('../lib/scanTicket');
 const { resolveGate } = require('../lib/attendanceGate');
+const { fmtTime } = require('../lib/datetime');
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -124,7 +125,7 @@ async function processCheckin(req, res) {
         return res.status(400).json({
           success: false,
           error: 'OUTSIDE_TIME_WINDOW',
-          message: `${label} chỉ mở từ ${openAt.toLocaleTimeString('vi-VN')} đến ${closeAt.toLocaleTimeString('vi-VN')}`,
+          message: `${label} chỉ mở từ ${fmtTime(openAt)} đến ${fmtTime(closeAt)}`,
         });
       }
       if (gate.reason === 'MANUALLY_CLOSED') {
@@ -196,7 +197,7 @@ async function processCheckin(req, res) {
 
     if (type === 'checkin') {
       if (attendance?.checkinTime) {
-        const time = attendance.checkinTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        const time = fmtTime(attendance.checkinTime);
         return res.status(400).json({
           success: false,
           error: 'ALREADY_CHECKED_IN',
@@ -218,7 +219,7 @@ async function processCheckin(req, res) {
         });
       }
       if (attendance?.checkoutTime) {
-        const time = attendance.checkoutTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        const time = fmtTime(attendance.checkoutTime);
         return res.status(400).json({
           success: false,
           error: 'ALREADY_CHECKED_OUT',
@@ -236,7 +237,7 @@ async function processCheckin(req, res) {
       success: true,
       type,
       time: now.toISOString(),
-      timeDisplay: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      timeDisplay: fmtTime(now, { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       user: { name: req.user.name, mssv: req.user.mssv },
       event: { id: event.id, name: event.name, location: event.location },
     });

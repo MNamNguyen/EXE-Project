@@ -3,6 +3,7 @@ const prisma = require('../lib/prisma');
 const { loadEventForWrite } = require('../lib/eventAccess');
 const { attachmentHeader, inlineHeader } = require('../lib/contentDisposition');
 const { buildAttendanceHtmlReport } = require('../services/htmlReport.service');
+const { fmtDateTime } = require('../lib/datetime');
 
 async function loadAttendanceRows(eventId) {
   return prisma.attendance.findMany({
@@ -56,8 +57,8 @@ async function exportAttendance(req, res) {
         mssv: a.user.mssv || '',
         name: a.user.name,
         class: a.user.class || '',
-        checkin: a.checkinTime ? new Date(a.checkinTime).toLocaleString('vi-VN') : '',
-        checkout: a.checkoutTime ? new Date(a.checkoutTime).toLocaleString('vi-VN') : '',
+        checkin: a.checkinTime ? fmtDateTime(a.checkinTime) : '',
+        checkout: a.checkoutTime ? fmtDateTime(a.checkoutTime) : '',
         status: statusMap[a.status] || a.status,
       });
       if (idx % 2 === 1) {

@@ -4,18 +4,21 @@
 // Biểu đồ donut vẽ bằng SVG thuần (kỹ thuật stroke-dasharray giống vòng đếm
 // ngược trên màn hình QR — QRDisplay.jsx — để nhất quán phong cách trong app).
 
+const { fmtDateTime, fmtTime } = require('../lib/datetime');
+
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
 
-function fmtDateTime(d) {
-  return d ? new Date(d).toLocaleString('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+// Giờ luôn in theo múi giờ VN, không theo TZ của máy chủ — xem lib/datetime.js.
+function dateTimeOrDash(d) {
+  return d ? fmtDateTime(d) : '—';
 }
 
-function fmtTime(d) {
-  return d ? new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '—';
+function timeOrDash(d) {
+  return d ? fmtTime(d) : '—';
 }
 
 // Vẽ donut chart nhiều lát từ mảng { label, value, color }. Trả về chuỗi SVG,
@@ -83,8 +86,8 @@ function buildAttendanceHtmlReport(event, attendances) {
         <td>${escapeHtml(r.mssv)}</td>
         <td>${escapeHtml(r.name)}</td>
         <td>${escapeHtml(r.class)}</td>
-        <td>${fmtTime(r.checkinTime)}</td>
-        <td>${r.checkoutTime ? fmtTime(r.checkoutTime) : '<span class="muted">—</span>'}</td>
+        <td>${timeOrDash(r.checkinTime)}</td>
+        <td>${r.checkoutTime ? timeOrDash(r.checkoutTime) : '<span class="muted">—</span>'}</td>
       </tr>`).join('') || `<tr><td colspan="6" class="empty">Chưa có ai điểm danh</td></tr>`;
 
   const absentRows = absent
@@ -99,7 +102,7 @@ function buildAttendanceHtmlReport(event, attendances) {
       </tr>`).join('') || `<tr><td colspan="5" class="empty">Không có ai vắng — mọi người đã điểm danh 🎉</td></tr>`;
 
   const schedule = event.checkinOpen
-    ? `${fmtDateTime(event.checkinOpen)}${event.checkinClose ? ` – ${fmtTime(event.checkinClose)}` : ''}`
+    ? `${dateTimeOrDash(event.checkinOpen)}${event.checkinClose ? ` – ${timeOrDash(event.checkinClose)}` : ''}`
     : 'Điểm danh thủ công (không đặt lịch cố định)';
 
   return `<!doctype html>
@@ -177,7 +180,7 @@ function buildAttendanceHtmlReport(event, attendances) {
       <div class="meta">
         <span>📍 <b>${escapeHtml(event.location)}</b></span>
         <span>🕐 <b>${escapeHtml(schedule)}</b></span>
-        <span>📄 Xuất lúc <b>${fmtDateTime(new Date())}</b></span>
+        <span>📄 Xuất lúc <b>${dateTimeOrDash(new Date())}</b></span>
       </div>
     </div>
 
@@ -213,7 +216,7 @@ function buildAttendanceHtmlReport(event, attendances) {
       </table>
     </div>
 
-    <footer>Xuất tự động bởi Hệ thống Điểm danh FPT Event · ${fmtDateTime(new Date())}</footer>
+    <footer>Xuất tự động bởi Hệ thống Điểm danh FPT Event · ${dateTimeOrDash(new Date())}</footer>
   </div>
 </body>
 </html>`;
