@@ -1,7 +1,7 @@
 const ExcelJS = require('exceljs');
 const prisma = require('../lib/prisma');
 const { loadEventForWrite } = require('../lib/eventAccess');
-const { attachmentHeader } = require('../lib/contentDisposition');
+const { attachmentHeader, inlineHeader } = require('../lib/contentDisposition');
 const { buildAttendanceHtmlReport } = require('../services/htmlReport.service');
 
 async function loadAttendanceRows(eventId) {
@@ -79,6 +79,11 @@ async function exportAttendance(req, res) {
 // Báo cáo HTML tự chứa (biểu đồ SVG + danh sách tham gia + danh sách vắng) —
 // xem services/htmlReport.service.js. Tải về như một file .html độc lập,
 // mở được offline, không phụ thuộc server sau khi đã xuất.
+//
+// `?view=1` trả về CÙNG nội dung đó nhưng với Content-Disposition: inline để
+// BTC xem ngay trên web (ReportViewerModal.jsx nhúng vào iframe) thay vì phải
+// tải file xuống rồi mở bằng tay. Một nguồn HTML duy nhất cho cả hai chế độ —
+// xem trên web và file tải về không bao giờ lệch nhau.
 async function exportAttendanceHtml(req, res) {
   try {
     const event = await loadEventForWrite(req, res);
@@ -86,9 +91,13 @@ async function exportAttendanceHtml(req, res) {
 
     const attendances = await loadAttendanceRows(req.params.id);
     const html = buildAttendanceHtmlReport(event, attendances);
+    const inline = req.query.view === '1' || req.query.view === 'true';
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Content-Disposition', attachmentHeader(`baocao-${event.name}`, 'html'));
+    res.setHeader(
+      'Content-Disposition',
+      (inline ? inlineHeader : attachmentHeader)(`baocao-${event.name}`, 'html')
+    );
     return res.send(html);
   } catch (err) {
     console.error('Export HTML error:', err);

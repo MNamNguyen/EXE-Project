@@ -4,7 +4,7 @@ import {
   QrCode, Download, Search, Users, CheckCircle, LogOut,
   RefreshCw, ExternalLink, UserCheck, ChevronLeft, ChevronRight,
   Pencil, UserPlus, Link2, TicketCheck, PlayCircle, StopCircle,
-  FileCode2, Circle,
+  FileCode2, Circle, Eye,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -15,6 +15,7 @@ import Badge, { attendanceStatusBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import EventEditModal from './EventEditModal';
 import EventMembersModal from './EventMembersModal';
+import ReportViewerModal from './ReportViewerModal';
 
 const PAGE_SIZE = 20;
 
@@ -36,6 +37,7 @@ export default function EventDetail() {
   const [manualType, setManualType] = useState('checkin');
   const [editModal, setEditModal] = useState(false);
   const [membersModal, setMembersModal] = useState(false);
+  const [reportModal, setReportModal] = useState(false);
 
   const reloadEvent = () => eventApi.get(id).then(({ data }) => setEvent(data.data));
 
@@ -187,10 +189,14 @@ export default function EventDetail() {
               {exporting ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <Download size={16} />}
               Xuất Excel
             </button>
+            <button onClick={() => setReportModal(true)}
+              className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
+              <Eye size={16} /> Xem báo cáo
+            </button>
             <button onClick={handleExportHtml} disabled={exportingHtml}
               className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
               {exportingHtml ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <FileCode2 size={16} />}
-              Báo cáo HTML
+              Tải HTML
             </button>
             <button onClick={() => setManualModal(true)}
               className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
@@ -399,6 +405,14 @@ export default function EventDetail() {
         eventId={id}
         onClose={() => setMembersModal(false)}
         onChanged={() => { reloadEvent(); loadAttendance(page); }}
+      />
+
+      {/* Xem báo cáo HTML ngay trên web (kèm nút tải file / in PDF bên trong) */}
+      <ReportViewerModal
+        open={reportModal}
+        eventId={id}
+        eventName={event.name}
+        onClose={() => setReportModal(false)}
       />
     </Layout>
   );

@@ -19,10 +19,21 @@ function toAsciiFilename(name) {
   return stripped || 'export';
 }
 
-function attachmentHeader(baseName, ext) {
+function dispositionHeader(type, baseName, ext) {
   const asciiName = `${toAsciiFilename(baseName)}.${ext}`;
   const utf8Name = `${baseName}.${ext}`;
-  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(utf8Name)}`;
+  return `${type}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(utf8Name)}`;
 }
 
-module.exports = { attachmentHeader, toAsciiFilename };
+function attachmentHeader(baseName, ext) {
+  return dispositionHeader('attachment', baseName, ext);
+}
+
+// "inline" = trình duyệt HIỂN THỊ luôn thay vì tải về, dùng cho chế độ xem báo
+// cáo trực tiếp trên web. Vẫn giữ filename để nếu người xem bấm Lưu thì tên
+// file ra đúng như khi tải về.
+function inlineHeader(baseName, ext) {
+  return dispositionHeader('inline', baseName, ext);
+}
+
+module.exports = { attachmentHeader, inlineHeader, toAsciiFilename };

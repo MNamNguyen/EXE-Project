@@ -92,6 +92,32 @@ test('exportAttendanceHtml: trả về file .html tự chứa, không phải JSO
   assert.ok(!/https?:\/\//i.test(res.text.replace(/UTF-8/g, '')));
 });
 
+// `?view=1` là chế độ xem trực tiếp trên web: cùng HTML, chỉ khác disposition
+// inline để trình duyệt/iframe hiển thị luôn thay vì tải file xuống.
+test('exportAttendanceHtml?view=1: disposition inline, nội dung y như bản tải về', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => BTC_USER);
+  mockOwnedEvent();
+  stubMethod(prisma.attendance, 'findMany', async () => [attendanceRow({ checkinTime: new Date() })]);
+
+  const view = await request(app).get('/api/reports/events/evt-1/export-html?view=1').set('Authorization', `Bearer ${token}`);
+
+  assert.strictEqual(view.status, 200);
+  assert.match(view.headers['content-type'], /text\/html/);
+  assert.match(view.headers['content-disposition'], /^inline;/);
+  assert.match(view.headers['content-disposition'], /filename="baocao-Hoi_thao_Cong_nghe\.html"/);
+  assert.ok(/^[\x00-\x7F]*$/.test(view.headers['content-disposition']));
+  assert.match(view.text, /Nguyễn Văn A/);
+});
+
+test('exportAttendanceHtml: không có ?view vẫn tải về (attachment)', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => BTC_USER);
+  mockOwnedEvent();
+  stubMethod(prisma.attendance, 'findMany', async () => []);
+
+  const res = await request(app).get('/api/reports/events/evt-1/export-html').set('Authorization', `Bearer ${token}`);
+  assert.match(res.headers['content-disposition'], /^attachment;/);
+});
+
 test('exportAttendanceHtml: không phải chủ sự kiện bị chặn 403', async () => {
   stubMethod(prisma.user, 'findUnique', async () => BTC_USER);
   mockOwnedEvent({ createdById: 'btc-khac' });

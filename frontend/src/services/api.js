@@ -138,6 +138,9 @@ export const adminApi = {
 export const reportApi = {
   exportAttendance: (eventId) => api.get(`/api/reports/events/${eventId}/export`, { responseType: 'blob' }),
   exportAttendanceHtml: (eventId) => api.get(`/api/reports/events/${eventId}/export-html`, { responseType: 'blob' }),
+  // Chế độ xem trên web: lấy HTML dưới dạng chuỗi để nhúng vào iframe srcDoc
+  // (blob không dùng được cho srcDoc, và tab blob: bị popup blocker chặn).
+  viewAttendanceHtml: (eventId) => api.get(`/api/reports/events/${eventId}/export-html`, { params: { view: 1 }, responseType: 'text' }),
   getFraudLogs: (params) => api.get('/api/reports/fraud-logs', { params }),
 };
 
