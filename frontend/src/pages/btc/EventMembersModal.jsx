@@ -299,8 +299,7 @@ export default function EventMembersModal({ open, eventId, onClose, onChanged })
             <PanelHeader title="Thêm cả lớp vào sự kiện" onClose={backToList} />
 
             <p className="text-xs text-gray-500 bg-primary-50 rounded-lg p-3">
-              Chọn lớp để thêm toàn bộ sinh viên đang hoạt động của lớp đó vào danh sách tham gia.
-              Người đã có trong danh sách sẽ được bỏ qua, không bị thêm trùng.
+              Thêm toàn bộ sinh viên đang hoạt động của lớp. Người đã có trong danh sách được bỏ qua.
             </p>
 
             <div className="relative">

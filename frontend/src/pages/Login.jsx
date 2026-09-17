@@ -370,8 +370,7 @@ export default function Login() {
                   {loginMode === 'otp' && (
                     <p className="text-xs text-gray-500 bg-primary-50/60 border border-primary-100
                                   rounded-xl px-3.5 py-3 leading-relaxed">
-                      Hệ thống sẽ gửi mã 6 chữ số tới email đã đăng ký của bạn — không cần nhớ
-                      mật khẩu. Chỉ áp dụng cho tài khoản sinh viên.
+                      Mã 6 chữ số sẽ được gửi tới email đã đăng ký.
                     </p>
                   )}
 
@@ -402,7 +401,7 @@ export default function Login() {
                   </div>
                   <h1 className="text-2xl font-bold text-gray-900">Xác thực thiết bị</h1>
                   <p className="text-gray-500 text-sm mt-1.5">
-                    Mã OTP 6 chữ số đã được gửi đến email của bạn. Kiểm tra hộp thư đến (và thư rác).
+                    Mã OTP 6 chữ số đã được gửi đến email của bạn.
                   </p>
                 </div>
 
@@ -447,8 +446,7 @@ export default function Login() {
                   </div>
                   <h1 className="text-2xl font-bold text-gray-900">Đăng nhập bằng OTP</h1>
                   <p className="text-gray-500 text-sm mt-1.5">
-                    Mã 6 chữ số đã được gửi tới email đăng ký của <strong>{form.identifier}</strong>.
-                    Kiểm tra cả thư rác. Mã có hiệu lực 10 phút.
+                    Mã 6 chữ số đã gửi tới email của <strong>{form.identifier}</strong>. Hiệu lực 10 phút.
                   </p>
                 </div>
 
@@ -494,8 +492,7 @@ export default function Login() {
                   </div>
                   <h1 className="text-2xl font-bold text-gray-900">Quên mật khẩu</h1>
                   <p className="text-gray-500 text-sm mt-1.5">
-                    Nhập MSSV hoặc email của bạn. Chúng tôi sẽ gửi mã xác thực 6 chữ số
-                    đến email đã đăng ký.
+                    Nhập MSSV hoặc email để nhận mã xác thực.
                   </p>
                 </div>
 
@@ -549,8 +546,7 @@ export default function Login() {
                   </div>
                   <h1 className="text-2xl font-bold text-gray-900">Đặt lại mật khẩu</h1>
                   <p className="text-gray-500 text-sm mt-1.5">
-                    Nhập mã 6 chữ số vừa gửi tới email của bạn (kiểm tra cả thư rác) và
-                    chọn mật khẩu mới. Mã có hiệu lực trong 15 phút.
+                    Nhập mã 6 chữ số trong email và chọn mật khẩu mới. Mã hiệu lực 15 phút.
                   </p>
                 </div>
 
@@ -633,7 +629,7 @@ export default function Login() {
                   </div>
                   <h1 className="text-2xl font-bold text-gray-900">Đặt mật khẩu mới</h1>
                   <p className="text-gray-500 text-sm mt-1.5">
-                    Đây là lần đăng nhập đầu tiên. Vui lòng đặt mật khẩu cá nhân để tiếp tục.
+                    Lần đăng nhập đầu tiên — hãy đặt mật khẩu cá nhân.
                   </p>
                 </div>
 

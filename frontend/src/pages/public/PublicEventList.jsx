@@ -55,8 +55,7 @@ export default function PublicEventList() {
           </Link>
           <h1 className="text-2xl md:text-3xl font-bold text-white">Đăng ký tham gia sự kiện</h1>
           <p className="text-white/75 text-sm mt-2 max-w-xl">
-            Chọn sự kiện bạn muốn tham dự và điền thông tin đăng ký. Chưa có tài khoản?
-            Hệ thống sẽ tự tạo và gửi thông tin đăng nhập qua email cho bạn.
+            Chọn sự kiện và điền thông tin đăng ký. Chưa có tài khoản? Hệ thống sẽ gửi qua email.
           </p>
         </div>
       </div>

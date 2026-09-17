@@ -107,10 +107,10 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
           <div className="flex items-start gap-2.5 bg-primary-50 border border-primary-200 rounded-xl p-3">
             <Info size={15} className="text-primary-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-primary-800 leading-relaxed">
-              Toàn bộ sinh viên đang hoạt động của lớp <strong>{className}</strong> sẽ tự động được thêm vào danh sách
+              Toàn bộ sinh viên đang hoạt động của lớp <strong>{className}</strong> sẽ được thêm vào danh sách
               tham gia. {useSchedule
-                ? 'Điểm danh sẽ mở/đóng đúng theo khung giờ bên dưới.'
-                : 'Không đặt lịch, điểm danh sẽ MỞ NGAY sau khi tạo — bạn có thể bấm đóng thủ công bất cứ lúc nào ở trang chi tiết.'}
+                ? 'Điểm danh mở/đóng theo khung giờ bên dưới.'
+                : 'Điểm danh mở ngay sau khi tạo.'}
             </p>
           </div>
 
@@ -157,7 +157,7 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
               </div>
             ) : (
               <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-                Điểm danh mở ngay khi tạo, không giới hạn giờ. Bật lên nếu buổi học có giờ bắt đầu/kết thúc cố định.
+                Điểm danh mở ngay khi tạo, không giới hạn giờ.
               </p>
             )}
           </div>

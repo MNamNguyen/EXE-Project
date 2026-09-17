@@ -202,8 +202,7 @@ export default function BulkUserActions({ selected, currentUserId, onClear, onDo
           <form onSubmit={submitEdit} className="space-y-4">
             {summary}
             <p className="text-xs text-gray-400">
-              Bật công tắc ở trường bạn muốn ghi đè. Trường không bật sẽ giữ nguyên giá trị riêng của
-              từng người. Email, MSSV và họ tên là dữ liệu riêng nên chỉ sửa được từng người.
+              Chỉ những trường được bật mới bị ghi đè.
             </p>
 
             <div className="space-y-2">
@@ -276,7 +275,7 @@ export default function BulkUserActions({ selected, currentUserId, onClear, onDo
             {summary}
             <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
               {modal === 'lock'
-                ? 'Tài khoản bị khoá không đăng nhập được nhưng dữ liệu điểm danh cũ vẫn giữ nguyên. Phiên đăng nhập đang mở còn hiệu lực tới khi token hết hạn (1 ngày).'
+                ? 'Tài khoản bị khoá không đăng nhập được, dữ liệu điểm danh vẫn giữ nguyên.'
                 : 'Người dùng có thể đăng nhập lại bằng mật khẩu hiện tại.'}
             </p>
             <div className="flex gap-3">
@@ -336,9 +335,8 @@ export default function BulkUserActions({ selected, currentUserId, onClear, onDo
           <div className="space-y-4">
             {summary}
             <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-              Mỗi người nhận một mật khẩu tạm riêng qua email và buộc phải đổi ở lần đăng nhập kế
-              tiếp. Tài khoản đang bị tạm khoá do đăng nhập sai nhiều lần cũng được mở khoá. Danh
-              sách mật khẩu sẽ hiện ngay sau khi chạy xong để bàn giao thủ công nếu email lỗi.
+              Mỗi người nhận một mật khẩu tạm qua email, phải đổi ở lần đăng nhập kế tiếp.
+              Tài khoản đang bị khoá cũng được mở.
             </p>
             <div className="flex gap-3">
               <button type="button" onClick={close} className="btn-secondary btn-md flex-1">Huỷ</button>
@@ -361,8 +359,7 @@ export default function BulkUserActions({ selected, currentUserId, onClear, onDo
           <div className="space-y-4">
             {summary}
             <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-              Gỡ thiết bị đã tin cậy. Lần đăng nhập kế tiếp trên máy mới sẽ cần mã OTP gửi qua email
-              như bình thường.
+              Gỡ thiết bị đã tin cậy — lần đăng nhập kế tiếp sẽ cần mã OTP.
             </p>
             <div className="flex gap-3">
               <button type="button" onClick={close} className="btn-secondary btn-md flex-1">Huỷ</button>
@@ -388,8 +385,7 @@ export default function BulkUserActions({ selected, currentUserId, onClear, onDo
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-red-800">Không thể hoàn tác</p>
                 <p className="text-xs text-red-700">
-                  Toàn bộ lịch sử điểm danh, đăng ký sự kiện và thiết bị của những người này sẽ bị xoá
-                  vĩnh viễn. Người đã từng tạo sự kiện sẽ được bỏ qua — hãy khoá tài khoản của họ.
+                  Xoá vĩnh viễn tài khoản và toàn bộ lịch sử điểm danh. Người đã tạo sự kiện được bỏ qua.
                 </p>
               </div>
             </div>

@@ -100,7 +100,7 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
             <Clock size={16} className="text-primary-600" /> Thời gian check-in / check-out
           </h3>
           <p className="text-xs text-gray-400 mb-3">
-            Tuỳ chọn — để trống cả 4 ô để chủ động mở/đóng điểm danh thủ công thay vì đặt lịch.
+            Tuỳ chọn — để trống để mở/đóng điểm danh thủ công.
           </p>
           <div className="grid grid-cols-2 gap-3">
             {[

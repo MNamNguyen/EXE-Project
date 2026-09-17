@@ -527,7 +527,7 @@ export default function UserManagement() {
         <form onSubmit={handleCreate} className="space-y-4">
           {userFormFields(form, setForm)}
           <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-            Hệ thống sẽ gửi email chào mừng kèm mật khẩu tạm thời đến địa chỉ email trên.
+            Mật khẩu tạm thời sẽ được gửi qua email.
           </p>
           <div className="flex gap-3">
             <button type="button" onClick={() => setCreateModal(false)} className="btn-secondary btn-md flex-1">Huỷ</button>
@@ -558,8 +558,7 @@ export default function UserManagement() {
         {pwdResult ? (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
-              Mật khẩu mới của <strong>{pwdUser?.name}</strong> đã được đặt lại. Người dùng sẽ buộc phải
-              đổi mật khẩu ngay sau lần đăng nhập kế tiếp.
+              Đã đặt lại mật khẩu của <strong>{pwdUser?.name}</strong>.
             </p>
             <div className="bg-surface rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">Mật khẩu mới</p>
@@ -574,7 +573,7 @@ export default function UserManagement() {
             <p className={`text-xs rounded-lg p-3 ${pwdResult.emailSent ? 'text-gray-400 bg-surface' : 'text-red-600 bg-red-50'}`}>
               {pwdResult.emailSent
                 ? `Email kèm mật khẩu mới đã được gửi đến ${pwdUser?.email}.`
-                : 'Không gửi được email. Hãy sao chép mật khẩu và bàn giao cho người dùng theo cách khác.'}
+                : 'Không gửi được email — hãy sao chép mật khẩu và bàn giao trực tiếp.'}
             </p>
             <button type="button" onClick={() => setPwdModal(false)} className="btn-primary btn-md w-full">Đóng</button>
           </div>
@@ -611,8 +610,8 @@ export default function UserManagement() {
             )}
 
             <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-              Người dùng sẽ nhận email kèm mật khẩu mới và buộc phải đổi mật khẩu ở lần đăng nhập kế tiếp.
-              Tài khoản đang bị tạm khoá do đăng nhập sai nhiều lần cũng được mở khoá.
+              Mật khẩu mới được gửi qua email, phải đổi ở lần đăng nhập kế tiếp.
+              Tài khoản đang bị khoá cũng được mở.
             </p>
 
             <div className="flex gap-3">

@@ -111,7 +111,7 @@ export default function ClassManagement() {
               {search ? 'Không tìm thấy lớp phù hợp' : 'Chưa có lớp nào'}
             </p>
             <p className="text-gray-400 text-xs mt-1 mb-4">
-              Tạo lớp để nhóm sinh viên lại, thêm nhanh cả lớp vào sự kiện hoặc tạo buổi điểm danh.
+              Tạo lớp để thêm nhanh cả lớp vào sự kiện hoặc tạo buổi điểm danh.
             </p>
             {!search && (
               <button onClick={openCreate} className="btn-primary btn-sm inline-flex">

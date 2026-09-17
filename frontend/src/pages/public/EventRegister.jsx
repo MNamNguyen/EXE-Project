@@ -293,8 +293,8 @@ function SuccessCard({ event, result, loggedIn }) {
           <div className="flex items-start gap-2.5 bg-primary-50 border border-primary-200 rounded-xl p-4 mt-4 text-left">
             <Info size={16} className="text-primary-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-primary-800 leading-relaxed">
-              Hệ thống đã tạo tài khoản mới cho bạn. Mật khẩu tạm đã được gửi tới{' '}
-              <strong>{result.email}</strong> — hãy đăng nhập và đổi mật khẩu trước ngày sự kiện.
+              Đã tạo tài khoản mới cho bạn, mật khẩu tạm được gửi tới{' '}
+              <strong>{result.email}</strong>.
             </p>
           </div>
         )}
@@ -303,8 +303,8 @@ function SuccessCard({ event, result, loggedIn }) {
           <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4 text-left">
             <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-amber-800 leading-relaxed">
-              Đăng ký đã được ghi nhận nhưng hệ thống chưa gửi được email xác nhận.
-              Vui lòng liên hệ Ban tổ chức để nhận thông tin đăng nhập.
+              Đã ghi nhận đăng ký nhưng chưa gửi được email — liên hệ Ban tổ chức để nhận
+              thông tin đăng nhập.
             </p>
           </div>
         )}

@@ -151,8 +151,7 @@ export default function EventCreate() {
               <Clock size={18} className="text-primary-600" /> Thời gian
             </h2>
             <p className="text-xs text-gray-400 mb-4">
-              Tuỳ chọn — để trống nếu muốn chủ động bấm "Mở điểm danh" / "Đóng điểm danh" ở trang chi tiết sự kiện
-              thay vì đặt lịch cố định. Nếu đặt, phải điền đủ cả 4 mốc giờ.
+              Tuỳ chọn — để trống để mở/đóng điểm danh thủ công. Nếu đặt, phải điền đủ cả 4 mốc giờ.
             </p>
             <div className="grid grid-cols-2 gap-3">
               {[
@@ -188,7 +187,7 @@ export default function EventCreate() {
             {form.gpsEnabled ? (
               <div className="space-y-4">
                 <p className="text-xs text-gray-500 bg-primary-50 rounded-lg p-3">
-                  Sinh viên phải đứng trong bán kính cho phép để check-in. Nên bật khi tổ chức ngoài trời hoặc GPS tốt. Tắt nếu sự kiện trong nhà tín hiệu yếu.
+                  Sinh viên phải đứng trong bán kính cho phép để check-in.
                 </p>
 
                 {/* Auto-detect button */}
@@ -272,7 +271,7 @@ export default function EventCreate() {
               </div>
             ) : (
               <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-3">
-                GPS tắt: hệ thống sẽ chỉ dùng Dynamic QR + Device Binding để chống gian lận. Phù hợp với sự kiện trong nhà tín hiệu GPS yếu.
+                GPS tắt — chỉ chống gian lận bằng Dynamic QR + Device Binding.
               </p>
             )}
           </div>
@@ -289,7 +288,7 @@ export default function EventCreate() {
                 <div>
                   <p className="text-sm font-medium text-gray-700">Cho phép tự đăng ký tham gia</p>
                   <p className="text-xs text-gray-400">
-                    Sinh viên tự điền form (họ tên, MSSV, email) qua link công khai. Chưa có tài khoản sẽ được tạo tự động.
+                    Sinh viên tự đăng ký qua link công khai.
                   </p>
                 </div>
               </label>
