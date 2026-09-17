@@ -127,6 +127,86 @@ test('exportAttendanceHtml: không phải chủ sự kiện bị chặn 403', as
   assert.strictEqual(res.status, 403);
 });
 
+// ── Chia sẻ báo cáo qua link công khai ──────────────────────────
+
+test('createReportShare: cấp link, bấm lần hai giữ nguyên token đã phát đi', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => BTC_USER);
+  mockOwnedEvent();
+  let updates = 0;
+  stubMethod(prisma.event, 'update', async ({ data }) => { updates += 1; return { ...data }; });
+
+  const first = await request(app).post('/api/reports/events/evt-1/share').set('Authorization', `Bearer ${token}`);
+  assert.strictEqual(first.status, 200);
+  assert.strictEqual(first.body.data.shared, true);
+  assert.match(first.body.data.url, /\/bao-cao\/[\w-]{20,}$/);
+  assert.strictEqual(updates, 1);
+
+  // Sự kiện đã có token → không ghi DB nữa, trả lại đúng link cũ.
+  mockOwnedEvent({ reportShareToken: 'token-cu', reportSharedAt: new Date() });
+  const second = await request(app).post('/api/reports/events/evt-1/share').set('Authorization', `Bearer ${token}`);
+  assert.match(second.body.data.url, /\/bao-cao\/token-cu$/);
+  assert.strictEqual(updates, 1, 'không cấp token mới khi đã chia sẻ');
+});
+
+test('createReportShare?rotate=1: cấp token mới cho link cũ bị lộ', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => BTC_USER);
+  mockOwnedEvent({ reportShareToken: 'token-cu' });
+  stubMethod(prisma.event, 'update', async ({ data }) => ({ ...data }));
+
+  const res = await request(app).post('/api/reports/events/evt-1/share?rotate=1').set('Authorization', `Bearer ${token}`);
+  assert.strictEqual(res.status, 200);
+  assert.ok(!res.body.data.url.endsWith('/token-cu'));
+});
+
+test('revokeReportShare: xoá token, link cũ hết hiệu lực', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => BTC_USER);
+  mockOwnedEvent({ reportShareToken: 'token-cu' });
+  let written = null;
+  stubMethod(prisma.event, 'update', async ({ data }) => { written = data; return { ...data }; });
+
+  const res = await request(app).delete('/api/reports/events/evt-1/share').set('Authorization', `Bearer ${token}`);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(written.reportShareToken, null);
+  assert.strictEqual(res.body.data.shared, false);
+  assert.strictEqual(res.body.data.url, null);
+});
+
+test('share: không phải chủ sự kiện bị chặn 403', async () => {
+  stubMethod(prisma.user, 'findUnique', async () => BTC_USER);
+  mockOwnedEvent({ createdById: 'btc-khac' });
+
+  const create = await request(app).post('/api/reports/events/evt-1/share').set('Authorization', `Bearer ${token}`);
+  const revoke = await request(app).delete('/api/reports/events/evt-1/share').set('Authorization', `Bearer ${token}`);
+  assert.strictEqual(create.status, 403);
+  assert.strictEqual(revoke.status, 403);
+});
+
+test('báo cáo chia sẻ xem được KHÔNG cần đăng nhập', async () => {
+  stubMethod(prisma.event, 'findUnique', async ({ where }) => (
+    where.reportShareToken === 'token-hop-le'
+      ? { id: 'evt-1', name: 'Hội thảo Công nghệ', location: 'Hội trường A1', checkinOpen: new Date(), checkinClose: new Date() }
+      : null
+  ));
+  stubMethod(prisma.attendance, 'findMany', async () => [attendanceRow({ checkinTime: new Date() })]);
+
+  const res = await request(app).get('/api/public/reports/token-hop-le');
+
+  assert.strictEqual(res.status, 200);
+  assert.match(res.headers['content-type'], /text\/html/);
+  assert.match(res.headers['content-disposition'], /^inline;/);
+  // Link lan rộng: proxy/CDN không được giữ bản cũ, thu hồi phải có hiệu lực ngay.
+  assert.match(res.headers['cache-control'], /no-store/);
+  assert.match(res.text, /Nguyễn Văn A/);
+});
+
+test('token sai hoặc đã thu hồi trả 404 SHARE_NOT_FOUND', async () => {
+  stubMethod(prisma.event, 'findUnique', async () => null);
+
+  const res = await request(app).get('/api/public/reports/token-da-thu-hoi');
+  assert.strictEqual(res.status, 404);
+  assert.strictEqual(res.body.error, 'SHARE_NOT_FOUND');
+});
+
 // ── Múi giờ (bug thật: Render chạy UTC) ─────────────────────────
 
 test('giờ trong báo cáo in theo giờ VN, không theo TZ của máy chủ', () => {

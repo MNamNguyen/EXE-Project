@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Download, Printer, RefreshCw, FileWarning } from 'lucide-react';
+import { X, Download, Printer, RefreshCw, FileWarning, Share2, Copy, Link2Off, RotateCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { reportApi } from '../../services/api';
 import Spinner from '../../components/ui/Spinner';
@@ -21,6 +21,12 @@ export default function ReportViewerModal({ open, eventId, eventName, onClose })
   const [failed, setFailed] = useState(false);
   const frameRef = useRef(null);
 
+  // Link chia sẻ công khai: null = chưa biết (chưa hỏi server), { shared, url }
+  // sau khi hỏi. Panel chỉ mở khi BTC bấm "Chia sẻ".
+  const [share, setShare] = useState(null);
+  const [sharePanel, setSharePanel] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+
   const load = useCallback(() => {
     if (!eventId) return;
     setLoading(true);
@@ -32,9 +38,14 @@ export default function ReportViewerModal({ open, eventId, eventName, onClose })
   }, [eventId]);
 
   useEffect(() => {
-    if (open) load();
-    else setHtml('');
-  }, [open, load]);
+    if (open) {
+      load();
+      reportApi.getShare(eventId).then(({ data }) => setShare(data.data)).catch(() => {});
+    } else {
+      setHtml('');
+      setSharePanel(false);
+    }
+  }, [open, eventId, load]);
 
   // Khoá scroll trang nền giống components/ui/Modal.jsx
   useEffect(() => {
@@ -62,6 +73,36 @@ export default function ReportViewerModal({ open, eventId, eventName, onClose })
     URL.revokeObjectURL(url);
   };
 
+  const runShare = (promise, successMsg) => {
+    setShareBusy(true);
+    promise
+      .then(({ data }) => {
+        setShare(data.data);
+        if (data.data.url) copyLink(data.data.url);
+        toast.success(successMsg);
+      })
+      .catch((err) => toast.error(err.response?.data?.message || 'Thao tác thất bại'))
+      .finally(() => setShareBusy(false));
+  };
+
+  const copyLink = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard bị chặn (http, hoặc người dùng từ chối) — link vẫn hiện ra
+      // trong ô bên dưới để copy tay, nên không báo lỗi ồn ào.
+    }
+  };
+
+  const handleRevoke = () => {
+    if (!confirm('Thu hồi link? Người đã nhận link sẽ không xem được báo cáo nữa.')) return;
+    setShareBusy(true);
+    reportApi.revokeShare(eventId)
+      .then(({ data }) => { setShare(data.data); toast.success('Đã thu hồi link chia sẻ'); })
+      .catch((err) => toast.error(err.response?.data?.message || 'Thu hồi thất bại'))
+      .finally(() => setShareBusy(false));
+  };
+
   // In nội dung iframe (không phải cả trang app) — cũng là đường "lưu thành PDF".
   const handlePrint = () => {
     try {
@@ -84,6 +125,12 @@ export default function ReportViewerModal({ open, eventId, eventName, onClose })
             className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50">
             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
           </button>
+          <button onClick={() => setSharePanel((v) => !v)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+              share?.shared ? 'text-primary-700 bg-primary-50 hover:bg-primary-100' : 'text-gray-600 hover:bg-gray-100'
+            }`}>
+            <Share2 size={16} /> <span className="hidden sm:inline">{share?.shared ? 'Đang chia sẻ' : 'Chia sẻ'}</span>
+          </button>
           <button onClick={handlePrint} disabled={loading || failed || !html}
             className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50">
             <Printer size={16} /> In / PDF
@@ -96,6 +143,45 @@ export default function ReportViewerModal({ open, eventId, eventName, onClose })
             <X size={20} />
           </button>
         </div>
+
+        {sharePanel && (
+          <div className="px-4 sm:px-6 py-3 bg-primary-50/60 border-b border-primary-100 flex-shrink-0 space-y-2">
+            {share?.shared ? (
+              <>
+                <p className="text-xs text-gray-600">
+                  Ai có link này đều xem được báo cáo, không cần đăng nhập. Số liệu luôn là mới nhất.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input readOnly value={share.url} onFocus={(e) => e.target.select()}
+                    className="input flex-1 min-w-[220px] text-xs font-mono" />
+                  <button onClick={() => { copyLink(share.url); toast.success('Đã copy link'); }}
+                    className="flex items-center gap-1.5 bg-primary-600 text-white font-medium px-3 py-2 rounded-xl text-xs hover:bg-primary-700 transition-colors">
+                    <Copy size={14} /> Copy
+                  </button>
+                  <button onClick={() => runShare(reportApi.createShare(eventId, { rotate: true }), 'Đã cấp link mới')} disabled={shareBusy}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-gray-600 hover:bg-white transition-colors disabled:opacity-50">
+                    <RotateCw size={14} /> Link mới
+                  </button>
+                  <button onClick={handleRevoke} disabled={shareBusy}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+                    <Link2Off size={14} /> Thu hồi
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-gray-600">
+                  Tạo link công khai để gửi báo cáo cho người không có tài khoản.
+                </p>
+                <button onClick={() => runShare(reportApi.createShare(eventId), 'Đã tạo link, đã copy vào clipboard')} disabled={shareBusy}
+                  className="flex items-center gap-1.5 bg-primary-600 text-white font-medium px-3 py-2 rounded-xl text-xs hover:bg-primary-700 transition-colors disabled:opacity-50">
+                  {shareBusy ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <Share2 size={14} />}
+                  Tạo link chia sẻ
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex-1 bg-[#F4F7FC] min-h-0">
           {loading ? (

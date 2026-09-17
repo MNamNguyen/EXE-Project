@@ -101,6 +101,9 @@ CREATE TABLE IF NOT EXISTS "attendance_events" (
   "isWhitelisted" BOOLEAN          NOT NULL DEFAULT FALSE,
   "allowRegistration" BOOLEAN      NOT NULL DEFAULT TRUE,
   "isActive"      BOOLEAN          NOT NULL DEFAULT TRUE,
+  -- Link chia sẻ báo cáo công khai (NULL = chưa chia sẻ / đã thu hồi).
+  "reportShareToken" TEXT,
+  "reportSharedAt"   TIMESTAMPTZ,
   "createdById"   TEXT             NOT NULL,
   -- Gắn với attendance_classes khi sự kiện này là một buổi điểm danh của lớp
   -- (tạo qua /api/classes/:id/sessions) — NULL với sự kiện thường.
@@ -125,6 +128,21 @@ ALTER TABLE "attendance_events"
 
 ALTER TABLE "attendance_events"
   ADD COLUMN IF NOT EXISTS "classId" TEXT;
+
+-- Chia sẻ báo cáo qua link công khai. UNIQUE vì token là khoá tra cứu sự kiện
+-- ở /api/public/reports/:token.
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "reportShareToken" TEXT;
+
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "reportSharedAt" TIMESTAMPTZ;
+
+DO $$ BEGIN
+  ALTER TABLE "attendance_events"
+    ADD CONSTRAINT "attendance_events_reportShareToken_key" UNIQUE ("reportShareToken");
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 DO $$ BEGIN
   ALTER TABLE "attendance_events"

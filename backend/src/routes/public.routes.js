@@ -6,6 +6,8 @@ const {
 // Đổi token QR lấy vé quét phải gọi được khi chưa đăng nhập, nên đặt ở đây để
 // giữ nguyên quy ước "/api/public/* là router duy nhất không cần auth".
 const { issueScanTicket } = require('../controllers/checkin.controller');
+// Báo cáo được BTC chia sẻ bằng link công khai: người xem không có tài khoản.
+const { getSharedReport } = require('../controllers/report.controller');
 
 // Endpoint đăng ký công khai có thể tạo tài khoản mới → siết chặt hơn rate limit
 // chung của /api để chặn spam tạo user hàng loạt từ một IP.
@@ -34,5 +36,7 @@ router.post('/scan-ticket', scanTicketLimiter, issueScanTicket);
 router.get('/events', listOpenEvents);
 router.get('/events/:id', getPublicEvent);
 router.post('/events/:id/register', registerLimiter, registerPublic);
+
+router.get('/reports/:token', getSharedReport);
 
 module.exports = router;

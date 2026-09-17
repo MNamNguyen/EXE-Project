@@ -142,6 +142,16 @@ export const reportApi = {
   // (blob không dùng được cho srcDoc, và tab blob: bị popup blocker chặn).
   viewAttendanceHtml: (eventId) => api.get(`/api/reports/events/${eventId}/export-html`, { params: { view: 1 }, responseType: 'text' }),
   getFraudLogs: (params) => api.get('/api/reports/fraud-logs', { params }),
+
+  // Link chia sẻ báo cáo công khai. POST tạo-hoặc-trả-lại link đang có;
+  // rotate = cấp token mới khi link cũ bị lộ; DELETE thu hồi.
+  getShare: (eventId) => api.get(`/api/reports/events/${eventId}/share`),
+  createShare: (eventId, { rotate } = {}) =>
+    api.post(`/api/reports/events/${eventId}/share`, null, { params: rotate ? { rotate: 1 } : {} }),
+  revokeShare: (eventId) => api.delete(`/api/reports/events/${eventId}/share`),
+  // Người xem link chia sẻ KHÔNG đăng nhập — endpoint nằm dưới /api/public.
+  getSharedReport: (shareToken) =>
+    api.get(`/api/public/reports/${shareToken}`, { responseType: 'text' }),
 };
 
 export default api;

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const ExcelJS = require('exceljs');
 const prisma = require('../lib/prisma');
 const { loadEventForWrite } = require('../lib/eventAccess');
@@ -106,6 +107,114 @@ async function exportAttendanceHtml(req, res) {
   }
 }
 
+// ── Chia sẻ báo cáo qua link công khai ─────────────────────────────────────
+// BTC muốn gửi báo cáo cho người không có tài khoản (khách mời, phòng CTSV,
+// giảng viên phụ trách). Link mang một token ngẫu nhiên 32 byte thay cho
+// eventId, nên biết id sự kiện KHÔNG suy ra được link, và thu hồi = set token
+// về NULL để link cũ chết ngay (khác với token HMAC stateless kiểu scanTicket
+// — thu hồi được là yêu cầu chính ở đây).
+function newShareToken() {
+  return crypto.randomBytes(24).toString('base64url');
+}
+
+// Link người dùng nhận là trang frontend (có header, nút in/tải), không phải
+// URL API thô — frontend tự gọi /api/public/reports/:token để lấy HTML.
+function shareUrl(token) {
+  const base = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
+  return `${base}/bao-cao/${token}`;
+}
+
+function shareState(event) {
+  return {
+    shared: Boolean(event.reportShareToken),
+    url: event.reportShareToken ? shareUrl(event.reportShareToken) : null,
+    sharedAt: event.reportSharedAt,
+  };
+}
+
+async function getReportShare(req, res) {
+  try {
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
+    return res.json({ success: true, data: shareState(event) });
+  } catch (err) {
+    console.error('Get report share error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+}
+
+// Tạo link, hoặc trả lại link đang có để bấm nhiều lần không làm chết link đã
+// phát đi. `?rotate=1` mới cấp token mới (dùng khi link cũ bị lộ).
+async function createReportShare(req, res) {
+  try {
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
+
+    const rotate = req.query.rotate === '1' || req.query.rotate === 'true';
+    if (event.reportShareToken && !rotate) {
+      return res.json({ success: true, data: shareState(event) });
+    }
+
+    const updated = await prisma.event.update({
+      where: { id: event.id },
+      data: { reportShareToken: newShareToken(), reportSharedAt: new Date() },
+      select: { reportShareToken: true, reportSharedAt: true },
+    });
+    return res.json({ success: true, data: shareState(updated) });
+  } catch (err) {
+    console.error('Create report share error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi tạo link chia sẻ' });
+  }
+}
+
+async function revokeReportShare(req, res) {
+  try {
+    const event = await loadEventForWrite(req, res);
+    if (!event) return;
+
+    const updated = await prisma.event.update({
+      where: { id: event.id },
+      data: { reportShareToken: null, reportSharedAt: null },
+      select: { reportShareToken: true, reportSharedAt: true },
+    });
+    return res.json({ success: true, data: shareState(updated) });
+  } catch (err) {
+    console.error('Revoke report share error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi thu hồi link chia sẻ' });
+  }
+}
+
+// Endpoint công khai (mount trong public.routes.js, không qua authenticate).
+// Token sai/đã thu hồi → 404 SHARE_NOT_FOUND, không phân biệt hai trường hợp
+// để không tiết lộ token nào từng tồn tại.
+async function getSharedReport(req, res) {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { reportShareToken: req.params.token },
+    });
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: 'SHARE_NOT_FOUND',
+        message: 'Link báo cáo không tồn tại hoặc đã bị thu hồi',
+      });
+    }
+
+    const attendances = await loadAttendanceRows(event.id);
+    const html = buildAttendanceHtmlReport(event, attendances);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', inlineHeader(`baocao-${event.name}`, 'html'));
+    // Link công khai có thể bị lan rộng: không cho proxy/CDN giữ lại bản cũ,
+    // để báo cáo luôn là số liệu hiện tại và thu hồi có hiệu lực ngay.
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(html);
+  } catch (err) {
+    console.error('Shared report error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi tải báo cáo' });
+  }
+}
+
 async function getFraudLogs(req, res) {
   try {
     const { eventId } = req.query;
@@ -124,4 +233,12 @@ async function getFraudLogs(req, res) {
   }
 }
 
-module.exports = { exportAttendance, exportAttendanceHtml, getFraudLogs };
+module.exports = {
+  exportAttendance,
+  exportAttendanceHtml,
+  getReportShare,
+  createReportShare,
+  revokeReportShare,
+  getSharedReport,
+  getFraudLogs,
+};

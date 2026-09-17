@@ -16,6 +16,7 @@ import FraudLogs from './pages/FraudLogs';
 import MyAttendance from './pages/student/MyAttendance';
 import PublicEventList from './pages/public/PublicEventList';
 import EventRegister from './pages/public/EventRegister';
+import SharedReport from './pages/public/SharedReport';
 import ClassManagement from './pages/classes/ClassManagement';
 import ClassDetail from './pages/classes/ClassDetail';
 
@@ -58,6 +59,9 @@ export default function App() {
       {/* Đăng ký tham gia sự kiện — công khai, không cần đăng nhập */}
       <Route path="/dang-ky" element={<PublicEventList />} />
       <Route path="/dang-ky/:id" element={<EventRegister />} />
+
+      {/* Báo cáo BTC chia sẻ — xem được không cần đăng nhập */}
+      <Route path="/bao-cao/:token" element={<SharedReport />} />
 
       {/* QR Scan — accessible but requires login (redirects to login if needed) */}
       <Route path="/scan" element={<ScanLanding />} />

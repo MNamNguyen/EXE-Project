@@ -79,6 +79,11 @@ model Event {
   // Cho phép người ngoài tự đăng ký tham gia qua link công khai /dang-ky/:id.
   allowRegistration Boolean   @default(true)
   isActive          Boolean   @default(true)
+  // Link chia sẻ báo cáo công khai: /api/public/reports/:reportShareToken xem
+  // được không cần đăng nhập. NULL = chưa chia sẻ hoặc BTC đã thu hồi, nên thu
+  // hồi chỉ là set NULL và link cũ chết ngay.
+  reportShareToken  String?   @unique
+  reportSharedAt    DateTime?
   createdById       String
   // Gắn với Class khi sự kiện này là một buổi điểm danh của lớp (tạo qua
   // /api/classes/:id/sessions) — null với sự kiện thường. Xoá lớp không xoá
