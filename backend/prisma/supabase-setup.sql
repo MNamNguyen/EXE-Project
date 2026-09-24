@@ -403,6 +403,17 @@ CREATE TABLE IF NOT EXISTS "attendance_certificates" (
     ON DELETE SET NULL ON UPDATE CASCADE
 );
 
+-- Bật RLS cho các bảng mới: KHÔNG tạo policy nào, nên anon/authenticated key
+-- (REST API của Supabase — project này dùng chung với ứng dụng khác) không đọc
+-- ghi được gì. Backend kết nối bằng role postgres (chủ bảng, có BYPASSRLS) nên
+-- không bị ảnh hưởng. ENABLE nhiều lần không lỗi.
+ALTER TABLE "attendance_feedback_templates"     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_feedback_forms"         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_feedback_responses"     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_event_reminders"        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_certificate_templates"  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_certificates"           ENABLE ROW LEVEL SECURITY;
+
 -- ============================================================
 -- BƯỚC 4: UNIQUE constraints bổ sung
 -- ============================================================
