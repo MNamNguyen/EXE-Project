@@ -269,6 +269,140 @@ CREATE TABLE IF NOT EXISTS "attendance_otp_tokens" (
     ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
+-- ----- Đánh giá sau sự kiện -----
+-- questions/answers là JSON, cấu trúc kiểm tra ở backend (lib/feedbackForm.js).
+
+-- Thư viện mẫu form đánh giá (ADMIN + BTC dùng chung)
+CREATE TABLE IF NOT EXISTS "attendance_feedback_templates" (
+  "id"          TEXT        NOT NULL,
+  "name"        TEXT        NOT NULL,
+  "description" TEXT,
+  "questions"   JSONB       NOT NULL,
+  "createdById" TEXT,
+  "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "attendance_feedback_templates_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_feedback_templates_createdById_fkey"
+    FOREIGN KEY ("createdById")
+    REFERENCES "attendance_users"("id")
+    ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- Form đánh giá của một sự kiện (bản sao câu hỏi lấy từ mẫu lúc gắn)
+CREATE TABLE IF NOT EXISTS "attendance_feedback_forms" (
+  "id"          TEXT        NOT NULL,
+  "eventId"     TEXT        NOT NULL,
+  "templateId"  TEXT,
+  "title"       TEXT        NOT NULL,
+  "description" TEXT,
+  "questions"   JSONB       NOT NULL,
+  "isAnonymous" BOOLEAN     NOT NULL DEFAULT FALSE,
+  "isOpen"      BOOLEAN     NOT NULL DEFAULT FALSE,
+  "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "attendance_feedback_forms_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_feedback_forms_eventId_key" UNIQUE ("eventId"),
+  CONSTRAINT "attendance_feedback_forms_eventId_fkey"
+    FOREIGN KEY ("eventId")
+    REFERENCES "attendance_events"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "attendance_feedback_forms_templateId_fkey"
+    FOREIGN KEY ("templateId")
+    REFERENCES "attendance_feedback_templates"("id")
+    ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- Phiếu trả lời — mỗi người một phiếu cho mỗi form
+CREATE TABLE IF NOT EXISTS "attendance_feedback_responses" (
+  "id"        TEXT        NOT NULL,
+  "formId"    TEXT        NOT NULL,
+  "userId"    TEXT,
+  "answers"   JSONB       NOT NULL,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "attendance_feedback_responses_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_feedback_responses_formId_fkey"
+    FOREIGN KEY ("formId")
+    REFERENCES "attendance_feedback_forms"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "attendance_feedback_responses_userId_fkey"
+    FOREIGN KEY ("userId")
+    REFERENCES "attendance_users"("id")
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT "attendance_feedback_responses_formId_userId_key"
+    UNIQUE ("formId", "userId")
+);
+
+-- Nhật ký gửi nhắc lịch thủ công (nút "Gửi nhắc ngay" của BTC)
+CREATE TABLE IF NOT EXISTS "attendance_event_reminders" (
+  "id"             TEXT        NOT NULL,
+  "eventId"        TEXT        NOT NULL,
+  "status"         TEXT        NOT NULL DEFAULT 'SENDING',
+  "recipientCount" INTEGER     NOT NULL DEFAULT 0,
+  "failedCount"    INTEGER     NOT NULL DEFAULT 0,
+  "note"           TEXT,
+  "triggeredById"  TEXT,
+  "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "completedAt"    TIMESTAMPTZ,
+  CONSTRAINT "attendance_event_reminders_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_event_reminders_eventId_fkey"
+    FOREIGN KEY ("eventId")
+    REFERENCES "attendance_events"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "attendance_event_reminders_triggeredById_fkey"
+    FOREIGN KEY ("triggeredById")
+    REFERENCES "attendance_users"("id")
+    ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- Mẫu chứng nhận của sự kiện (ảnh nền lưu trong DB + vị trí các ô thông tin)
+CREATE TABLE IF NOT EXISTS "attendance_certificate_templates" (
+  "id"          TEXT        NOT NULL,
+  "eventId"     TEXT        NOT NULL,
+  "image"       BYTEA       NOT NULL,
+  "mimeType"    TEXT        NOT NULL,
+  "width"       INTEGER     NOT NULL,
+  "height"      INTEGER     NOT NULL,
+  "fields"      JSONB       NOT NULL,
+  "updatedById" TEXT,
+  "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "attendance_certificate_templates_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_certificate_templates_eventId_key" UNIQUE ("eventId"),
+  CONSTRAINT "attendance_certificate_templates_eventId_fkey"
+    FOREIGN KEY ("eventId")
+    REFERENCES "attendance_events"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- Chứng nhận đã cấp (PDF vẽ lại từ mẫu mỗi lần tải, không lưu file)
+CREATE TABLE IF NOT EXISTS "attendance_certificates" (
+  "id"            TEXT        NOT NULL,
+  "code"          TEXT        NOT NULL,
+  "eventId"       TEXT        NOT NULL,
+  "userId"        TEXT        NOT NULL,
+  "recipientName" TEXT        NOT NULL,
+  "issuedAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "issuedById"    TEXT,
+  "emailStatus"   TEXT        NOT NULL DEFAULT 'PENDING',
+  "emailSentAt"   TIMESTAMPTZ,
+  CONSTRAINT "attendance_certificates_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_certificates_code_key" UNIQUE ("code"),
+  CONSTRAINT "attendance_certificates_eventId_userId_key" UNIQUE ("eventId", "userId"),
+  CONSTRAINT "attendance_certificates_eventId_fkey"
+    FOREIGN KEY ("eventId")
+    REFERENCES "attendance_events"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "attendance_certificates_userId_fkey"
+    FOREIGN KEY ("userId")
+    REFERENCES "attendance_users"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "attendance_certificates_issuedById_fkey"
+    FOREIGN KEY ("issuedById")
+    REFERENCES "attendance_users"("id")
+    ON DELETE SET NULL ON UPDATE CASCADE
+);
+
 -- ============================================================
 -- BƯỚC 4: UNIQUE constraints bổ sung
 -- ============================================================
@@ -413,6 +547,33 @@ CREATE INDEX IF NOT EXISTS "idx_otp_tokens_userId_purpose"
 CREATE INDEX IF NOT EXISTS "idx_otp_tokens_used_expiresAt"
   ON "attendance_otp_tokens"("used", "expiresAt");
 
+-- ----- attendance_feedback_* -----
+CREATE INDEX IF NOT EXISTS "attendance_feedback_templates_createdById_idx"
+  ON "attendance_feedback_templates"("createdById");
+
+CREATE INDEX IF NOT EXISTS "attendance_feedback_forms_templateId_idx"
+  ON "attendance_feedback_forms"("templateId");
+
+CREATE INDEX IF NOT EXISTS "attendance_feedback_responses_formId_idx"
+  ON "attendance_feedback_responses"("formId");
+
+CREATE INDEX IF NOT EXISTS "attendance_feedback_responses_userId_idx"
+  ON "attendance_feedback_responses"("userId");
+
+-- ----- attendance_event_reminders -----
+CREATE INDEX IF NOT EXISTS "attendance_event_reminders_eventId_createdAt_idx"
+  ON "attendance_event_reminders"("eventId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "attendance_event_reminders_triggeredById_idx"
+  ON "attendance_event_reminders"("triggeredById");
+
+-- ----- attendance_certificates -----
+CREATE INDEX IF NOT EXISTS "attendance_certificates_userId_idx"
+  ON "attendance_certificates"("userId");
+
+CREATE INDEX IF NOT EXISTS "attendance_certificates_issuedById_idx"
+  ON "attendance_certificates"("issuedById");
+
 -- ============================================================
 -- BƯỚC 6: Trigger tự động cập nhật updatedAt
 -- ============================================================
@@ -437,6 +598,26 @@ CREATE TRIGGER "attendance_events_updated_at"
 DROP TRIGGER IF EXISTS "attendance_records_updated_at" ON "attendance_records";
 CREATE TRIGGER "attendance_records_updated_at"
   BEFORE UPDATE ON "attendance_records"
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS "attendance_feedback_templates_updated_at" ON "attendance_feedback_templates";
+CREATE TRIGGER "attendance_feedback_templates_updated_at"
+  BEFORE UPDATE ON "attendance_feedback_templates"
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS "attendance_feedback_forms_updated_at" ON "attendance_feedback_forms";
+CREATE TRIGGER "attendance_feedback_forms_updated_at"
+  BEFORE UPDATE ON "attendance_feedback_forms"
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS "attendance_certificate_templates_updated_at" ON "attendance_certificate_templates";
+CREATE TRIGGER "attendance_certificate_templates_updated_at"
+  BEFORE UPDATE ON "attendance_certificate_templates"
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS "attendance_feedback_responses_updated_at" ON "attendance_feedback_responses";
+CREATE TRIGGER "attendance_feedback_responses_updated_at"
+  BEFORE UPDATE ON "attendance_feedback_responses"
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================

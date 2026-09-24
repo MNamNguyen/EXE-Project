@@ -220,7 +220,99 @@ async function sendEventRegistrationEmail(email, name, event, { mssv, tempPasswo
   });
 }
 
+// Nội dung do BTC nhập (tên sự kiện, lời nhắn) được chèn vào HTML email.
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Nhắc lịch sự kiện sắp diễn ra (BTC gửi tay). leadText: "sẽ diễn ra vào ngày
+// mai", "sẽ bắt đầu sau 3 giờ nữa", "đang diễn ra"... do lib/eventReminder.js
+// tính theo lúc gửi.
+async function sendEventReminderEmail(email, name, event, { leadText, note, loginUrl } = {}) {
+  assertConfigured();
+
+  const when = event.checkinOpen
+    ? fmtDateTime(event.checkinOpen, { dateStyle: 'full', timeStyle: 'short' })
+    : null;
+  const noteBlock = note
+    ? `
+          <div style="background: #fff8e6; border-left: 4px solid #ffb020; border-radius: 6px; padding: 14px 16px; margin: 0 0 24px;">
+            <p style="margin: 0 0 4px; color: #6b7b9a; font-size: 13px;">Lời nhắn từ Ban tổ chức:</p>
+            <p style="margin: 0; color: #0d1b2e; white-space: pre-line;">${escapeHtml(note)}</p>
+          </div>`
+    : '';
+  const loginBlock = loginUrl
+    ? `<p style="text-align: center; margin: 28px 0 8px;">
+            <a href="${escapeHtml(loginUrl)}" style="background: #1A6BFF; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; display: inline-block;">Đăng nhập trước</a>
+          </p>`
+    : '';
+
+  await brevoRequest({
+    sender,
+    to: [{ email }],
+    subject: `[FPT Event] Nhắc lịch: ${event.name}${leadText ? ` (${leadText})` : ''}`,
+    htmlContent: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #1A6BFF, #00A3FF); padding: 32px; border-radius: 12px 12px 0 0; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">FPT Event System</h1>
+        </div>
+        <div style="background: #fff; padding: 32px; border-radius: 0 0 12px 12px; border: 1px solid #e2eaff;">
+          <p style="color: #0d1b2e; font-size: 16px;">Xin chào <strong>${escapeHtml(name)}</strong>,</p>
+          <p style="color: #6b7b9a;">Sự kiện bạn đã đăng ký <strong style="color: #1a6bff;">${escapeHtml(leadText || 'sắp diễn ra')}</strong>:</p>
+          <div style="background: #f0f7ff; border-radius: 8px; padding: 20px; margin: 24px 0;">
+            <p style="margin: 0 0 6px; font-size: 17px;"><strong>${escapeHtml(event.name)}</strong></p>
+            <p style="margin: 0 0 4px; color: #6b7b9a;"><strong>Địa điểm:</strong> ${escapeHtml(event.location)}</p>
+            ${when ? `<p style="margin: 0; color: #6b7b9a;"><strong>Thời gian:</strong> ${escapeHtml(when)}</p>` : ''}
+          </div>${noteBlock}
+          <p style="color: #6b7b9a; font-size: 14px;">Hãy đăng nhập sẵn trên điện thoại để quét mã QR điểm danh nhanh hơn khi tới nơi.</p>
+          ${loginBlock}
+        </div>
+      </div>
+    `,
+  });
+}
+
+// Báo chứng nhận tham gia đã sẵn sàng. Không đính kèm PDF: vài trăm email
+// kèm file dễ bị Brevo/Gmail chặn, và chứng nhận luôn xem/tải lại được trên web.
+async function sendCertificateEmail(email, name, event, { viewUrl } = {}) {
+  assertConfigured();
+  const button = viewUrl
+    ? `<p style="text-align: center; margin: 28px 0 8px;">
+            <a href="${escapeHtml(viewUrl)}" style="background: #1A6BFF; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; display: inline-block;">Xem và tải chứng nhận</a>
+          </p>`
+    : '';
+
+  await brevoRequest({
+    sender,
+    to: [{ email }],
+    subject: `[FPT Event] Chứng nhận tham gia: ${event.name}`,
+    htmlContent: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #1A6BFF, #00A3FF); padding: 32px; border-radius: 12px 12px 0 0; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">FPT Event System</h1>
+        </div>
+        <div style="background: #fff; padding: 32px; border-radius: 0 0 12px 12px; border: 1px solid #e2eaff;">
+          <p style="color: #0d1b2e; font-size: 16px;">Xin chào <strong>${escapeHtml(name)}</strong>,</p>
+          <p style="color: #6b7b9a;">Cảm ơn bạn đã tham gia sự kiện. Chứng nhận tham gia của bạn đã sẵn sàng:</p>
+          <div style="background: #f0f7ff; border-radius: 8px; padding: 20px; margin: 24px 0;">
+            <p style="margin: 0; font-size: 17px;"><strong>${escapeHtml(event.name)}</strong></p>
+          </div>
+          <p style="color: #6b7b9a; font-size: 14px;">Đăng nhập hệ thống, vào mục <strong>Chứng nhận của tôi</strong> để xem và tải file PDF.</p>
+          ${button}
+        </div>
+      </div>
+    `,
+  });
+}
+
 module.exports = {
+  sendCertificateEmail,
+  sendEventReminderEmail,
   sendOtpEmail,
   sendLoginOtpEmail,
   sendWelcomeEmail,

@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { MapPin, Wifi, CheckCircle2, XCircle, Lock, QrCode, Clock, Lightbulb } from 'lucide-react';
+import { MapPin, Wifi, CheckCircle2, XCircle, Lock, QrCode, Clock, Lightbulb, ArrowDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { checkinApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { getCurrentPosition, GPS_ERROR_MESSAGES } from '../../utils/gps';
 import Spinner from '../../components/ui/Spinner';
+import FeedbackResponseForm from '../feedback/FeedbackResponseForm';
 
 // Vé quét được giữ qua vòng chuyển hướng sang trang đăng nhập, nên dùng
 // sessionStorage (sống theo tab, tự mất khi đóng) chứ không phải state.
@@ -160,6 +161,25 @@ export default function ScanLanding() {
     return map[code] || 'Không thể check-in';
   };
 
+  // Check-out xong (hoặc quét lại khi đã check-out) mà sự kiện đang mở form đánh
+  // giá và mình chưa gửi → hiện form ngay dưới kết quả, không bắt tìm link.
+  const feedbackPrompt = stage === STAGES.SUCCESS
+    ? result?.feedback
+    : stage === STAGES.ERROR && errorInfo?.error === 'ALREADY_CHECKED_OUT'
+      ? errorInfo.extra?.feedback
+      : null;
+  const showFeedback = !!feedbackPrompt && !feedbackPrompt.submitted;
+
+  const feedbackRef = useRef(null);
+  useEffect(() => {
+    if (!showFeedback) return;
+    // Cho sinh viên kịp thấy dấu tích "thành công" rồi mới cuộn xuống form.
+    const timer = setTimeout(() => {
+      feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [showFeedback]);
+
   const isCheckin = type === 'checkin';
   const accentColor = isCheckin ? 'primary' : 'emerald';
 
@@ -239,7 +259,13 @@ export default function ScanLanding() {
               </p>
             </div>
 
-            <p className="text-xs text-gray-400">Bạn có thể đóng trang này</p>
+            {showFeedback ? (
+              <p className="text-sm font-medium text-violet-700 flex items-center justify-center gap-1.5">
+                <ArrowDown size={15} className="animate-bounce" /> Dành 1 phút đánh giá sự kiện bên dưới nhé
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400">Bạn có thể đóng trang này</p>
+            )}
           </div>
         )}
 
@@ -260,6 +286,12 @@ export default function ScanLanding() {
 
             <h2 className="text-xl font-bold text-gray-900 mb-2">{errorInfo.title}</h2>
             <p className="text-sm text-gray-500 mb-5 leading-relaxed">{errorInfo.message}</p>
+
+            {showFeedback && (
+              <p className="text-sm font-medium text-violet-700 flex items-center justify-center gap-1.5 mb-1">
+                <ArrowDown size={15} className="animate-bounce" /> Bạn chưa đánh giá sự kiện — form ở bên dưới
+              </p>
+            )}
 
             {errorInfo.error === 'QR_EXPIRED' && (
               <div className="bg-amber-50 rounded-xl p-3 mb-4 flex items-center gap-2">
@@ -291,6 +323,13 @@ export default function ScanLanding() {
                 Thử lại
               </button>
             )}
+          </div>
+        )}
+
+        {/* Form đánh giá ngay sau check-out */}
+        {showFeedback && (
+          <div ref={feedbackRef} className="mt-6 scroll-mt-4 animate-fade-in">
+            <FeedbackResponseForm eventId={eventId} showTitle />
           </div>
         )}
 

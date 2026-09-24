@@ -25,13 +25,18 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  deviceBindings DeviceBinding[]
-  otpTokens      OtpToken[]
-  createdEvents  Event[]         @relation("EventCreator")
-  attendances    Attendance[]
-  fraudLogs      FraudLog[]
-  eventMembers   EventMember[]
-  createdClasses Class[]         @relation("ClassCreator")
+  deviceBindings     DeviceBinding[]
+  otpTokens          OtpToken[]
+  createdEvents      Event[]            @relation("EventCreator")
+  attendances        Attendance[]
+  fraudLogs          FraudLog[]
+  eventMembers       EventMember[]
+  createdClasses     Class[]            @relation("ClassCreator")
+  feedbackTemplates  FeedbackTemplate[] @relation("FeedbackTemplateCreator")
+  feedbackResponses  FeedbackResponse[]
+  sentReminders      EventReminder[]
+  certificates       Certificate[]      @relation("CertificateRecipient")
+  issuedCertificates Certificate[]      @relation("CertificateIssuer")
 
   @@index([role])
   @@index([isActive])
@@ -92,11 +97,15 @@ model Event {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  createdBy    User          @relation("EventCreator", fields: [createdById], references: [id])
-  class        Class?        @relation(fields: [classId], references: [id], onDelete: SetNull)
-  attendances  Attendance[]
-  fraudLogs    FraudLog[]
-  eventMembers EventMember[]
+  createdBy           User                      @relation("EventCreator", fields: [createdById], references: [id])
+  class               Class?                    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  attendances         Attendance[]
+  fraudLogs           FraudLog[]
+  eventMembers        EventMember[]
+  feedbackForm        EventFeedbackForm?
+  reminders           EventReminder[]
+  certificateTemplate EventCertificateTemplate?
+  certificates        Certificate[]
 
   @@index([createdById])
   @@index([isActive])
@@ -231,4 +240,144 @@ model OtpToken {
   @@index([userId, purpose])
   @@index([used, expiresAt])
   @@map("attendance_otp_tokens")
+}
+
+// ───────────────────────────────────────────────────────────────
+// Đánh giá sau sự kiện
+// ───────────────────────────────────────────────────────────────
+//
+// questions (JSON) có cùng hình dạng ở mẫu và form:
+//   [{ id, type: 'TEXT' | 'RATING', label, required }]
+// Kiểm tra/chuẩn hoá ở lib/feedbackForm.js — DB không ràng buộc cấu trúc JSON.
+
+// Thư viện mẫu dùng chung cho ADMIN + BTC. Người tạo bị xoá thì mẫu vẫn giữ
+// (SetNull) vì người khác có thể đang dùng.
+model FeedbackTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  questions   Json
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User?               @relation("FeedbackTemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  forms     EventFeedbackForm[]
+
+  @@index([createdById])
+  @@map("attendance_feedback_templates")
+}
+
+// Form đánh giá của MỘT sự kiện. questions là BẢN SAO lấy từ mẫu lúc gắn —
+// sửa mẫu về sau không được làm đổi câu hỏi dưới những câu trả lời đã có.
+// templateId chỉ để hiển thị "tạo từ mẫu nào", xoá mẫu thì form vẫn nguyên.
+model EventFeedbackForm {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  templateId  String?
+  title       String
+  description String?
+  questions   Json
+  // Ẩn danh: server vẫn lưu userId (mỗi người một phiếu) nhưng không API nào
+  // trả ra ai đã viết gì. Đã có phiếu thì chỉ được bật, không được tắt.
+  isAnonymous Boolean  @default(false)
+  // BTC mở/đóng tay — không có khung giờ.
+  isOpen      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event     Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template  FeedbackTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  responses FeedbackResponse[]
+
+  @@index([templateId])
+  @@map("attendance_feedback_forms")
+}
+
+// Phiếu trả lời: answers = { [questionId]: string | 1..5 }. Xoá tài khoản thì
+// phiếu vẫn giữ (SetNull) để số liệu tổng hợp của sự kiện không bị đổi.
+model FeedbackResponse {
+  id        String   @id @default(cuid())
+  formId    String
+  userId    String?
+  answers   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  form EventFeedbackForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  user User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([formId, userId])
+  @@index([formId])
+  @@index([userId])
+  @@map("attendance_feedback_responses")
+}
+
+// Nhật ký mỗi lượt BTC bấm "Gửi nhắc ngay": hiện lịch sử trong trang sự kiện và
+// là mốc tính thời gian chờ giữa hai lần gửi (MANUAL_COOLDOWN_MS).
+model EventReminder {
+  id             String    @id @default(cuid())
+  eventId        String
+  status         String    @default("SENDING") // SENDING | SENT | FAILED
+  recipientCount Int       @default(0)
+  failedCount    Int       @default(0)
+  note           String?
+  triggeredById  String?
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  triggeredBy User? @relation(fields: [triggeredById], references: [id], onDelete: SetNull)
+
+  @@index([eventId, createdAt])
+  @@index([triggeredById])
+  @@map("attendance_event_reminders")
+}
+
+// ───────────────────────────────────────────────────────────────
+// Chứng nhận tham gia — TUỲ CHỌN theo sự kiện: không upload mẫu = không có chứng nhận
+// ───────────────────────────────────────────────────────────────
+
+// Mẫu chứng nhận của MỘT sự kiện: ảnh nền PNG/JPG (lưu thẳng trong DB vì Render
+// xoá ổ đĩa mỗi lần deploy và dự án không có kho file) + vị trí các ô thông tin.
+// fields (JSON) = [{ key: name|event|date|code, enabled, x, y, size, maxWidth,
+// font, color, align }] — toạ độ/cỡ chữ là TỈ LỆ theo ảnh, xem lib/certificateLayout.js.
+model EventCertificateTemplate {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  image       Bytes
+  mimeType    String
+  width       Int
+  height      Int
+  fields      Json
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("attendance_certificate_templates")
+}
+
+// Chứng nhận đã cấp. PDF KHÔNG lưu sẵn — vẽ lại từ mẫu mỗi lần tải. recipientName
+// chụp lại lúc cấp để chứng nhận không tự đổi khi tài khoản đổi tên.
+model Certificate {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  eventId       String
+  userId        String
+  recipientName String
+  issuedAt      DateTime  @default(now())
+  issuedById    String?
+  emailStatus   String    @default("PENDING") // PENDING | SENDING | SENT | FAILED
+  emailSentAt   DateTime?
+
+  event    Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user     User  @relation("CertificateRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  issuedBy User? @relation("CertificateIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@index([issuedById])
+  @@map("attendance_certificates")
 }

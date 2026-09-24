@@ -19,6 +19,9 @@ import EventRegister from './pages/public/EventRegister';
 import SharedReport from './pages/public/SharedReport';
 import ClassManagement from './pages/classes/ClassManagement';
 import ClassDetail from './pages/classes/ClassDetail';
+import FeedbackTemplates from './pages/feedback/FeedbackTemplates';
+import EventFeedback from './pages/student/EventFeedback';
+import MyCertificates from './pages/student/MyCertificates';
 
 function RequireAuth({ children, roles }) {
   const { user, loading } = useAuth();
@@ -76,6 +79,10 @@ export default function App() {
       {/* Student */}
       <Route path="/dashboard" element={<RequireAuth><StudentDashboard /></RequireAuth>} />
       <Route path="/my-attendance" element={<RequireAuth><MyAttendance /></RequireAuth>} />
+      {/* Link BTC phát cho người tham dự — tự chuyển qua /login?redirect= nếu chưa đăng nhập */}
+      <Route path="/feedback/:eventId" element={<EventFeedback />} />
+      {/* Link trong email "đã có chứng nhận" trỏ về đây */}
+      <Route path="/my-certificates" element={<RequireAuth><MyCertificates /></RequireAuth>} />
 
       {/* Events — BTC/ADMIN/LECTURER */}
       <Route path="/events" element={<RequireAuth roles={['ADMIN', 'BTC', 'LECTURER']}><EventList /></RequireAuth>} />
@@ -85,6 +92,9 @@ export default function App() {
       {/* Lớp học — BTC/Admin */}
       <Route path="/classes" element={<RequireAuth roles={['ADMIN', 'BTC']}><ClassManagement /></RequireAuth>} />
       <Route path="/classes/:id" element={<RequireAuth roles={['ADMIN', 'BTC']}><ClassDetail /></RequireAuth>} />
+
+      {/* Thư viện mẫu đánh giá */}
+      <Route path="/feedback-templates" element={<RequireAuth roles={['ADMIN', 'BTC']}><FeedbackTemplates /></RequireAuth>} />
 
       {/* Admin */}
       <Route path="/admin/users" element={<RequireAuth roles={['ADMIN']}><UserManagement /></RequireAuth>} />

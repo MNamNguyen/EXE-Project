@@ -2,18 +2,20 @@ import { NavLink, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   LayoutDashboard, CalendarDays, Users,
-  LogOut, ShieldCheck, X, GraduationCap,
+  LogOut, ShieldCheck, X, GraduationCap, ClipboardList, Award,
 } from 'lucide-react';
 
 const navItems = {
   STUDENT: [
     { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/my-attendance', icon: CalendarDays,    label: 'Lịch sử tham dự' },
+    { to: '/my-certificates', icon: Award,         label: 'Chứng nhận của tôi' },
   ],
   BTC: [
     { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/events',       icon: CalendarDays,    label: 'Quản lý sự kiện' },
     { to: '/classes',      icon: GraduationCap,   label: 'Quản lý lớp' },
+    { to: '/feedback-templates', icon: ClipboardList, label: 'Mẫu đánh giá' },
     { to: '/reports/fraud', icon: ShieldCheck,    label: 'Log gian lận' },
   ],
   LECTURER: [
@@ -24,6 +26,7 @@ const navItems = {
     { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/events',        icon: CalendarDays,    label: 'Quản lý sự kiện' },
     { to: '/classes',       icon: GraduationCap,   label: 'Quản lý lớp' },
+    { to: '/feedback-templates', icon: ClipboardList, label: 'Mẫu đánh giá' },
     { to: '/admin/users',   icon: Users,           label: 'Quản lý người dùng' },
     { to: '/reports/fraud', icon: ShieldCheck,     label: 'Log gian lận' },
   ],

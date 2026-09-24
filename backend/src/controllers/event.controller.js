@@ -48,6 +48,15 @@ async function listEvents(req, res) {
               select: { id: true },
               take: 1,
             },
+            // Trạng thái form đánh giá + đã gửi phiếu chưa, để "Lịch sử tham dự"
+            // hiện nút "Đánh giá" mà không phải gọi thêm 1 request cho mỗi sự kiện.
+            feedbackForm: {
+              select: {
+                isOpen: true,
+                responses: { where: { userId }, select: { id: true }, take: 1 },
+              },
+            },
+            certificates: { where: { userId }, select: { id: true }, take: 1 },
           }),
         },
       }),
@@ -59,10 +68,14 @@ async function listEvents(req, res) {
     // được vì không biết checkinState/checkoutState theo hành vi mở/đóng thủ công).
     const withGate = (e) => ({ ...e, gate: gateSummary(e) });
     const data = role === 'STUDENT'
-      ? events.map(({ attendances, eventMembers, ...rest }) => ({
+      ? events.map(({ attendances, eventMembers, feedbackForm, certificates, ...rest }) => ({
           ...withGate(rest),
           attendance: attendances?.[0] || null,
           isRegistered: (eventMembers?.length || 0) > 0,
+          feedback: feedbackForm
+            ? { isOpen: feedbackForm.isOpen, submitted: (feedbackForm.responses?.length || 0) > 0 }
+            : null,
+          certificateId: certificates?.[0]?.id || null,
         }))
       : events.map(withGate);
 
@@ -283,6 +296,49 @@ async function getQRToken(req, res) {
       },
     });
   } catch (err) {
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+}
+
+// Màn hình trình chiếu hỏi mỗi vài giây để chào người vừa check-in. Màn chiếu
+// là nơi CÔNG KHAI nên chỉ trả tên — không MSSV/email/lớp. Luôn trả N lượt mới
+// nhất (không dùng con trỏ thời gian): client tự so id để biết ai mới, nên
+// chạy lại sau khi mất mạng hay server ngủ dậy cũng không lệch.
+const LIVE_RECENT_LIMIT = 60;
+
+async function getLiveCheckins(req, res) {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id: req.params.id, isActive: true },
+      select: { id: true, createdById: true },
+    });
+    if (!event) return res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
+    if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Không có quyền xem sự kiện này' });
+    }
+
+    const [recent, checkedIn, registered] = await Promise.all([
+      prisma.attendance.findMany({
+        where: { eventId: event.id, checkinTime: { not: null } },
+        orderBy: { checkinTime: 'desc' },
+        take: LIVE_RECENT_LIMIT,
+        select: { id: true, checkinTime: true, user: { select: { name: true } } },
+      }),
+      prisma.attendance.count({ where: { eventId: event.id, checkinTime: { not: null } } }),
+      prisma.attendance.count({ where: { eventId: event.id } }),
+    ]);
+
+    res.set('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      data: {
+        checkedIn,
+        registered,
+        recent: recent.map((a) => ({ id: a.id, name: a.user?.name || 'Khách mời', checkinTime: a.checkinTime })),
+      },
+    });
+  } catch (err) {
+    console.error('Live checkins error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi server' });
   }
 }
@@ -604,7 +660,7 @@ async function searchUsersForEvent(req, res) {
 
 module.exports = {
   listEvents, createEvent, getEvent, updateEvent, deleteEvent,
-  getQRToken, getAttendance, manualCheckin,
+  getQRToken, getLiveCheckins, getAttendance, manualCheckin,
   listMembers, addMembers, removeMember, searchUsersForEvent,
   listClasses, addMembersByClass,
 };

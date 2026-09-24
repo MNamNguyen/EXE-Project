@@ -159,3 +159,48 @@
   stroke-dashoffset: 100;
   animation: check-draw 0.4s ease-out 0.1s forwards;
 }
+
+/* ── Màn hình trình chiếu: lời chào người vừa check-in ───────────── */
+@keyframes live-pop-in {
+  0% { opacity: 0; transform: scale(0.3) rotate(-8deg); }
+  60% { opacity: 1; transform: scale(1.12) rotate(3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes live-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -5px; }
+}
+@keyframes live-welcome-in {
+  0% { opacity: 0; transform: translateY(40px) scale(0.6); }
+  55% { opacity: 1; transform: translateY(-8px) scale(1.06); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes live-wiggle {
+  0%, 100% { transform: rotate(0) scale(1); }
+  25% { transform: rotate(-12deg) scale(1.1); }
+  75% { transform: rotate(12deg) scale(1.1); }
+}
+@keyframes live-shimmer {
+  to { background-position: 200% center; }
+}
+@keyframes live-confetti {
+  0% { opacity: 1; transform: translate3d(0, -20px, 0) rotate(0); }
+  100% { opacity: 0.9; transform: translate3d(var(--dx), 110vh, 0) rotate(var(--rot)); }
+}
+
+/* translate (không phải transform) cho nhịp bồng bềnh để không đè lên transform của pop-in */
+.live-chip { animation: live-pop-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both, live-float 3.5s ease-in-out infinite; }
+.live-float { animation: live-float 3s ease-in-out infinite; }
+.live-welcome { animation: live-welcome-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.live-wiggle { display: inline-block; animation: live-wiggle 0.9s ease-in-out 2; }
+.live-progress {
+  background: linear-gradient(90deg, #FFD166, #FF6B9D, #B388FF, #4CC9F0);
+  background-size: 200% auto;
+  animation: live-shimmer 3s linear infinite;
+}
+.live-confetti { animation-name: live-confetti; animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); animation-fill-mode: both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-chip, .live-float, .live-welcome, .live-wiggle, .live-progress { animation: none; }
+  .live-confetti { display: none; }
+}

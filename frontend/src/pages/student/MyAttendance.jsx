@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle2, LogOut, Clock, Calendar } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CheckCircle2, LogOut, Clock, Calendar, MessageSquareText, Award } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { eventApi } from '../../services/api';
@@ -73,6 +74,16 @@ export default function MyAttendance() {
                       )}
                     </div>
                   )}
+                  <FeedbackAction event={event} />
+                  {event.certificateId && (
+                    <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between gap-3">
+                      <p className="text-xs text-gray-500">Bạn đã được cấp chứng nhận tham gia</p>
+                      <Link to={`/my-certificates?open=${event.certificateId}`}
+                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
+                        <Award size={14} /> Xem chứng nhận
+                      </Link>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -80,5 +91,30 @@ export default function MyAttendance() {
         )}
       </div>
     </Layout>
+  );
+}
+
+// Nút đánh giá: chỉ người đã check-out mới gửi được (backend cũng chặn), nên
+// không hiện nút cho người chưa check-out để khỏi bấm vào rồi bị từ chối.
+function FeedbackAction({ event }) {
+  const fb = event.feedback;
+  if (!fb || event.attendance?.status !== 'CHECKED_OUT') return null;
+  if (!fb.isOpen && !fb.submitted) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between gap-3">
+      <p className="text-xs text-gray-500">
+        {fb.submitted ? 'Bạn đã gửi đánh giá' : 'Sự kiện đang nhận đánh giá'}
+      </p>
+      <Link
+        to={`/feedback/${event.id}`}
+        className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+          fb.submitted ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-primary-600 text-white hover:bg-primary-700'
+        }`}
+      >
+        <MessageSquareText size={14} />
+        {!fb.submitted ? 'Đánh giá' : fb.isOpen ? 'Sửa đánh giá' : 'Xem đánh giá'}
+      </Link>
+    </div>
   );
 }

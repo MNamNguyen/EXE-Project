@@ -74,6 +74,8 @@ export const eventApi = {
   update: (id, data) => api.put(`/api/events/${id}`, data),
   delete: (id) => api.delete(`/api/events/${id}`),
   getQR: (id) => api.get(`/api/events/${id}/qr`),
+  // Màn hình trình chiếu: check-in mới nhất (chỉ tên) để hiện lời chào.
+  getLive: (id) => api.get(`/api/events/${id}/live`),
   getAttendance: (id, params) => api.get(`/api/events/${id}/attendance`, { params }),
   manualCheckin: (id, data) => api.post(`/api/events/${id}/manual-checkin`, data),
   listMembers: (id, params) => api.get(`/api/events/${id}/members`, { params }),
@@ -84,6 +86,9 @@ export const eventApi = {
   removeMember: (id, userId) => api.delete(`/api/events/${id}/members/${userId}`),
   // Người dùng đã đăng nhập tự ghi tên vào danh sách tham gia.
   register: (id) => api.post(`/api/events/${id}/register`),
+  // Nhắc lịch qua email — BTC gửi thủ công (không có nhắc tự động).
+  getReminders: (id) => api.get(`/api/events/${id}/reminders`),
+  sendReminder: (id, note) => api.post(`/api/events/${id}/reminders/send`, { note }),
 };
 
 // Quản lý lớp học (ADMIN/BTC)
@@ -152,6 +157,52 @@ export const reportApi = {
   // Người xem link chia sẻ KHÔNG đăng nhập — endpoint nằm dưới /api/public.
   getSharedReport: (shareToken) =>
     api.get(`/api/public/reports/${shareToken}`, { responseType: 'text' }),
+};
+
+// Đánh giá sau sự kiện. Mẫu: ADMIN/BTC dùng chung. Form sự kiện: ADMIN hoặc
+// người tạo sự kiện. response: người tham dự (chỉ gửi được khi đã check-out).
+export const feedbackApi = {
+  listTemplates: (params) => api.get('/api/feedback/templates', { params }),
+  getTemplate: (id) => api.get(`/api/feedback/templates/${id}`),
+  createTemplate: (data) => api.post('/api/feedback/templates', data),
+  updateTemplate: (id, data) => api.put(`/api/feedback/templates/${id}`, data),
+  deleteTemplate: (id) => api.delete(`/api/feedback/templates/${id}`),
+
+  getEventForm: (eventId) => api.get(`/api/feedback/events/${eventId}/form`),
+  // { templateId } hoặc { title, description, questions }, kèm isAnonymous.
+  saveEventForm: (eventId, data) => api.put(`/api/feedback/events/${eventId}/form`, data),
+  // { isOpen?, isAnonymous? }
+  setEventFormState: (eventId, data) => api.patch(`/api/feedback/events/${eventId}/form`, data),
+  removeEventForm: (eventId) => api.delete(`/api/feedback/events/${eventId}/form`),
+  getResults: (eventId) => api.get(`/api/feedback/events/${eventId}/results`),
+
+  getMyResponse: (eventId) => api.get(`/api/feedback/events/${eventId}/response`),
+  submit: (eventId, answers) => api.post(`/api/feedback/events/${eventId}/response`, { answers }),
+};
+
+// Chứng nhận tham gia. Ảnh/PDF đều cần header Authorization nên phải tải qua
+// axios dạng blob (thẻ <img src> / <a href> không gửi được token).
+export const certificateApi = {
+  // BTC — mẫu và cấp chứng nhận của một sự kiện
+  getSetup: (eventId) => api.get(`/api/events/${eventId}/certificate`),
+  getTemplateImage: (eventId) => api.get(`/api/events/${eventId}/certificate/image`, { responseType: 'blob' }),
+  uploadImage: (eventId, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.put(`/api/events/${eventId}/certificate/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  saveFields: (eventId, fields) => api.put(`/api/events/${eventId}/certificate/fields`, { fields }),
+  removeTemplate: (eventId) => api.delete(`/api/events/${eventId}/certificate`),
+  previewPdf: (eventId, name) => api.get(`/api/events/${eventId}/certificate/preview`, { params: { name }, responseType: 'blob' }),
+  issue: (eventId) => api.post(`/api/events/${eventId}/certificates/issue`),
+  listIssued: (eventId) => api.get(`/api/events/${eventId}/certificates`),
+  revoke: (eventId, certId) => api.delete(`/api/events/${eventId}/certificates/${certId}`),
+
+  // Người nhận
+  mine: () => api.get('/api/certificates/mine'),
+  get: (id) => api.get(`/api/certificates/${id}`),
+  background: (id) => api.get(`/api/certificates/${id}/background`, { responseType: 'blob' }),
+  pdf: (id) => api.get(`/api/certificates/${id}/pdf`, { responseType: 'blob' }),
 };
 
 export default api;

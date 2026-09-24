@@ -16,6 +16,9 @@ import Modal from '../../components/ui/Modal';
 import EventEditModal from './EventEditModal';
 import EventMembersModal from './EventMembersModal';
 import ReportViewerModal from './ReportViewerModal';
+import EventFeedbackPanel from './EventFeedbackPanel';
+import EventReminderPanel from './EventReminderPanel';
+import EventCertificatePanel from './EventCertificatePanel';
 
 const PAGE_SIZE = 20;
 
@@ -254,6 +257,15 @@ export default function EventDetail() {
             </div>
           ))}
         </div>
+
+        {/* Nhắc lịch qua email cho người đã đăng ký */}
+        <EventReminderPanel event={event} />
+
+        {/* Chứng nhận tham gia (tuỳ chọn) */}
+        <EventCertificatePanel event={event} />
+
+        {/* Form đánh giá sau sự kiện */}
+        <EventFeedbackPanel eventId={id} eventName={event.name} />
 
         {/* Attendance table */}
         <div className="card overflow-hidden">

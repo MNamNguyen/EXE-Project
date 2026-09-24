@@ -3,6 +3,7 @@ const { validateToken } = require('../services/qr.service');
 const { issueTicket, validateTicket } = require('../lib/scanTicket');
 const { resolveGate } = require('../lib/attendanceGate');
 const { fmtTime } = require('../lib/datetime');
+const { feedbackPromptFor } = require('../lib/feedbackForm');
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -220,10 +221,14 @@ async function processCheckin(req, res) {
       }
       if (attendance?.checkoutTime) {
         const time = fmtTime(attendance.checkoutTime);
+        // Quét lại mã check-out (vd. lỡ đóng tab trước khi đánh giá) vẫn nhận
+        // được form đánh giá nếu chưa gửi.
+        const feedback = await feedbackPromptFor(eventId, userId);
         return res.status(400).json({
           success: false,
           error: 'ALREADY_CHECKED_OUT',
           message: `Bạn đã check-out lúc ${time} rồi.`,
+          ...(feedback && { feedback }),
         });
       }
 
@@ -233,9 +238,13 @@ async function processCheckin(req, res) {
       });
     }
 
+    // Check-out xong là lúc hỏi đánh giá — trang quét mã hiện form ngay nếu có.
+    const feedback = type === 'checkout' ? await feedbackPromptFor(eventId, userId) : null;
+
     return res.json({
       success: true,
       type,
+      ...(feedback && { feedback }),
       time: now.toISOString(),
       timeDisplay: fmtTime(now, { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       user: { name: req.user.name, mssv: req.user.mssv },

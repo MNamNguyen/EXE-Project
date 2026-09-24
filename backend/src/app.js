@@ -40,6 +40,8 @@ app.use('/api/classes', require('./routes/class.routes'));
 app.use('/api/checkin', require('./routes/checkin.routes'));
 app.use('/api/admin', require('./routes/admin.routes'));
 app.use('/api/reports', require('./routes/report.routes'));
+app.use('/api/feedback', require('./routes/feedback.routes'));
+app.use('/api/certificates', require('./routes/certificate.routes'));
 
 // Health check — dùng cho UptimeRobot để giữ server khỏi ngủ (free tier).
 // Ping nhẹ vào DB (SELECT 1) nên cũng giữ luôn DB connection sống.
