@@ -6,17 +6,8 @@
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#bg)"/>
-  <!-- QR corners -->
-  <rect x="12" y="12" width="16" height="16" rx="3" fill="none" stroke="white" stroke-width="3"/>
-  <rect x="36" y="12" width="16" height="16" rx="3" fill="none" stroke="white" stroke-width="3"/>
-  <rect x="12" y="36" width="16" height="16" rx="3" fill="none" stroke="white" stroke-width="3"/>
-  <!-- Inner fills -->
-  <rect x="17" y="17" width="6" height="6" rx="1.5" fill="white"/>
-  <rect x="41" y="17" width="6" height="6" rx="1.5" fill="white"/>
-  <rect x="17" y="41" width="6" height="6" rx="1.5" fill="white"/>
-  <!-- Data dots -->
-  <rect x="37" y="37" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
-  <rect x="44" y="37" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
-  <rect x="37" y="44" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
-  <rect x="44" y="44" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
+  <!-- Logo chữ F — vẽ lại dạng vector từ logo/LOGO.png (toạ độ gốc 1852×2140) -->
+  <g transform="translate(16.42 14) scale(0.016822)" fill="#fff">
+    <path d="M0 0H1852V378H0Z M1465 837H1852V1224H1465Z M1465 1744H1852V2131H1465Z M1299 840C493 840 0 1332 0 2140H387C387 1558 717 1228 1299 1228Z"/>
+  </g>
 </svg>
