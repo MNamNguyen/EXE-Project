@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wireframe FPT Event</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+
+    <style>
+      /* ===== TOKEN CỦA BẢN DỰNG (chép sang frontend/src/index.css ở bước dựng thật) =====
+         Khung lấy từ tokens.css của skill; khối màu nhấn thay bằng xanh thương hiệu FPT Event. */
+      :root {
+        color-scheme: light;
+        /* FONT, khai một lần */
+        --app-font: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+        /* MÀU NHẤN, CHỖ 1/2: NỀN SÁNG. Xanh thương hiệu #1A6BFF giữ nguyên. Rê vào tối đi
+           (primary-700 của dự án) thay vì nhạt đi: nhạt đi thì chữ trắng trên nút còn dưới 4.5:1. */
+        --primary: #1a6bff;
+        --primary-hover: #0052d4;
+        --primary-foreground: #ffffff;
+        --primary-light: rgba(26, 107, 255, 0.08);
+
+        --background: #f4f4f6;
+        --surface: #ffffff;
+        --foreground: #2c2c2c;
+        --muted: #707070;
+        --border: #f7f7f8;
+        --border-strong: #eaeaea;
+        --surface-overlay: #ffffff;
+        --elevation-popover: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        --elevation-modal: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        --item-hover: #f4f4f6;
+        --chart-fill: var(--primary);
+        --secondary: #e7e8ec;
+        --secondary-hover: #dbdce2;
+        --background-hover: #e7e7ea;
+        --surface-hover: #f8f8fa;
+        --button-hover-surface: #f1f1f3;
+        --button-hover-page: #e4e4e7;
+        --button-hover: var(--button-hover-page);
+        --shadow-segment-track: inset 0 0 0 1px rgb(0 0 0 / 0.05), inset 0 1px 2px rgb(0 0 0 / 0.04);
+        --shadow-segment-thumb: 0 0 0 1px rgb(0 0 0 / 0.04), 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 6px -2px rgb(0 0 0 / 0.08);
+        --ring-focus: rgba(26, 107, 255, 0.12);
+        --border-focus: var(--primary);
+
+        /* Màu mang nghĩa (M7, M30, I4) */
+        --danger: #c70036;
+        --danger-bg: rgb(255 32 86 / 0.1);
+        --danger-bg-hover: rgb(255 32 86 / 0.15);
+        --error: #fb2c36;
+        --error-ring: rgb(251 44 54 / 0.1);
+        --error-text: #e7000b;
+        --error-bg: #fef2f2;
+        --error-border: #ffc9c9;
+        --error-strong: #c10007;
+        --success-bg: #ecfdf5;
+        --success: #007a55;
+        --warning-bg: #fffbeb;
+        --warning: #bb4d00;
+        --neutral-bg: #f4f4f5;
+        --neutral: #52525c;
+        /* "Đang có mặt" (đã check-in): xanh thương hiệu nhạt, chữ primary-700 (6:1) */
+        --info-bg: rgba(26, 107, 255, 0.08);
+        --info: #0052d4;
+        /* Nhãn phân loại vai trò (M8): không đỏ, không hổ phách, không xanh lá */
+        --cat-violet-bg: #f5f3ff;
+        --cat-violet: #7008e7;
+        --cat-teal-bg: #f0fdfa;
+        --cat-teal: #00786f;
+        --cat-pink-bg: #fdf2f8;
+        --cat-pink: #c6005c;
+        --radius: 0.75rem;
+      }
+
+      .dark {
+        color-scheme: dark;
+        /* MÀU NHẤN, CHỖ 2/2: NỀN TỐI. Sáng hơn hai bậc, chữ trên nút tối lại (6.4:1). */
+        --primary: #4d8eff;
+        --primary-hover: #3f7eeb;
+        --primary-foreground: #05060f;
+        --primary-light: rgba(77, 142, 255, 0.14);
+
+        --background: #05060f;
+        --chart-fill: color-mix(in srgb, var(--primary) 70%, transparent);
+        --surface-overlay: #171a26;
+        --elevation-popover: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+        --elevation-modal: 0 20px 25px -5px rgb(0 0 0 / 0.6), 0 8px 10px -6px rgb(0 0 0 / 0.6);
+        --item-hover: rgb(255 255 255 / 0.05);
+        --secondary: rgb(255 255 255 / 0.08);
+        --secondary-hover: rgb(255 255 255 / 0.13);
+        --background-hover: #171a26;
+        --surface-hover: #141722;
+        --button-hover-surface: rgb(255 255 255 / 0.08);
+        --button-hover-page: rgb(255 255 255 / 0.08);
+        --shadow-segment-track: inset 0 0 0 1px var(--border), inset 0 1px 2px rgb(0 0 0 / 0.4);
+        --shadow-segment-thumb: 0 0 0 1px var(--border-strong), inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.5);
+        --ring-focus: rgba(77, 142, 255, 0.16);
+        --border-focus: rgba(77, 142, 255, 0.6);
+        --surface: #0f111a;
+        --foreground: #e9edf5;
+        --muted: #8b93a7;
+        --border: rgba(160, 180, 220, 0.12);
+        --border-strong: rgba(160, 180, 220, 0.16);
+
+        --danger: #ff637e;
+        --error-ring: rgb(251 44 54 / 0.15);
+        --error-text: #ff6467;
+        --error-bg: rgb(251 44 54 / 0.1);
+        --error-border: rgb(251 44 54 / 0.3);
+        --error-strong: #ff6467;
+        --success-bg: rgb(0 188 125 / 0.15);
+        --success: #00d492;
+        --warning-bg: rgb(254 154 0 / 0.15);
+        --warning: #ff8904;
+        --neutral-bg: rgb(113 113 123 / 0.15);
+        --neutral: #9f9fa9;
+        --info-bg: rgba(77, 142, 255, 0.15);
+        --info: #8db8ff;
+        --cat-violet-bg: rgb(142 81 255 / 0.15);
+        --cat-violet: #c4b4ff;
+        --cat-teal-bg: rgb(0 187 167 / 0.15);
+        --cat-teal: #46ecd5;
+        --cat-pink-bg: rgb(246 51 154 / 0.15);
+        --cat-pink: #fda5d5;
+      }
+
+      /* Nền rê của nút viền theo nền phía sau (tokens.css) */
+      .bg-surface *, .bg-surface-overlay * { --button-hover: var(--button-hover-surface); }
+      .bg-surface .bg-background *, [class~="hover:bg-item-hover"]:hover * { --button-hover: var(--button-hover-page); }
+
+      /* Thanh cuộn tự ẩn (I18) */
+      * { --scrollbar-thumb: transparent; }
+      *:hover { --scrollbar-thumb: color-mix(in srgb, var(--foreground) 16%, transparent); }
+      .is-scrolling { --scrollbar-thumb: color-mix(in srgb, var(--foreground) 28%, transparent); }
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
+      ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--foreground) 40%, transparent); }
+      @supports not selector(::-webkit-scrollbar) {
+        * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+        *:hover { scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent) transparent; }
+      }
+      .scrollbar-clean { scrollbar-width: none; }
+      .scrollbar-clean::-webkit-scrollbar { display: none; }
+      body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+      /* ===== NẤC XÁM CỦA WIREFRAME: chỉ tắt màu nhấn và màu trạng thái, mọi token khác giữ ===== */
+      :root[data-mau="xam"] {
+        --primary: #2c2c2c; --primary-hover: #444444; --primary-foreground: #ffffff;
+        --primary-light: rgba(44, 44, 44, 0.06);
+        --ring-focus: rgba(44, 44, 44, 0.1);
+        --success-bg: var(--neutral-bg); --success: var(--neutral);
+        --warning-bg: var(--neutral-bg); --warning: var(--neutral);
+        --info-bg: var(--neutral-bg); --info: var(--neutral);
+        --error-bg: var(--neutral-bg); --error-strong: var(--neutral); --error-text: var(--neutral); --error-border: var(--border-strong);
+        --danger: var(--neutral); --danger-bg: var(--neutral-bg); --danger-bg-hover: var(--secondary);
+        --cat-violet-bg: var(--neutral-bg); --cat-violet: var(--neutral);
+        --cat-teal-bg: var(--neutral-bg); --cat-teal: var(--neutral);
+        --cat-pink-bg: var(--neutral-bg); --cat-pink: var(--neutral);
+      }
+      :root.dark[data-mau="xam"] {
+        --primary: #e9edf5; --primary-hover: #cfd5e0; --primary-foreground: #05060f;
+        --primary-light: rgba(233, 237, 245, 0.08);
+        --ring-focus: rgba(233, 237, 245, 0.12); --border-focus: rgba(233, 237, 245, 0.42);
+      }
+      :root[data-mau="xam"] .wf-av { background: var(--neutral-bg) !important; color: var(--neutral) !important; --tw-ring-color: var(--border-strong) !important; }
+      :root[data-mau="xam"] .wf-logo-bg { fill: #2c2c2c; }
+      :root[data-mau="xam"] .wf-brandpanel { background: #2c2c2c !important; }
+      :root[data-mau="xam"] .wf-stage { background: #1f1f1f !important; }
+      :root[data-mau="xam"] .wf-chip { background: #3a3a3a !important; }
+      :root[data-mau="xam"] .wf-star-on { color: var(--neutral) !important; fill: var(--neutral) !important; }
+    </style>
+
+    <style type="text/tailwindcss">
+      @custom-variant dark (&:where(.dark, .dark *));
+      @theme inline {
+        --font-sans: var(--app-font);
+        --color-primary: var(--primary);
+        --color-primary-hover: var(--primary-hover);
+        --color-primary-foreground: var(--primary-foreground);
+        --color-primary-light: var(--primary-light);
+        --color-background: var(--background);
+        --color-background-hover: var(--background-hover);
+        --color-surface: var(--surface);
+        --color-surface-hover: var(--surface-hover);
+        --color-surface-overlay: var(--surface-overlay);
+        --color-item-hover: var(--item-hover);
+        --color-foreground: var(--foreground);
+        --color-muted: var(--muted);
+        --color-border: var(--border);
+        --color-border-strong: var(--border-strong);
+        --color-chart-fill: var(--chart-fill);
+        --color-secondary: var(--secondary);
+        --color-secondary-hover: var(--secondary-hover);
+        --color-button-hover: var(--button-hover);
+        --color-danger: var(--danger);
+        --color-danger-bg: var(--danger-bg);
+        --color-danger-bg-hover: var(--danger-bg-hover);
+        --color-error: var(--error);
+        --color-error-text: var(--error-text);
+        --color-error-bg: var(--error-bg);
+        --color-error-border: var(--error-border);
+        --color-error-strong: var(--error-strong);
+        --color-success: var(--success);
+        --color-success-bg: var(--success-bg);
+        --color-warning: var(--warning);
+        --color-warning-bg: var(--warning-bg);
+        --color-neutral: var(--neutral);
+        --color-neutral-bg: var(--neutral-bg);
+        --color-info: var(--info);
+        --color-info-bg: var(--info-bg);
+        --color-cat-violet: var(--cat-violet);
+        --color-cat-violet-bg: var(--cat-violet-bg);
+        --color-cat-teal: var(--cat-teal);
+        --color-cat-teal-bg: var(--cat-teal-bg);
+        --color-cat-pink: var(--cat-pink);
+        --color-cat-pink-bg: var(--cat-pink-bg);
+        --border-color-focus: var(--border-focus);
+        --ring-color-focus: var(--ring-focus);
+        --shadow-popover: var(--elevation-popover);
+        --shadow-modal: var(--elevation-modal);
+      }
+    </style>
+
+    <style>
+      /* ===== THANH CÔNG CỤ WIREFRAME (ngoài bản thiết kế) ===== */
+      .wf-bar { position: relative; z-index: 50; display: flex; align-items: center; gap: 24px; height: 56px;
+        padding: 0 16px; overflow-x: auto; white-space: nowrap; background: #fff; border-bottom: 1px solid #e5e5e5;
+        color: #737373; font: 14px/1 system-ui, -apple-system, sans-serif; color-scheme: light; }
+      .wf-bar *, .wf-reason * { box-sizing: border-box; }
+      .wf-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+      .wf-set { display: flex; align-items: center; gap: 2px; flex-shrink: 0; padding: 3px; border-radius: 10px; background: #f4f4f5; }
+      .wf-set a { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+        border-radius: 7px; color: #737373; text-decoration: none; }
+      .wf-set a:hover { color: #171717; }
+      .wf-switch { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; color: #737373; text-decoration: none; }
+      .wf-switch i { position: relative; width: 36px; height: 20px; border-radius: 10px; background: #e4e4e7; transition: background .15s; }
+      .wf-switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+        background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .2); transition: translate .15s; }
+      .wf-switch[aria-checked="true"] i { background: #171717; }
+      .wf-switch[aria-checked="true"] i::after { translate: 16px 0; }
+      .wf-set a[aria-current="page"] { background: #fff; color: #171717; font-weight: 500;
+        box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 0 0 1px rgb(0 0 0 / .04); }
+      .wf-bar svg { width: 16px; height: 16px; flex-shrink: 0; }
+      [data-wf-param="v"] a { justify-content: center; min-width: 32px; padding: 0 10px; }
+      [data-wf-param="v"] a[data-recommended]::after { content: ""; position: absolute; top: 5px; right: 5px;
+        width: 5px; height: 5px; border-radius: 50%; background: #1a6bff; }
+      .wf-menu { flex-shrink: 0; }
+      .wf-menu summary { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border-radius: 8px;
+        cursor: pointer; list-style: none; }
+      .wf-menu summary::-webkit-details-marker { display: none; }
+      .wf-menu summary:hover, .wf-menu[open] summary { background: #f4f4f5; }
+      .wf-menu b { color: #171717; font-weight: 500; }
+      .wf-popover { position: fixed; z-index: 60; display: grid; min-width: 168px; max-height: calc(100vh - 80px); overflow-y: auto;
+        padding: 4px; background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / .08); }
+      .wf-popover a { display: flex; align-items: center; height: 34px; padding: 0 10px; border-radius: 6px; color: #404040; text-decoration: none; }
+      .wf-popover a:hover, .wf-popover a[aria-current="page"] { background: #f4f4f5; color: #171717; }
+      .wf-popover a[aria-current="page"] { font-weight: 500; }
+      .wf-popover .wf-pop-label { padding: 10px 10px 4px; color: #a3a3a3; font-size: 12px; font-weight: 500; }
+      .wf-reason { border-bottom: 1px solid #e5e5e5; background: #fafafa; color: #404040; font: 13px/1.5 system-ui, -apple-system, sans-serif; color-scheme: light; }
+      .wf-reason summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 44px; padding: 8px 16px;
+        cursor: pointer; list-style: none; }
+      .wf-reason summary::-webkit-details-marker { display: none; }
+      .wf-reason-name { min-width: 0; overflow: hidden; color: #171717; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+      .wf-reason-tag { flex-shrink: 0; height: 20px; padding: 0 8px; border-radius: 10px; background: #eef4ff; color: #0052d4;
+        font-size: 12px; font-weight: 500; line-height: 20px; }
+      .wf-reason-why { flex: 1; min-width: 0; overflow: hidden; color: #525252; text-overflow: ellipsis; white-space: nowrap; }
+      .wf-reason[open] .wf-reason-why { white-space: normal; }
+      .wf-reason-toggle { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; height: 28px; margin-left: auto;
+        padding: 0 8px; border-radius: 6px; color: #171717; font-weight: 500; }
+      .wf-reason summary:hover .wf-reason-toggle { background: #f0f0f0; }
+      .wf-reason-toggle svg { width: 16px; height: 16px; transition: rotate .15s; }
+      .wf-reason[open] .wf-reason-toggle svg { rotate: 180deg; }
+      .wf-reason-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 4px 16px 16px; }
+      .wf-reason-cols { display: grid; max-width: 1120px; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 16px 32px; }
+      .wf-reason h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; color: #171717; font-size: 12px; font-weight: 600; }
+      .wf-reason h3 i { width: 6px; height: 6px; border-radius: 50%; background: #a3a3a3; }
+      .wf-reason h3 i[data-tone="uu"] { background: #16a34a; }
+      .wf-reason h3 i[data-tone="nhuoc"] { background: #d97706; }
+      .wf-reason ul { display: grid; gap: 2px; margin: 0; padding-left: 16px; }
+      .wf-reason li::marker { color: #a3a3a3; }
+      .wf-reason p { margin: 0; }
+      .wf-reason-tips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid #ebebeb; }
+      .wf-reason-tips h3 { margin: 0 4px 0 0; }
+      .wf-reason-tips button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #e5e5e5;
+        border-radius: 8px; background: #fff; color: #262626; font: inherit; white-space: nowrap; cursor: pointer; }
+      .wf-reason-tips button:hover { border-color: #d4d4d4; background: #f5f5f5; }
+      .wf-reason-tips button svg { width: 14px; height: 14px; color: #737373; }
+      .wf-reason-tips button [data-icon="da-chep"], .wf-reason-tips button[data-copied] [data-icon="chep"] { display: none; }
+      .wf-reason-tips button[data-copied] [data-icon="da-chep"] { display: block; color: #16a34a; }
+      .wf-reason :focus-visible { outline: 2px solid #1a6bff; outline-offset: 2px; }
+      @media (max-width: 767px) {
+        .wf-reason-why { order: 1; flex-basis: 100%; }
+        .wf-reason-toggle span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+        .wf-reason-tips h3 { flex-basis: 100%; }
+      }
+      @layer base { [data-wf-block] { position: relative; } }
+      [data-wf-block]::before { content: attr(data-wf-block); position: absolute; top: 4px; left: 4px; z-index: 5;
+        display: grid; place-items: center; width: 18px; height: 18px; border-radius: 9px; background: #1f1f1f; color: #fff;
+        font: 11px/1 system-ui, sans-serif; pointer-events: none; }
+      [data-wf-block][data-wf-block-out]::before { top: auto; bottom: 100%; }
+      body[data-frame] .wf-bar, body[data-frame] .wf-reason { display: none; }
+      body:not([data-kho="mobile"]) [data-wf-param="nav"] { display: none; }
+      body[data-nonav] [data-wf-param="nav"] { display: none !important; }
+
+      /* Panel trượt trái của menu (☰) ở màn hẹp: 500ms vào / 350ms ra, đường cong sheet */
+      .wf-drawer { transform: translateX(-100%); transition: transform 350ms cubic-bezier(0.32, 0.72, 0, 1); }
+      .wf-drawer-overlay { opacity: 0; pointer-events: none; transition: opacity 350ms cubic-bezier(0.32, 0.72, 0, 1); }
+      body[data-menu-open] .wf-drawer { transform: translateX(0); transition-duration: 500ms; }
+      body[data-menu-open] .wf-drawer-overlay { opacity: 1; pointer-events: auto; transition-duration: 500ms; }
+      /* Lớp nổi (dropdown) của bản thiết kế: mở 150ms, đóng 100ms */
+      .wf-pop { display: none; opacity: 0; scale: .95; translate: 0 -4px;
+        transition: opacity 100ms ease-in, scale 100ms ease-in, display 100ms allow-discrete; }
+      .wf-pop[data-open] { display: block; opacity: 1; scale: 1; translate: 0 0;
+        transition: opacity 150ms ease-out, scale 150ms ease-out, translate 150ms ease-out, display 150ms allow-discrete; }
+      @starting-style { .wf-pop[data-open] { opacity: 0; scale: .95; translate: 0 -4px; } }
+      .wf-pop[data-up] { translate: 0 4px; }
+      .wf-pop[data-up][data-open] { translate: 0 0; }
+      @starting-style { .wf-pop[data-up][data-open] { translate: 0 4px; } }
+      @media (prefers-reduced-motion: reduce) { .wf-pop, .wf-drawer, .wf-drawer-overlay { transition: none !important; } }
+    </style>
+  </head>
+  <body class="bg-background font-sans text-foreground antialiased">
+    <nav class="wf-bar" aria-label="Wireframe" id="wf-bar"></nav>
+    <details class="wf-reason" data-wf-reason id="wf-reason"></details>
+    <div id="wf-design"></div>
+
+    <script src="wf-data.js"></script>
+    <script src="wf-core.js"></script>
+    <script src="wf-screens.js"></script>
+    <script>WF.boot();</script>
+  </body>
+</html>
