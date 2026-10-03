@@ -1,16 +1,51 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Plus, Search, RefreshCw, AlertCircle, GraduationCap,
-  Users, Pencil, Trash2, ChevronRight,
-} from 'lucide-react';
+import { Ellipsis, Pencil, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { classApi } from '../../services/api';
 import Layout from '../../components/layout/Layout';
-import Spinner from '../../components/ui/Spinner';
-import Modal from '../../components/ui/Modal';
+import Button, { IconButton } from '../../components/ui/Button';
+import Modal, { useConfirm } from '../../components/ui/Modal';
+import Pagination from '../../components/ui/Pagination';
+import Dropdown, { MenuGroup, MenuItem, MenuSeparator } from '../../components/ui/Dropdown';
+import { TableCard, Th } from '../../components/ui/Card';
+import { Field, Input, SearchInput, Textarea } from '../../components/ui/Input';
+import { EmptyText, LoadError, SkeletonRows } from '../../components/ui/States';
+
+// Form tạo/sửa lớp (một form cho cả hai việc), dùng chung với trang chi tiết lớp
+export function ClassFormModal({ open, mode, form, setForm, saving, onClose, onSubmit }) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={mode === 'create' ? 'Tạo lớp mới' : 'Sửa lớp'}
+      size="sm"
+      footer={(
+        <>
+          <Button variant="secondary" size="form" onClick={onClose}>Huỷ</Button>
+          <Button type="submit" form="class-form" variant="primary" size="form" loading={saving}>
+            {mode === 'create' ? 'Tạo lớp' : 'Lưu thay đổi'}
+          </Button>
+        </>
+      )}
+    >
+      <form id="class-form" onSubmit={onSubmit} className="flex flex-col gap-5">
+        <Field label="Tên lớp" required>
+          {(id) => <Input id={id} placeholder="VD: SE1701" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />}
+        </Field>
+        <Field label="Mô tả" optional>
+          {(id) => (
+            <Textarea id={id} className="resize-none" rows={2} placeholder="VD: Lập trình Web - Khoá 17"
+              value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+          )}
+        </Field>
+      </form>
+    </Modal>
+  );
+}
 
 export default function ClassManagement() {
+  const confirm = useConfirm();
   const [classes, setClasses] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -61,7 +96,11 @@ export default function ClassManagement() {
   };
 
   const handleDelete = async (cls) => {
-    if (!confirm(`Xoá lớp "${cls.name}"?`)) return;
+    if (!(await confirm({
+      title: 'Xoá lớp?',
+      body: <>Lớp <span className="font-medium text-foreground">{cls.name}</span> sẽ bị xoá.</>,
+      confirmLabel: 'Xoá lớp',
+    }))) return;
     try {
       await classApi.remove(cls.id);
       toast.success('Đã xoá lớp');
@@ -71,106 +110,85 @@ export default function ClassManagement() {
     }
   };
 
-  return (
-    <Layout>
-      <div className="bg-gradient-brand px-6 py-8">
-        <div className="max-w-5xl mx-auto flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Quản lý lớp học</h1>
-            <p className="text-white/70 text-sm mt-1">Tạo lớp, gom sinh viên và tạo nhanh buổi điểm danh theo lớp</p>
-          </div>
-          <button onClick={openCreate} className="btn-primary btn-md bg-white text-primary-700 hover:bg-blue-50">
-            <Plus size={16} /> Tạo lớp mới
-          </button>
-        </div>
-      </div>
+  const rowMenu = (cls) => (
+    <Dropdown align="end" ariaLabel="Thao tác" trigger={<IconButton icon={Ellipsis} label="Thao tác" row />}>
+      <MenuGroup><MenuItem icon={Pencil} onSelect={() => openEdit(cls)}>Sửa lớp</MenuItem></MenuGroup>
+      <MenuSeparator />
+      <MenuGroup><MenuItem icon={Trash2} danger onSelect={() => handleDelete(cls)}>Xoá lớp</MenuItem></MenuGroup>
+    </Dropdown>
+  );
 
-      <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
-        <div className="relative max-w-sm">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input className="input pl-10 text-sm" placeholder="Tìm lớp theo tên..."
-            value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-        ) : loadError ? (
-          <div className="card flex flex-col items-center gap-3 py-16">
-            <AlertCircle size={36} className="text-red-400" />
-            <p className="text-sm font-medium text-gray-500">Không tải được danh sách lớp</p>
-            <button onClick={() => load(search)} className="btn-primary btn-sm mt-1">
-              <RefreshCw size={14} /> Thử lại
-            </button>
-          </div>
-        ) : classes.length === 0 ? (
-          <div className="card p-12 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-3">
-              <GraduationCap size={28} className="text-gray-300" />
-            </div>
-            <p className="font-semibold text-gray-600 text-sm">
-              {search ? 'Không tìm thấy lớp phù hợp' : 'Chưa có lớp nào'}
-            </p>
-            <p className="text-gray-400 text-xs mt-1 mb-4">
-              Tạo lớp để thêm nhanh cả lớp vào sự kiện hoặc tạo buổi điểm danh.
-            </p>
-            {!search && (
-              <button onClick={openCreate} className="btn-primary btn-sm inline-flex">
-                <Plus size={14} /> Tạo lớp đầu tiên
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  let body;
+  if (loading) body = <SkeletonRows rows={5} avatar={false} />;
+  else if (loadError) body = <LoadError title="Không tải được danh sách lớp" onRetry={() => load(search)} />;
+  else if (classes.length === 0) {
+    body = search ? (
+      <p className="text-pretty py-10 text-center text-sm text-muted">
+        Không có lớp nào khớp <span className="text-foreground">“{search}”</span>. Thử từ khoá khác.{' '}
+        <button type="button" onClick={() => setSearch('')} className="font-medium text-foreground underline-offset-4 hover:underline">Xoá tìm kiếm</button>
+      </p>
+    ) : (
+      <EmptyText className="py-10">Chưa có lớp nào. Tạo lớp để thêm cả lớp vào sự kiện hoặc tạo buổi điểm danh.</EmptyText>
+    );
+  } else {
+    body = (
+      <>
+        <table className="hidden w-full text-sm sm:table">
+          <thead className="border-b border-border">
+            <tr>
+              <Th className="w-full">Lớp</Th>
+              <Th className="text-right">Thành viên</Th>
+              <Th>Người tạo</Th>
+              <th className="w-px px-2"><span className="sr-only">Thao tác</span></th>
+            </tr>
+          </thead>
+          <tbody>
             {classes.map((cls) => (
-              <div key={cls.id} className="card p-4 flex items-start gap-3 hover:shadow-card-hover transition-all group">
-                <div className="w-11 h-11 rounded-xl bg-primary-50 flex items-center justify-center flex-shrink-0">
-                  <GraduationCap size={20} className="text-primary-600" />
-                </div>
-                <Link to={`/classes/${cls.id}`} className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 text-sm truncate">{cls.name}</p>
-                  {cls.description && <p className="text-xs text-gray-400 truncate mt-0.5">{cls.description}</p>}
-                  <p className="text-xs text-gray-500 flex items-center gap-1 mt-1.5">
-                    <Users size={11} /> {cls.memberCount} thành viên
-                  </p>
-                </Link>
-                <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                  <button onClick={() => openEdit(cls)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors" title="Sửa">
-                    <Pencil size={14} />
-                  </button>
-                  <button onClick={() => handleDelete(cls)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Xoá">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <Link to={`/classes/${cls.id}`} className="p-1.5 text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0 self-center">
-                  <ChevronRight size={16} />
-                </Link>
-              </div>
+              <tr key={cls.id} className="border-b border-border last:border-0 hover:bg-surface-hover">
+                <td className="max-w-0 px-4 py-3">
+                  <Link to={`/classes/${cls.id}`} className="block truncate font-medium text-foreground outline-none hover:underline">{cls.name}</Link>
+                  <p className="mt-0.5 truncate text-xs text-muted" title={cls.description || ''}>{cls.description || '—'}</p>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-foreground">{cls.memberCount}</td>
+                <td className={`whitespace-nowrap px-4 py-3 ${cls.createdBy?.name ? 'text-foreground' : 'text-muted'}`}>{cls.createdBy?.name || '—'}</td>
+                <td className="px-2 py-3">{rowMenu(cls)}</td>
+              </tr>
             ))}
-          </div>
-        )}
-      </div>
+          </tbody>
+        </table>
+        <ul className="divide-y divide-border sm:hidden">
+          {classes.map((cls) => (
+            <li key={cls.id} className="flex items-start gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <Link to={`/classes/${cls.id}`} className="text-sm font-medium text-foreground outline-none">{cls.name}</Link>
+                {cls.description && <p className="mt-0.5 line-clamp-2 text-pretty text-xs text-muted">{cls.description}</p>}
+                <p className="mt-1 text-xs tabular-nums text-muted">{cls.memberCount} thành viên</p>
+              </div>
+              {rowMenu(cls)}
+            </li>
+          ))}
+        </ul>
+        <Pagination page={1} pages={1} total={classes.length} pageSize={classes.length} noun="lớp" onPageChange={() => {}} />
+      </>
+    );
+  }
 
-      <Modal open={!!modal} onClose={() => setModal(null)} title={modal === 'create' ? 'Tạo lớp mới' : 'Sửa lớp'} size="sm">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="label">Tên lớp <span className="text-red-500">*</span></label>
-            <input className="input" placeholder="VD: SE1701" autoFocus
-              value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          </div>
-          <div>
-            <label className="label">Mô tả</label>
-            <textarea className="input resize-none" rows={2} placeholder="VD: Lập trình Web - Khoá 17"
-              value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-          </div>
-          <div className="flex gap-3">
-            <button type="button" onClick={() => setModal(null)} className="btn-secondary btn-md flex-1">Huỷ</button>
-            <button type="submit" disabled={saving} className="btn-primary btn-md flex-1">
-              {saving ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-              {modal === 'create' ? 'Tạo lớp' : 'Lưu thay đổi'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+  return (
+    <Layout title="Lớp học" headerRight={<Button variant="primary" size="hdr" icon={Plus} onClick={openCreate}>Tạo lớp</Button>}>
+      <div className="mb-4">
+        <SearchInput className="w-full sm:w-72" placeholder="Tìm lớp theo tên" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+      <TableCard>{body}</TableCard>
+
+      <ClassFormModal
+        open={!!modal}
+        mode={modal === 'create' ? 'create' : 'edit'}
+        form={form}
+        setForm={setForm}
+        saving={saving}
+        onClose={() => setModal(null)}
+        onSubmit={handleSubmit}
+      />
     </Layout>
   );
 }

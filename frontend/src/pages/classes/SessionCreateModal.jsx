@@ -1,11 +1,15 @@
-import { useState, useEffect } from 'react';
-import { MapPin, Clock, Shield, LocateFixed, Loader2, Info } from 'lucide-react';
+import { useState, useEffect, useId } from 'react';
+import { LocateFixed } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { classApi } from '../../services/api';
 import { getCurrentPosition, GPS_ERROR_MESSAGES } from '../../utils/gps';
 import { toLocalInput, localInputToISO } from '../../utils/date';
 import Modal from '../../components/ui/Modal';
-import Spinner from '../../components/ui/Spinner';
+import Button from '../../components/ui/Button';
+import { Field, Input } from '../../components/ui/Input';
+import { Switch } from '../../components/ui/Choice';
+import { Banner } from '../../components/ui/States';
+import DateTimePicker from '../../components/ui/DateTimePicker';
 
 function defaultForm() {
   return {
@@ -29,7 +33,27 @@ function scheduleDefaults() {
   };
 }
 
+const TIME_FIELDS = [
+  { key: 'checkinOpen', label: 'Check-in mở' },
+  { key: 'checkinClose', label: 'Check-in đóng' },
+  { key: 'checkoutOpen', label: 'Check-out mở' },
+  { key: 'checkoutClose', label: 'Check-out đóng' },
+];
+
+function SettingRow({ id, title, desc, checked, onChange }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <p id={id} className="text-sm font-medium text-foreground">{title}</p>
+        {desc && <p className="mt-1 text-pretty text-sm text-muted">{desc}</p>}
+      </div>
+      <div className="pt-0.5"><Switch checked={checked} onChange={onChange} labelledBy={id} /></div>
+    </div>
+  );
+}
+
 export default function SessionCreateModal({ open, classId, className, onClose, onCreated }) {
+  const uid = useId();
   const [form, setForm] = useState(defaultForm());
   const [useSchedule, setUseSchedule] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -37,8 +61,8 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Modal không unmount khi đóng — reset lại form mỗi lần mở để không giữ dữ
-  // liệu buổi trước (địa điểm, giờ, GPS...) sang buổi mới.
+  // Reset lại form mỗi lần mở để không giữ dữ liệu buổi trước (địa điểm, giờ,
+  // GPS...) sang buổi mới.
   useEffect(() => {
     if (open) { setForm(defaultForm()); setUseSchedule(false); }
   }, [open]);
@@ -101,114 +125,74 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
       onClose={onClose}
       title={`Tạo buổi điểm danh — ${className}`}
       size="lg"
+      footer={(
+        <>
+          <Button variant="secondary" size="form" onClick={onClose}>Huỷ</Button>
+          <Button type="submit" form="session-create-form" variant="primary" size="form" loading={saving}>Tạo buổi điểm danh và mở QR</Button>
+        </>
+      )}
     >
       {open && (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="flex items-start gap-2.5 bg-primary-50 border border-primary-200 rounded-xl p-3">
-            <Info size={15} className="text-primary-600 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-primary-800 leading-relaxed">
-              Toàn bộ sinh viên đang hoạt động của lớp <strong>{className}</strong> sẽ được thêm vào danh sách
-              tham gia. {useSchedule
-                ? 'Điểm danh mở/đóng theo khung giờ bên dưới.'
-                : 'Điểm danh mở ngay sau khi tạo.'}
-            </p>
-          </div>
+        <form id="session-create-form" onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <Banner tone="info" compact>
+            Toàn bộ sinh viên đang hoạt động của lớp <span className="font-medium text-foreground">{className}</span> sẽ được thêm vào danh sách
+            tham gia. {useSchedule ? 'Điểm danh mở/đóng theo khung giờ bên dưới.' : 'Điểm danh mở ngay sau khi tạo.'}
+          </Banner>
 
-          <div>
-            <label className="label">Tên buổi học</label>
-            <input className="input" placeholder={`VD: ${className} - Buổi 12`} value={form.name} onChange={(e) => set('name', e.target.value)} />
-            <p className="text-xs text-gray-400 mt-1">Để trống sẽ tự đặt tên theo ngày giờ check-in mở</p>
-          </div>
+          <Field label="Tên buổi học" optional hint="Để trống sẽ tự đặt tên theo ngày giờ check-in mở">
+            {(id) => <Input id={id} placeholder={`VD: ${className} - Buổi 12`} value={form.name} onChange={(e) => set('name', e.target.value)} />}
+          </Field>
 
-          <div>
-            <label className="label">Địa điểm <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input className="input pl-10" placeholder="VD: Phòng A101" value={form.location} onChange={(e) => set('location', e.target.value)} />
-            </div>
-          </div>
+          <Field label="Địa điểm" required>
+            {(id) => <Input id={id} placeholder="VD: Phòng A101" value={form.location} onChange={(e) => set('location', e.target.value)} />}
+          </Field>
 
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
-                <Clock size={16} className="text-primary-600" /> Đặt lịch cố định
-              </h3>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-sm text-gray-600">{useSchedule ? 'Bật' : 'Tắt'}</span>
-                <div onClick={toggleSchedule}
-                  className={`w-11 h-6 rounded-full transition-colors cursor-pointer relative ${useSchedule ? 'bg-primary-600' : 'bg-gray-200'}`}>
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${useSchedule ? 'translate-x-6' : 'translate-x-1'}`} />
-                </div>
-              </label>
-            </div>
-            {useSchedule ? (
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { key: 'checkinOpen', label: 'Check-in mở' },
-                  { key: 'checkinClose', label: 'Check-in đóng' },
-                  { key: 'checkoutOpen', label: 'Check-out mở' },
-                  { key: 'checkoutClose', label: 'Check-out đóng' },
-                ].map(({ key, label }) => (
-                  <div key={key}>
-                    <label className="label">{label} <span className="text-red-500">*</span></label>
-                    <input className="input text-sm" type="datetime-local" value={form[key]} onChange={(e) => set(key, e.target.value)} />
-                  </div>
+          <section className="border-t border-border pt-5">
+            <SettingRow
+              id={`${uid}-lich`}
+              title="Đặt lịch cố định"
+              desc={useSchedule ? undefined : 'Điểm danh mở ngay khi tạo, không giới hạn giờ.'}
+              checked={useSchedule}
+              onChange={toggleSchedule}
+            />
+            {useSchedule && (
+              <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                {TIME_FIELDS.map(({ key, label }) => (
+                  <Field key={key} label={label} required>
+                    {(id) => <DateTimePicker id={id} label={label} value={form[key]} onChange={(v) => set(key, v)} clearable={false} />}
+                  </Field>
                 ))}
               </div>
-            ) : (
-              <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-                Điểm danh mở ngay khi tạo, không giới hạn giờ.
-              </p>
             )}
-          </div>
+          </section>
 
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
-                <Shield size={16} className="text-primary-600" /> Xác thực GPS
-              </h3>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-sm text-gray-600">{form.gpsEnabled ? 'Bật' : 'Tắt'}</span>
-                <div onClick={() => set('gpsEnabled', !form.gpsEnabled)}
-                  className={`w-11 h-6 rounded-full transition-colors cursor-pointer relative ${form.gpsEnabled ? 'bg-primary-600' : 'bg-gray-200'}`}>
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.gpsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                </div>
-              </label>
-            </div>
-
+          <section className="border-t border-border pt-5">
+            <SettingRow
+              id={`${uid}-gps`}
+              title="Xác thực GPS"
+              desc="Sinh viên phải đứng trong bán kính cho phép mới check-in được."
+              checked={form.gpsEnabled}
+              onChange={(on) => set('gpsEnabled', on)}
+            />
             {form.gpsEnabled && (
-              <div className="space-y-3">
-                <button type="button" onClick={handleDetectLocation} disabled={gpsLoading}
-                  className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-primary-300 rounded-xl py-2.5 px-4 text-primary-700 font-medium text-sm hover:bg-primary-50 transition-all disabled:opacity-60">
-                  {gpsLoading
-                    ? <><Loader2 size={16} className="animate-spin" />Đang lấy vị trí...</>
-                    : <><LocateFixed size={16} />Lấy vị trí hiện tại</>}
-                </button>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="label">Vĩ độ</label>
-                    <input className="input font-mono text-sm" type="number" step="any" value={form.lat} onChange={(e) => set('lat', e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="label">Kinh độ</label>
-                    <input className="input font-mono text-sm" type="number" step="any" value={form.lng} onChange={(e) => set('lng', e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="label">Bán kính (m)</label>
-                    <input className="input" type="number" min="50" max="1000" value={form.radius} onChange={(e) => set('radius', e.target.value)} />
-                  </div>
+              <div className="mt-5 flex flex-col gap-4">
+                <div>
+                  <Button icon={LocateFixed} loading={gpsLoading} onClick={handleDetectLocation}>Lấy vị trí hiện tại</Button>
+                </div>
+                <div className="grid gap-5 sm:grid-cols-3">
+                  <Field label="Vĩ độ">
+                    {(id) => <Input id={id} type="number" step="any" inputMode="decimal" className="tabular-nums" value={form.lat} onChange={(e) => set('lat', e.target.value)} />}
+                  </Field>
+                  <Field label="Kinh độ">
+                    {(id) => <Input id={id} type="number" step="any" inputMode="decimal" className="tabular-nums" value={form.lng} onChange={(e) => set('lng', e.target.value)} />}
+                  </Field>
+                  <Field label="Bán kính (m)">
+                    {(id) => <Input id={id} type="number" min="50" max="1000" inputMode="numeric" className="tabular-nums" value={form.radius} onChange={(e) => set('radius', e.target.value)} />}
+                  </Field>
                 </div>
               </div>
             )}
-          </div>
-
-          <div className="flex gap-3">
-            <button type="button" onClick={onClose} className="btn-secondary btn-md flex-1">Huỷ</button>
-            <button type="submit" disabled={saving} className="btn-primary btn-md flex-[2]">
-              {saving ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-              {saving ? 'Đang tạo...' : 'Tạo buổi điểm danh & mở QR'}
-            </button>
-          </div>
+          </section>
         </form>
       )}
     </Modal>

@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { MapPin, Wifi, CheckCircle2, XCircle, Lock, QrCode, Clock, Lightbulb, ArrowDown } from 'lucide-react';
+import {
+  ArrowDown, CircleCheck, CircleX, Clock, LoaderCircle, Lock, MapPin, MapPinOff, RotateCw, Wifi,
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { checkinApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { getCurrentPosition, GPS_ERROR_MESSAGES } from '../../utils/gps';
-import Spinner from '../../components/ui/Spinner';
+import { getCurrentPosition } from '../../utils/gps';
+import Button from '../../components/ui/Button';
+import Logo from '../../components/ui/Logo';
+import { cx } from '../../utils/cx';
 import FeedbackResponseForm from '../feedback/FeedbackResponseForm';
 
 // Vé quét được giữ qua vòng chuyển hướng sang trang đăng nhập, nên dùng
@@ -48,6 +52,35 @@ const STAGES = {
   ERROR: 'error',
 };
 
+// Icon và tông cho từng mã lỗi: thất bại thì đỏ, "đã làm rồi" thì xanh thông tin
+function errorLook(code) {
+  if (code?.includes('ALREADY')) return { icon: CircleCheck, tone: 'bg-info-bg text-info' };
+  if (code === 'QR_EXPIRED') return { icon: Clock, tone: 'bg-error-bg text-error-text' };
+  if (code === 'OUT_OF_RANGE') return { icon: MapPinOff, tone: 'bg-error-bg text-error-text' };
+  if (code === 'GPS_REQUIRED') return { icon: MapPin, tone: 'bg-warning-bg text-warning' };
+  return { icon: CircleX, tone: 'bg-error-bg text-error-text' };
+}
+
+// Khung kết quả: một icon tròn, một tiêu đề, một câu; phần thêm (giờ, khoảng cách, nút) bên dưới
+function ResultCard({ icon: Icon, tone, title, sub, spin = false, children }) {
+  return (
+    <section className="rounded-2xl bg-surface p-6 text-center">
+      <div className={cx('mx-auto flex size-16 items-center justify-center rounded-full', tone)}>
+        <Icon className="size-8" aria-hidden="true" />
+      </div>
+      <h1 className="mt-4 text-xl font-semibold text-foreground">{title}</h1>
+      {sub && <p className="mt-1 text-pretty text-sm text-muted">{sub}</p>}
+      {spin && (
+        <div className="mt-6 flex justify-center text-muted">
+          <LoaderCircle className="size-6 animate-spin" aria-hidden="true" />
+          <span className="sr-only" role="status">Đang xử lý</span>
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
 export default function ScanLanding() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -60,7 +93,7 @@ export default function ScanLanding() {
   const [stage, setStage] = useState(STAGES.INIT);
   const [result, setResult] = useState(null);
   const [errorInfo, setErrorInfo] = useState(null);
-  const [gpsStatus, setGpsStatus] = useState(null);
+  const [, setGpsStatus] = useState(null);
 
   useEffect(() => {
     // Wait until AuthContext has resolved token from localStorage.
@@ -75,7 +108,7 @@ export default function ScanLanding() {
       return;
     }
     bootstrap();
-  }, [user, authLoading]);
+  }, [user, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Đổi token QR lấy vé quét TRƯỚC khi làm bất cứ việc gì tốn thời gian (đăng
   // nhập, xin quyền GPS). Mã QR chỉ sống ~90s tính từ lúc màn hình sinh ra nó;
@@ -116,7 +149,6 @@ export default function ScanLanding() {
       setGpsStatus('ok');
     } catch (err) {
       setGpsStatus('error');
-      const msg = GPS_ERROR_MESSAGES[err.message] || 'Không lấy được GPS';
       // If GPS denied, still try to proceed (server will decide based on event settings)
       if (err.message !== 'GPS_DENIED') {
         gps = null;
@@ -143,6 +175,9 @@ export default function ScanLanding() {
       setStage(STAGES.ERROR);
     }
   };
+
+  // Thử lại dùng vé đang còn trong phiên (nếu có), như lần quét đầu
+  const retry = () => processCheckin(readStoredTicket(eventId, type));
 
   const getErrorTitle = (code) => {
     const map = {
@@ -172,7 +207,7 @@ export default function ScanLanding() {
 
   const feedbackRef = useRef(null);
   useEffect(() => {
-    if (!showFeedback) return;
+    if (!showFeedback) return undefined;
     // Cho sinh viên kịp thấy dấu tích "thành công" rồi mới cuộn xuống form.
     const timer = setTimeout(() => {
       feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -181,164 +216,106 @@ export default function ScanLanding() {
   }, [showFeedback]);
 
   const isCheckin = type === 'checkin';
-  const accentColor = isCheckin ? 'primary' : 'emerald';
+  const look = errorLook(errorInfo?.error);
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${
-      isCheckin ? 'bg-gradient-to-br from-primary-50 to-white' : 'bg-gradient-to-br from-emerald-50 to-white'
-    }`}>
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3 ${
-            isCheckin ? 'bg-gradient-brand' : 'bg-gradient-to-br from-emerald-500 to-teal-600'
-          } shadow-lg`}>
-            <QrCode size={32} className="text-white" />
-          </div>
-          <p className="text-sm font-medium text-gray-500">
-            {isCheckin ? 'Điểm danh vào' : 'Điểm danh ra'} · FPT Event
-          </p>
+    <div className="min-h-screen bg-background px-4 py-8">
+      <div className="mx-auto w-full max-w-sm">
+        <div className="mb-6 flex items-center justify-center gap-2 text-sm text-muted">
+          <Logo className="size-6" />
+          <span>{isCheckin ? 'Điểm danh vào' : 'Điểm danh ra'} · FPT Event</span>
         </div>
 
-        {/* Stage: GPS */}
         {stage === STAGES.GPS && (
-          <div className="card p-8 text-center animate-fade-in">
-            <div className="w-16 h-16 rounded-2xl bg-primary-50 flex items-center justify-center mx-auto mb-4">
-              <MapPin size={28} className="text-primary-600 animate-pulse" />
-            </div>
-            <h2 className="text-lg font-bold text-gray-900 mb-2">Đang lấy vị trí GPS</h2>
-            <p className="text-sm text-gray-500">Vui lòng cho phép truy cập vị trí khi được hỏi</p>
-            <div className="flex justify-center mt-4">
-              <Spinner size="lg" />
-            </div>
-          </div>
+          <ResultCard icon={MapPin} tone="bg-info-bg text-info" title="Đang lấy vị trí GPS" sub="Cho phép truy cập vị trí khi trình duyệt hỏi." spin />
         )}
 
-        {/* Stage: Processing */}
         {stage === STAGES.PROCESSING && (
-          <div className="card p-8 text-center animate-fade-in">
-            <div className="w-16 h-16 rounded-2xl bg-primary-50 flex items-center justify-center mx-auto mb-4">
-              <Wifi size={28} className="text-primary-600 animate-pulse" />
-            </div>
-            <h2 className="text-lg font-bold text-gray-900 mb-2">Đang xử lý...</h2>
-            <p className="text-sm text-gray-500">Xác thực và ghi nhận điểm danh</p>
-            <div className="flex justify-center mt-4">
-              <Spinner size="lg" />
-            </div>
-          </div>
+          <ResultCard icon={Wifi} tone="bg-info-bg text-info" title="Đang xử lý..." sub="Xác thực và ghi nhận điểm danh" spin />
         )}
 
-        {/* Stage: Success */}
         {stage === STAGES.SUCCESS && result && (
-          <div className="card p-8 text-center animate-bounce-in">
-            {/* Animated checkmark */}
-            <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-5 shadow-lg ${
-              isCheckin ? 'bg-gradient-brand' : 'bg-gradient-to-br from-emerald-500 to-teal-600'
-            }`}>
-              <svg viewBox="0 0 60 60" className="w-12 h-12">
-                <circle cx="30" cy="30" r="28" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
-                <path d="M16 30 L25 40 L44 20" stroke="white" strokeWidth="3.5" fill="none"
-                  strokeLinecap="round" strokeLinejoin="round" className="check-path" />
-              </svg>
-            </div>
-
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">
-              {isCheckin ? 'Check-in thành công!' : 'Check-out thành công!'}
-            </h2>
-            <p className="text-gray-500 text-sm mb-5">
-              {result.user?.name} · {result.user?.mssv}
-            </p>
-
-            <div className={`rounded-2xl p-4 mb-5 ${isCheckin ? 'bg-primary-50' : 'bg-emerald-50'}`}>
-              <p className="text-xs text-gray-500 mb-1">{result.event?.name}</p>
-              <p className={`text-3xl font-bold ${isCheckin ? 'text-primary-700' : 'text-emerald-700'}`}>
-                {result.timeDisplay}
-              </p>
-              <p className="text-xs text-gray-400 mt-1 flex items-center justify-center gap-1">
-                <Clock size={11} /> {format(new Date(result.time), 'dd/MM/yyyy')}
+          <ResultCard
+            icon={CircleCheck}
+            tone="bg-success-bg text-success"
+            title={isCheckin ? 'Check-in thành công' : 'Check-out thành công'}
+            sub={[result.user?.name, result.user?.mssv].filter(Boolean).join(' · ')}
+          >
+            <div className="mt-5 rounded-xl bg-background p-4 text-left">
+              <p className="text-pretty text-sm font-medium text-foreground">{result.event?.name}</p>
+              <p className="mt-1 text-sm tabular-nums text-muted">
+                {[result.timeDisplay, result.time && format(new Date(result.time), 'dd/MM/yyyy'), result.event?.location].filter(Boolean).join(' · ')}
               </p>
             </div>
-
             {showFeedback ? (
-              <p className="text-sm font-medium text-violet-700 flex items-center justify-center gap-1.5">
-                <ArrowDown size={15} className="animate-bounce" /> Dành 1 phút đánh giá sự kiện bên dưới nhé
+              <p className="mt-4 flex items-center justify-center gap-1.5 text-sm font-medium text-foreground">
+                <ArrowDown className="size-4" aria-hidden="true" /> Dành 1 phút đánh giá sự kiện bên dưới
               </p>
             ) : (
-              <p className="text-xs text-gray-400">Bạn có thể đóng trang này</p>
+              <p className="mt-4 text-sm text-muted">Bạn có thể đóng trang này.</p>
             )}
-          </div>
+          </ResultCard>
         )}
 
-        {/* Stage: Error */}
         {stage === STAGES.ERROR && errorInfo && (
-          <div className="card p-8 text-center animate-fade-in">
-            <div className="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-5">
-              {errorInfo.error === 'QR_EXPIRED' ? (
-                <Clock size={36} className="text-red-500" />
-              ) : errorInfo.error === 'OUT_OF_RANGE' ? (
-                <MapPin size={36} className="text-red-500" />
-              ) : errorInfo.error?.includes('ALREADY') ? (
-                <CheckCircle2 size={36} className="text-amber-500" />
-              ) : (
-                <XCircle size={36} className="text-red-500" />
-              )}
-            </div>
-
-            <h2 className="text-xl font-bold text-gray-900 mb-2">{errorInfo.title}</h2>
-            <p className="text-sm text-gray-500 mb-5 leading-relaxed">{errorInfo.message}</p>
-
-            {showFeedback && (
-              <p className="text-sm font-medium text-violet-700 flex items-center justify-center gap-1.5 mb-1">
-                <ArrowDown size={15} className="animate-bounce" /> Bạn chưa đánh giá sự kiện — form ở bên dưới
-              </p>
+          <ResultCard icon={look.icon} tone={look.tone} title={errorInfo.title} sub={errorInfo.message}>
+            {errorInfo.error === 'OUT_OF_RANGE' && errorInfo.extra?.distance && (
+              <>
+                <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border text-left">
+                  <div className="bg-surface p-3">
+                    <dt className="text-xs text-muted">Cách địa điểm</dt>
+                    <dd className="mt-0.5 text-base font-semibold tabular-nums text-foreground">{errorInfo.extra.distance} m</dd>
+                  </div>
+                  <div className="bg-surface p-3">
+                    <dt className="text-xs text-muted">Cho phép trong</dt>
+                    <dd className="mt-0.5 text-base font-semibold tabular-nums text-foreground">{errorInfo.extra.requiredRadius} m</dd>
+                  </div>
+                </dl>
+                <p className="mt-4 text-pretty text-sm text-muted">Đi lại gần cửa vào rồi bấm Thử lại. Mã QR đã quét còn dùng được 15 phút.</p>
+              </>
             )}
 
             {errorInfo.error === 'QR_EXPIRED' && (
-              <div className="bg-amber-50 rounded-xl p-3 mb-4 flex items-center gap-2">
-                <Lightbulb size={14} className="text-amber-600 flex-shrink-0" />
-                <p className="text-xs text-amber-700 font-medium">Quét lại mã QR mới trên màn hình sự kiện</p>
-              </div>
-            )}
-
-            {errorInfo.error === 'OUT_OF_RANGE' && errorInfo.extra?.distance && (
-              <div className="bg-red-50 rounded-xl p-3 mb-4">
-                <p className="text-xs text-red-700">
-                  Khoảng cách hiện tại: <strong>{errorInfo.extra.distance}m</strong>
-                  <br />Yêu cầu trong vòng: <strong>{errorInfo.extra.requiredRadius}m</strong>
-                </p>
-              </div>
+              <p className="mt-4 text-pretty text-sm text-muted">Quét lại mã QR mới trên màn hình sự kiện.</p>
             )}
 
             {errorInfo.error === 'GPS_REQUIRED' && (
-              <div className="bg-blue-50 rounded-xl p-3 mb-4 text-left">
-                <p className="text-xs text-blue-700 font-medium mb-1">Cách bật GPS:</p>
-                <p className="text-xs text-blue-600">1. Vào Cài đặt → Quyền riêng tư → Vị trí</p>
-                <p className="text-xs text-blue-600">2. Cho phép trình duyệt truy cập vị trí</p>
-                <p className="text-xs text-blue-600">3. Quét lại mã QR</p>
+              <div className="mt-5 rounded-xl bg-background p-4 text-left text-sm">
+                <p className="font-medium text-foreground">Cách bật GPS</p>
+                <ol className="mt-1 list-inside list-decimal space-y-0.5 text-muted">
+                  <li>Vào Cài đặt → Quyền riêng tư → Vị trí</li>
+                  <li>Cho phép trình duyệt truy cập vị trí</li>
+                  <li>Quét lại mã QR</li>
+                </ol>
               </div>
             )}
 
-            {!errorInfo.error?.includes('ALREADY') && (
-              <button onClick={processCheckin} className="btn-primary btn-md btn-full">
-                Thử lại
-              </button>
+            {showFeedback && (
+              <p className="mt-4 flex items-center justify-center gap-1.5 text-sm font-medium text-foreground">
+                <ArrowDown className="size-4" aria-hidden="true" /> Bạn chưa đánh giá sự kiện — form ở bên dưới
+              </p>
             )}
-          </div>
+
+            {!errorInfo.error?.includes('ALREADY') && (
+              <div className="mt-5">
+                <Button size="auth" icon={RotateCw} onClick={retry} className="w-full">Thử lại</Button>
+              </div>
+            )}
+          </ResultCard>
         )}
 
         {/* Form đánh giá ngay sau check-out */}
         {showFeedback && (
-          <div ref={feedbackRef} className="mt-6 scroll-mt-4 animate-fade-in">
+          <div ref={feedbackRef} className="mt-4 scroll-mt-4">
             <FeedbackResponseForm eventId={eventId} showTitle />
           </div>
         )}
 
-        {/* User info */}
         {user && stage !== STAGES.SUCCESS && stage !== STAGES.ERROR && (
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">
-            <Lock size={11} />
-            <span>Đăng nhập với tài khoản <strong>{user.name}</strong></span>
-          </div>
+          <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted">
+            <Lock className="size-3.5" aria-hidden="true" />
+            Đăng nhập với tài khoản <span className="font-medium text-foreground">{user.name}</span>
+          </p>
         )}
       </div>
     </div>

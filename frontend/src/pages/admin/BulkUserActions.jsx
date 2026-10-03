@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import {
-  Pencil, KeyRound, Smartphone, Trash2, X, Copy, AlertTriangle, UserX, UserCheck,
-} from 'lucide-react';
+import { Copy, Ellipsis, KeyRound, Pencil, Smartphone, Trash2, UserCheck, UserX } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi } from '../../services/api';
 import Modal from '../../components/ui/Modal';
-import Spinner from '../../components/ui/Spinner';
+import Button from '../../components/ui/Button';
+import Select from '../../components/ui/Select';
+import Tabs from '../../components/ui/Tabs';
+import Dropdown, { MenuGroup, MenuItem } from '../../components/ui/Dropdown';
+import { Field, Input } from '../../components/ui/Input';
+import { Checkbox } from '../../components/ui/Choice';
+import { Banner } from '../../components/ui/States';
 
 // Trần của backend (lib/bulkUsers.js). Chặn sớm ở đây để admin thấy lý do
 // ngay trên thanh thao tác thay vì bấm xong mới nhận lỗi 400.
@@ -28,37 +32,31 @@ const EMPTY_EDIT = {
 
 // Kết quả hàng loạt luôn "thành công một phần" được: hiện rõ số đã xử lý và
 // TỪNG tài khoản bị bỏ qua kèm lý do, đừng nuốt vào một dòng toast.
-function BulkResult({ result, onClose, children }) {
+function BulkResult({ result, children }) {
   return (
-    <div className="space-y-4">
-      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
-        <p className="text-sm font-semibold text-emerald-800">{result.message}</p>
-      </div>
-
+    <div className="flex flex-col gap-4">
+      <p className="rounded-xl bg-success-bg p-4 text-sm font-medium text-success">{result.message}</p>
       {children}
-
       {result.skipped?.length > 0 && (
-        <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
-          <p className="text-sm font-semibold text-amber-800 mb-2">
-            {result.skipped.length} tài khoản bị bỏ qua
-          </p>
-          <ul className="space-y-1.5">
+        <div className="rounded-xl bg-warning-bg p-4">
+          <p className="mb-2 text-sm font-medium text-warning">{result.skipped.length} tài khoản bị bỏ qua</p>
+          <ul className="flex flex-col gap-1.5">
             {result.skipped.map((s) => (
-              <li key={s.id} className="text-xs text-amber-700">
-                <span className="font-medium">{s.name}</span> — {s.reason}
+              <li key={s.id} className="text-pretty text-sm text-foreground/80">
+                <span className="font-medium text-foreground">{s.name}</span> — {s.reason}
               </li>
             ))}
           </ul>
         </div>
       )}
-
-      <button type="button" onClick={onClose} className="btn-primary btn-md w-full">Đóng</button>
     </div>
   );
 }
 
+// Thanh thao tác hàng loạt (thay chỗ hàng lọc khi có dòng được chọn) và các hộp xử lý.
+// Không chọn ai thì chỉ còn các hộp (để chạy hết chuyển động đóng).
 export default function BulkUserActions({ selected, currentUserId, onClear, onDone }) {
-  const [modal, setModal] = useState(null); // 'edit' | 'password' | 'device' | 'delete'
+  const [modal, setModal] = useState(null); // 'edit' | 'password' | 'device' | 'delete' | 'lock' | 'unlock'
   const [edit, setEdit] = useState(EMPTY_EDIT);
   const [confirmText, setConfirmText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -69,8 +67,6 @@ export default function BulkUserActions({ selected, currentUserId, onClear, onDo
   const includesSelf = ids.includes(currentUserId);
   // Tài khoản của chính admin luôn bị backend loại khỏi lô → đếm theo số thực sự bị tác động.
   const affected = includesSelf ? count - 1 : count;
-
-  if (count === 0) return null;
 
   const close = () => { setModal(null); setResult(null); setConfirmText(''); };
 
@@ -132,131 +128,90 @@ export default function BulkUserActions({ selected, currentUserId, onClear, onDo
 
   const tooManyForPassword = affected > MAX_BULK_PASSWORD;
 
-  const actions = [
-    { key: 'edit', icon: Pencil, label: 'Sửa thông tin', onClick: openEdit },
-    {
-      key: 'password',
-      icon: KeyRound,
-      label: 'Đặt lại mật khẩu',
-      onClick: () => { setResult(null); setModal('password'); },
-      disabled: tooManyForPassword,
-      title: tooManyForPassword ? `Chỉ đặt lại được tối đa ${MAX_BULK_PASSWORD} tài khoản mỗi lần` : undefined,
-    },
-    { key: 'lock', icon: UserX, label: 'Khoá', onClick: () => openToggleActive(false) },
-    { key: 'unlock', icon: UserCheck, label: 'Mở khoá', onClick: () => openToggleActive(true) },
-    { key: 'device', icon: Smartphone, label: 'Reset thiết bị', onClick: () => { setResult(null); setModal('device'); } },
-    { key: 'delete', icon: Trash2, label: 'Xoá', danger: true, onClick: () => { setResult(null); setConfirmText(''); setModal('delete'); } },
-  ];
-
   const summary = (
-    <div className="bg-surface rounded-xl p-3 space-y-1">
-      <p className="text-sm font-medium text-gray-900">{affected} tài khoản sẽ bị tác động</p>
-      <p className="text-xs text-gray-400 line-clamp-3">
+    <div className="flex flex-col gap-1 rounded-xl bg-background p-3">
+      <p className="text-sm font-medium text-foreground">{affected} tài khoản sẽ bị tác động</p>
+      <p className="line-clamp-3 text-pretty text-sm text-muted">
         {selected.filter((u) => u.id !== currentUserId).map((u) => u.name).join(', ')}
       </p>
-      {includesSelf && (
-        <p className="text-xs text-amber-600">Tài khoản của bạn nằm trong lựa chọn và sẽ được bỏ qua.</p>
-      )}
+      {includesSelf && <p className="text-sm font-medium text-warning">Tài khoản của bạn nằm trong lựa chọn và sẽ được bỏ qua.</p>}
     </div>
+  );
+
+  const doneFooter = <Button variant="primary" size="form" onClick={finish}>Đóng</Button>;
+  const formFooter = (action) => (
+    <>
+      <Button variant="secondary" size="form" onClick={close}>Huỷ</Button>
+      {action}
+    </>
   );
 
   return (
     <>
-      {/* Thanh thao tác nổi — luôn thấy được khi cuộn bảng dài */}
-      <div className="sticky bottom-4 z-30 mt-4">
-        <div className="mx-auto max-w-4xl bg-gray-900 text-white rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 pr-3 border-r border-white/15">
-            <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-lg bg-primary-500 text-sm font-bold">
-              {count}
-            </span>
-            <span className="text-sm text-white/70">đã chọn</span>
+      {count > 0 && (
+        <div className="flex min-h-10 flex-wrap items-center gap-2">
+          <p className="mr-2 text-sm font-medium text-foreground"><span className="tabular-nums">{count}</span> đã chọn</p>
+          <Button variant="ghost" size="sm" onClick={onClear}>Bỏ chọn</Button>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button icon={Pencil} disabled={affected === 0} onClick={openEdit}>Sửa thông tin</Button>
+            <Button
+              icon={KeyRound}
+              disabled={affected === 0 || tooManyForPassword}
+              title={tooManyForPassword ? `Chỉ đặt lại được tối đa ${MAX_BULK_PASSWORD} tài khoản mỗi lần` : undefined}
+              onClick={() => { setResult(null); setModal('password'); }}
+            >
+              Đặt lại mật khẩu
+            </Button>
+            <Dropdown align="end" ariaLabel="Thao tác khác" trigger={<Button icon={Ellipsis} disabled={affected === 0}>Khác</Button>}>
+              <MenuGroup>
+                <MenuItem icon={UserX} onSelect={() => openToggleActive(false)}>Khoá</MenuItem>
+                <MenuItem icon={UserCheck} onSelect={() => openToggleActive(true)}>Mở khoá</MenuItem>
+                <MenuItem icon={Smartphone} onSelect={() => { setResult(null); setModal('device'); }}>Reset thiết bị</MenuItem>
+              </MenuGroup>
+            </Dropdown>
+            <Button variant="danger" icon={Trash2} disabled={affected === 0} onClick={() => { setResult(null); setConfirmText(''); setModal('delete'); }}>
+              Xoá
+            </Button>
           </div>
-
-          <div className="flex items-center gap-1 flex-wrap flex-1">
-            {actions.map(({ key, icon: Icon, label, onClick, danger, disabled, title }) => (
-              <button
-                key={key}
-                onClick={onClick}
-                disabled={disabled || affected === 0}
-                title={title}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                  danger ? 'text-red-300 hover:bg-red-500/20' : 'text-white/80 hover:bg-white/10'
-                }`}
-              >
-                <Icon size={14} /> {label}
-              </button>
-            ))}
-          </div>
-
-          <button onClick={onClear} className="p-2 rounded-xl text-white/50 hover:text-white hover:bg-white/10 transition-colors" title="Bỏ chọn tất cả">
-            <X size={16} />
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Sửa hàng loạt */}
-      <Modal open={modal === 'edit'} onClose={result ? finish : close} title={`Sửa ${affected} tài khoản`} size="sm">
+      <Modal
+        open={modal === 'edit'}
+        onClose={result ? finish : close}
+        title={`Sửa ${affected} tài khoản`}
+        description={result ? undefined : 'Chỉ những trường được bật mới bị ghi đè.'}
+        size="sm"
+        footer={result ? doneFooter : formFooter(<Button type="submit" form="bulk-edit-form" variant="primary" size="form" loading={busy}>Áp dụng</Button>)}
+      >
         {result ? (
-          <BulkResult result={result} onClose={finish} />
+          <BulkResult result={result} />
         ) : (
-          <form onSubmit={submitEdit} className="space-y-4">
+          <form id="bulk-edit-form" onSubmit={submitEdit} className="flex flex-col gap-4">
             {summary}
-            <p className="text-xs text-gray-400">
-              Chỉ những trường được bật mới bị ghi đè.
-            </p>
-
-            <div className="space-y-2">
-              <BulkField
-                label="Vai trò"
-                state={edit.role}
-                onToggle={(on) => setEdit({ ...edit, role: { ...edit.role, on } })}
-              >
-                <select className="input" value={edit.role.value}
-                  onChange={(e) => setEdit({ ...edit, role: { on: true, value: e.target.value } })}>
-                  {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </BulkField>
-
-              <BulkField
-                label="Lớp"
-                state={edit.class}
-                onToggle={(on) => setEdit({ ...edit, class: { ...edit.class, on } })}
-              >
-                <input className="input" placeholder="SE1701 — để trống để xoá lớp"
-                  value={edit.class.value}
-                  onChange={(e) => setEdit({ ...edit, class: { on: true, value: e.target.value } })} />
-              </BulkField>
-
-              <BulkField
-                label="Khoa"
-                state={edit.faculty}
-                onToggle={(on) => setEdit({ ...edit, faculty: { ...edit.faculty, on } })}
-              >
-                <input className="input" placeholder="Software Engineering — để trống để xoá khoa"
-                  value={edit.faculty.value}
-                  onChange={(e) => setEdit({ ...edit, faculty: { on: true, value: e.target.value } })} />
-              </BulkField>
-
-              <BulkField
-                label="Trạng thái"
-                state={edit.isActive}
-                onToggle={(on) => setEdit({ ...edit, isActive: { ...edit.isActive, on } })}
-              >
-                <select className="input" value={edit.isActive.value ? 'active' : 'locked'}
-                  onChange={(e) => setEdit({ ...edit, isActive: { on: true, value: e.target.value === 'active' } })}>
-                  <option value="active">Hoạt động</option>
-                  <option value="locked">Bị khoá</option>
-                </select>
-              </BulkField>
-            </div>
-
-            <div className="flex gap-3">
-              <button type="button" onClick={close} className="btn-secondary btn-md flex-1">Huỷ</button>
-              <button type="submit" disabled={busy} className="btn-primary btn-md flex-1">
-                {busy ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-                Áp dụng
-              </button>
-            </div>
+            <BulkField label="Vai trò" state={edit.role} onToggle={(on) => setEdit({ ...edit, role: { ...edit.role, on } })}>
+              <Select aria-label="Vai trò" value={edit.role.value} options={ROLE_OPTIONS}
+                onChange={(value) => setEdit({ ...edit, role: { on: true, value } })} />
+            </BulkField>
+            <BulkField label="Lớp" state={edit.class} onToggle={(on) => setEdit({ ...edit, class: { ...edit.class, on } })}>
+              <Input aria-label="Lớp" placeholder="SE1701 — để trống để xoá lớp" value={edit.class.value}
+                onChange={(e) => setEdit({ ...edit, class: { on: true, value: e.target.value } })} />
+            </BulkField>
+            <BulkField label="Khoa" state={edit.faculty} onToggle={(on) => setEdit({ ...edit, faculty: { ...edit.faculty, on } })}>
+              <Input aria-label="Khoa" placeholder="Software Engineering — để trống để xoá khoa" value={edit.faculty.value}
+                onChange={(e) => setEdit({ ...edit, faculty: { on: true, value: e.target.value } })} />
+            </BulkField>
+            <BulkField label="Trạng thái" state={edit.isActive} onToggle={(on) => setEdit({ ...edit, isActive: { ...edit.isActive, on } })}>
+              <Tabs
+                variant="segmented"
+                layout="full"
+                ariaLabel="Trạng thái"
+                value={edit.isActive.value ? 'active' : 'locked'}
+                onChange={(v) => setEdit({ ...edit, isActive: { on: true, value: v === 'active' } })}
+                items={[{ value: 'active', label: 'Hoạt động', grow: true }, { value: 'locked', label: 'Bị khoá', grow: true }]}
+              />
+            </BulkField>
           </form>
         )}
       </Modal>
@@ -267,143 +222,120 @@ export default function BulkUserActions({ selected, currentUserId, onClear, onDo
         onClose={result ? finish : close}
         title={modal === 'lock' ? `Khoá ${affected} tài khoản` : `Mở khoá ${affected} tài khoản`}
         size="sm"
+        footer={result ? doneFooter : formFooter(
+          <Button
+            variant={modal === 'lock' ? 'danger' : 'primary'}
+            size="form"
+            loading={busy}
+            onClick={() => submitToggleActive(modal === 'unlock')}
+          >
+            {modal === 'lock' ? 'Khoá tất cả' : 'Mở khoá tất cả'}
+          </Button>,
+        )}
       >
         {result ? (
-          <BulkResult result={result} onClose={finish} />
+          <BulkResult result={result} />
         ) : (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {summary}
-            <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
+            <p className="text-pretty text-sm text-muted">
               {modal === 'lock'
                 ? 'Tài khoản bị khoá không đăng nhập được, dữ liệu điểm danh vẫn giữ nguyên.'
                 : 'Người dùng có thể đăng nhập lại bằng mật khẩu hiện tại.'}
             </p>
-            <div className="flex gap-3">
-              <button type="button" onClick={close} className="btn-secondary btn-md flex-1">Huỷ</button>
-              <button type="button" disabled={busy}
-                onClick={() => submitToggleActive(modal === 'unlock')}
-                className="btn-primary btn-md flex-1">
-                {busy ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-                {modal === 'lock' ? 'Khoá tất cả' : 'Mở khoá tất cả'}
-              </button>
-            </div>
           </div>
         )}
       </Modal>
 
       {/* Reset mật khẩu hàng loạt */}
-      <Modal open={modal === 'password'} onClose={result ? finish : close} title={`Đặt lại mật khẩu cho ${affected} tài khoản`} size="lg">
+      <Modal
+        open={modal === 'password'}
+        onClose={result ? finish : close}
+        title={`Đặt lại mật khẩu cho ${affected} tài khoản`}
+        size="lg"
+        footer={result ? doneFooter : formFooter(
+          <Button variant="primary" size="form" loading={busy} onClick={() => run(() => adminApi.bulkResetPassword(ids))}>Đặt lại mật khẩu</Button>,
+        )}
+      >
         {result ? (
-          <BulkResult result={result} onClose={finish}>
+          <BulkResult result={result}>
             {result.results?.length > 0 && (
-              <div className="border border-border rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2.5 bg-surface border-b border-border">
-                  <p className="text-xs text-gray-500">
-                    Mật khẩu tạm — người dùng phải đổi ở lần đăng nhập kế tiếp
-                  </p>
-                  <button type="button" onClick={copyAllPasswords}
-                    className="flex items-center gap-1.5 text-xs font-medium text-primary-700 hover:text-primary-800">
-                    <Copy size={13} /> Sao chép tất cả
-                  </button>
+              <div className="overflow-hidden rounded-xl border border-border-strong">
+                <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-4 py-2.5">
+                  <p className="text-pretty text-xs text-muted">Mật khẩu tạm — người dùng phải đổi ở lần đăng nhập kế tiếp</p>
+                  <Button size="sm" icon={Copy} onClick={copyAllPasswords} className="shrink-0">Sao chép tất cả</Button>
                 </div>
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="table">
-                    <tbody>
-                      {result.results.map((r) => (
-                        <tr key={r.id}>
-                          <td>
-                            <p className="text-sm font-medium text-gray-900">{r.name}</p>
-                            <p className="text-xs text-gray-400">{r.email}</p>
-                          </td>
-                          <td>
-                            <code className="font-mono text-sm text-primary-700 select-all">{r.password}</code>
-                          </td>
-                          <td className="text-right">
-                            <span className={`text-xs ${r.emailSent ? 'text-emerald-600' : 'text-red-500'}`}>
-                              {r.emailSent ? 'Đã gửi email' : 'Email lỗi'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <ul className="max-h-64 divide-y divide-border overflow-y-auto">
+                  {result.results.map((r) => (
+                    <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
+                        <p className="truncate text-xs text-muted">{r.email}</p>
+                      </div>
+                      <code className="select-all font-mono text-sm text-foreground">{r.password}</code>
+                      <span className={`text-xs font-medium ${r.emailSent ? 'text-success' : 'text-error-text'}`}>
+                        {r.emailSent ? 'Đã gửi email' : 'Email lỗi'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </BulkResult>
         ) : (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {summary}
-            <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-              Mỗi người nhận một mật khẩu tạm qua email, phải đổi ở lần đăng nhập kế tiếp.
-              Tài khoản đang bị khoá cũng được mở.
+            <p className="text-pretty text-sm text-muted">
+              Mỗi người nhận một mật khẩu tạm qua email, phải đổi ở lần đăng nhập kế tiếp. Tài khoản đang bị khoá cũng được mở.
             </p>
-            <div className="flex gap-3">
-              <button type="button" onClick={close} className="btn-secondary btn-md flex-1">Huỷ</button>
-              <button type="button" disabled={busy}
-                onClick={() => run(() => adminApi.bulkResetPassword(ids))}
-                className="btn-primary btn-md flex-1">
-                {busy ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-                Đặt lại mật khẩu
-              </button>
-            </div>
           </div>
         )}
       </Modal>
 
       {/* Reset thiết bị hàng loạt */}
-      <Modal open={modal === 'device'} onClose={result ? finish : close} title={`Reset thiết bị cho ${affected} tài khoản`} size="sm">
+      <Modal
+        open={modal === 'device'}
+        onClose={result ? finish : close}
+        title={`Reset thiết bị cho ${affected} tài khoản`}
+        size="sm"
+        footer={result ? doneFooter : formFooter(
+          <Button variant="primary" size="form" loading={busy} onClick={() => run(() => adminApi.bulkResetDevice(ids))}>Reset thiết bị</Button>,
+        )}
+      >
         {result ? (
-          <BulkResult result={result} onClose={finish} />
+          <BulkResult result={result} />
         ) : (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {summary}
-            <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-              Gỡ thiết bị đã tin cậy — lần đăng nhập kế tiếp sẽ cần mã OTP.
-            </p>
-            <div className="flex gap-3">
-              <button type="button" onClick={close} className="btn-secondary btn-md flex-1">Huỷ</button>
-              <button type="button" disabled={busy}
-                onClick={() => run(() => adminApi.bulkResetDevice(ids))}
-                className="btn-primary btn-md flex-1">
-                {busy ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-                Reset thiết bị
-              </button>
-            </div>
+            <p className="text-pretty text-sm text-muted">Gỡ thiết bị đã tin cậy — lần đăng nhập kế tiếp sẽ cần mã OTP.</p>
           </div>
         )}
       </Modal>
 
       {/* Xoá hàng loạt — xoá cứng, bắt gõ xác nhận */}
-      <Modal open={modal === 'delete'} onClose={result ? finish : close} title={`Xoá ${affected} tài khoản`} size="sm">
+      <Modal
+        open={modal === 'delete'}
+        onClose={result ? finish : close}
+        title={`Xoá ${affected} tài khoản`}
+        size="sm"
+        footer={result ? doneFooter : formFooter(
+          <Button variant="danger" size="form" loading={busy} disabled={confirmText.trim().toUpperCase() !== 'XOA'}
+            onClick={() => run(() => adminApi.bulkDelete(ids))}>
+            Xoá vĩnh viễn
+          </Button>,
+        )}
+      >
         {result ? (
-          <BulkResult result={result} onClose={finish} />
+          <BulkResult result={result} />
         ) : (
-          <div className="space-y-4">
-            <div className="flex gap-3 bg-red-50 border border-red-100 rounded-xl p-4">
-              <AlertTriangle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-red-800">Không thể hoàn tác</p>
-                <p className="text-xs text-red-700">
-                  Xoá vĩnh viễn tài khoản và toàn bộ lịch sử điểm danh. Người đã tạo sự kiện được bỏ qua.
-                </p>
-              </div>
-            </div>
+          <div className="flex flex-col gap-4">
+            <Banner tone="error" title="Không thể hoàn tác" compact>
+              Xoá vĩnh viễn tài khoản và toàn bộ lịch sử điểm danh. Người đã tạo sự kiện được bỏ qua.
+            </Banner>
             {summary}
-            <div>
-              <label className="label">Gõ <strong>XOA</strong> để xác nhận</label>
-              <input className="input" value={confirmText} placeholder="XOA"
-                onChange={(e) => setConfirmText(e.target.value)} />
-            </div>
-            <div className="flex gap-3">
-              <button type="button" onClick={close} className="btn-secondary btn-md flex-1">Huỷ</button>
-              <button type="button" disabled={busy || confirmText.trim().toUpperCase() !== 'XOA'}
-                onClick={() => run(() => adminApi.bulkDelete(ids))}
-                className="btn-danger btn-md flex-1 disabled:opacity-40 disabled:cursor-not-allowed">
-                {busy ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-                Xoá vĩnh viễn
-              </button>
-            </div>
+            <Field label={<>Gõ <span className="font-semibold">XOA</span> để xác nhận</>}>
+              {(id) => <Input id={id} value={confirmText} onChange={(e) => setConfirmText(e.target.value)} />}
+            </Field>
           </div>
         )}
       </Modal>
@@ -414,13 +346,9 @@ export default function BulkUserActions({ selected, currentUserId, onClear, onDo
 // Một dòng "bật để ghi đè" trong form sửa hàng loạt.
 function BulkField({ label, state, onToggle, children }) {
   return (
-    <div className={`rounded-xl border p-3 transition-colors ${state.on ? 'border-primary-300 bg-primary-50/50' : 'border-border'}`}>
-      <label className="flex items-center gap-2.5 cursor-pointer">
-        <input type="checkbox" className="w-4 h-4 rounded accent-primary-600"
-          checked={state.on} onChange={(e) => onToggle(e.target.checked)} />
-        <span className="text-sm font-medium text-gray-900">{label}</span>
-      </label>
-      {state.on && <div className="mt-2.5">{children}</div>}
+    <div className="rounded-xl bg-background p-3">
+      <Checkbox label={label} checked={state.on} onChange={(e) => onToggle(e.target.checked)} labelClassName="font-medium" />
+      {state.on && <div className="mt-3">{children}</div>}
     </div>
   );
 }

@@ -1,27 +1,31 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Award, Upload, SlidersHorizontal, Send, Trash2, FileDown, RefreshCw, XCircle } from 'lucide-react';
+import { ChevronDown, CircleX, FileDown, RefreshCw, Send, SlidersHorizontal, Trash2, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { certificateApi } from '../../services/api';
-import Spinner from '../../components/ui/Spinner';
-import Modal from '../../components/ui/Modal';
+import Modal, { useConfirm } from '../../components/ui/Modal';
 import Badge from '../../components/ui/Badge';
+import Button, { IconButton } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { Banner, Skeleton, SkeletonRows } from '../../components/ui/States';
 import CertificateCanvas from '../certificates/CertificateCanvas';
 import CertificateEditorModal from './CertificateEditorModal';
 import { downloadBlob } from '../certificates/certRender';
 
 const EMAIL_BADGE = {
-  PENDING: { label: 'Chờ gửi email', variant: 'gray' },
-  SENDING: { label: 'Đang gửi', variant: 'yellow' },
-  SENT: { label: 'Đã gửi email', variant: 'green' },
-  FAILED: { label: 'Email lỗi', variant: 'red' },
+  PENDING: { label: 'Chờ gửi email', tone: 'neutral' },
+  SENDING: { label: 'Đang gửi', tone: 'warning' },
+  SENT: { label: 'Đã gửi email', tone: 'success' },
+  FAILED: { label: 'Email lỗi', tone: 'error' },
 };
 // Brevo gói free ~300 email/ngày cho CẢ hệ thống.
 const QUOTA_WARN = 250;
 
 // Khung "Chứng nhận tham gia" trong trang chi tiết sự kiện. Tuỳ chọn: không
-// upload mẫu thì sự kiện không có chứng nhận. Chỉ ADMIN/người tạo — 403 thì ẩn.
-export default function EventCertificatePanel({ event }) {
+// upload mẫu thì sự kiện không có chứng nhận. Chỉ ADMIN/người tạo — 403 thì ẩn
+// (onUnavailable để trang cha ẩn tab).
+export default function EventCertificatePanel({ event, onUnavailable }) {
+  const confirm = useConfirm();
   const [setup, setSetup] = useState(null);
   const [hidden, setHidden] = useState(false);
   const [imageUrl, setImageUrl] = useState(null);
@@ -34,7 +38,10 @@ export default function EventCertificatePanel({ event }) {
 
   const loadSetup = useCallback(() => certificateApi.getSetup(event.id)
     .then(({ data }) => { setSetup(data.data); return data.data; })
-    .catch((err) => { if (err.response?.status === 403) setHidden(true); return null; }), [event.id]);
+    .catch((err) => {
+      if (err.response?.status === 403) { setHidden(true); onUnavailable?.(); }
+      return null;
+    }), [event.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadImage = useCallback(async () => {
     try {
@@ -63,7 +70,13 @@ export default function EventCertificatePanel({ event }) {
   }), [event.name, event.checkinOpen]);
 
   if (hidden) return null;
-  if (!setup) return <div className="card p-4 flex justify-center"><Spinner size="md" /></div>;
+  if (!setup) {
+    return (
+      <Card title="Chứng nhận tham gia">
+        <div className="space-y-3"><Skeleton className="h-4 w-2/5" /><Skeleton className="h-32 w-full rounded-xl" /></div>
+      </Card>
+    );
+  }
 
   const { template, issuedCount, pendingCount, emailFailed } = setup;
 
@@ -98,7 +111,11 @@ export default function EventCertificatePanel({ event }) {
   };
 
   const handleRemove = async () => {
-    if (!confirm('Gỡ mẫu chứng nhận khỏi sự kiện này?')) return;
+    if (!(await confirm({
+      title: 'Gỡ mẫu chứng nhận?',
+      body: 'Mẫu chứng nhận sẽ bị gỡ khỏi sự kiện này.',
+      confirmLabel: 'Gỡ mẫu',
+    }))) return;
     setBusy('remove');
     try {
       await certificateApi.removeTemplate(event.id);
@@ -137,7 +154,12 @@ export default function EventCertificatePanel({ event }) {
   };
 
   const handleRevoke = async (cert) => {
-    if (!confirm(`Thu hồi chứng nhận của ${cert.recipientName}? Người này sẽ không xem/tải được nữa.`)) return;
+    if (!(await confirm({
+      title: 'Thu hồi chứng nhận?',
+      body: <><span className="font-medium text-foreground">{cert.recipientName}</span> sẽ không xem, tải được chứng nhận này nữa.</>,
+      confirmLabel: 'Thu hồi chứng nhận',
+      icon: CircleX,
+    }))) return;
     try {
       await certificateApi.revoke(event.id, cert.id);
       toast.success('Đã thu hồi chứng nhận');
@@ -148,114 +170,101 @@ export default function EventCertificatePanel({ event }) {
   };
 
   const canIssue = pendingCount > 0 || emailFailed > 0;
+  let sub = 'Không bắt buộc — upload mẫu nếu sự kiện này có cấp chứng nhận';
+  if (template) {
+    const waiting = pendingCount > 0
+      ? `${pendingCount} người đã check-out đang chờ cấp`
+      : issuedCount > 0 ? 'đã cấp cho mọi người đã check-out' : 'chưa có ai check-out để cấp';
+    sub = `Đã cấp ${issuedCount} · ${waiting}`;
+  }
 
   return (
-    <div className="card p-4 space-y-3">
-      <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-          <Award size={18} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-gray-900">Chứng nhận tham gia</p>
-          <p className="text-xs text-gray-400">
-            {template
-              ? `Đã cấp ${issuedCount} · ${pendingCount} người đã check-out đang chờ cấp`
-              : 'Không bắt buộc — upload mẫu nếu sự kiện này có cấp chứng nhận'}
-          </p>
-        </div>
-        {template && (
-          <button onClick={() => setIssueOpen(true)} disabled={!canIssue || busy === 'issue'}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
-            <Send size={14} /> Cấp chứng nhận{pendingCount > 0 ? ` (${pendingCount})` : ''}
-          </button>
-        )}
-      </div>
-
+    <Card
+      title="Chứng nhận tham gia"
+      sub={sub}
+      action={template && (
+        <Button icon={Send} disabled={!canIssue || busy === 'issue'} onClick={() => setIssueOpen(true)}>Cấp chứng nhận</Button>
+      )}
+    >
       <input ref={fileRef} type="file" accept="image/png,image/jpeg" className="hidden" onChange={handleUpload} />
 
       {!template ? (
-        <div className="border-t border-border pt-3 flex flex-col sm:flex-row sm:items-center gap-3">
-          <button onClick={() => fileRef.current?.click()} disabled={busy === 'upload'} className="btn-secondary btn-sm justify-center">
-            {busy === 'upload' ? <Spinner size="sm" /> : <Upload size={14} />} Upload ảnh mẫu
-          </button>
-          <p className="text-xs text-gray-400">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Button icon={Upload} loading={busy === 'upload'} onClick={() => fileRef.current?.click()} className="shrink-0">Upload ảnh mẫu</Button>
+          <p className="text-pretty text-xs text-muted">
             Ảnh PNG/JPG tối đa 5MB, mỗi chiều ≥ 500px. Nên thiết kế sẵn khung (ví dụ trên Canva, khổ A4 ngang) và
             để trống chỗ ghi tên — hệ thống tự điền họ tên, tên sự kiện, ngày và mã chứng nhận.
           </p>
         </div>
       ) : (
-        <div className="border-t border-border pt-3 grid sm:grid-cols-[220px_minmax(0,1fr)] gap-4">
-          <button onClick={() => setEditorOpen(true)} className="block text-left" title="Chỉnh bố cục">
-            {imageUrl
-              ? <CertificateCanvas imageUrl={imageUrl} template={template} values={sampleValues} />
-              : <div className="aspect-[1.41] rounded-lg bg-gray-50 flex items-center justify-center"><Spinner size="md" /></div>}
-          </button>
-          <div className="space-y-2">
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={() => setEditorOpen(true)} disabled={!imageUrl}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors disabled:opacity-50">
-                <SlidersHorizontal size={14} /> Chỉnh bố cục
-              </button>
-              <button onClick={() => fileRef.current?.click()} disabled={busy === 'upload'}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50">
-                {busy === 'upload' ? <Spinner size="sm" /> : <Upload size={14} />} Đổi ảnh mẫu
-              </button>
-              <button onClick={handlePreview} disabled={busy === 'preview'}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50">
-                {busy === 'preview' ? <Spinner size="sm" /> : <FileDown size={14} />} Tải PDF xem thử
-              </button>
+        <>
+          <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_14rem]">
+            <button type="button" onClick={() => imageUrl && setEditorOpen(true)} className="block cursor-pointer text-left outline-none" title="Chỉnh bố cục">
+              {imageUrl
+                ? <CertificateCanvas imageUrl={imageUrl} template={template} values={sampleValues} />
+                : <Skeleton className="aspect-[1.414] w-full rounded-xl" />}
+            </button>
+            <div className="flex flex-col gap-2">
+              <Button icon={SlidersHorizontal} disabled={!imageUrl} onClick={() => setEditorOpen(true)} className="justify-start">Chỉnh bố cục</Button>
+              <Button icon={Upload} loading={busy === 'upload'} onClick={() => fileRef.current?.click()} className="justify-start">Đổi ảnh mẫu</Button>
+              <Button icon={FileDown} loading={busy === 'preview'} onClick={handlePreview} className="justify-start">Tải PDF xem thử</Button>
               {issuedCount === 0 && (
-                <button onClick={handleRemove} disabled={busy === 'remove'}
-                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
-                  <Trash2 size={14} /> Gỡ mẫu
-                </button>
+                <Button variant="danger" icon={Trash2} loading={busy === 'remove'} onClick={handleRemove} className="justify-start">Gỡ mẫu</Button>
+              )}
+              <p className="mt-2 text-pretty text-xs text-muted">Ảnh PNG, JPG tối đa 5 MB. Họ tên, tên sự kiện, ngày và mã được điền tự động.</p>
+              {issuedCount > 0 && (
+                <p className="text-pretty text-xs font-medium text-warning">
+                  Đã cấp {issuedCount} chứng nhận — đổi ảnh hoặc bố cục sẽ áp dụng cho cả chứng nhận đã cấp.
+                </p>
+              )}
+              {emailFailed > 0 && (
+                <p className="text-pretty text-xs text-error-text">
+                  {emailFailed} email thông báo gửi lỗi — bấm “Cấp chứng nhận” để gửi lại.
+                </p>
               )}
             </div>
-            {issuedCount > 0 && (
-              <p className="text-[11px] text-amber-700">
-                Đã cấp {issuedCount} chứng nhận — đổi ảnh hoặc bố cục sẽ áp dụng cho cả chứng nhận đã cấp.
-              </p>
-            )}
-            {emailFailed > 0 && (
-              <p className="text-[11px] text-red-600">
-                {emailFailed} email thông báo gửi lỗi — bấm "Cấp chứng nhận" để gửi lại.
-              </p>
-            )}
-
-            {issuedCount > 0 && (
-              <details className="pt-1" onToggle={(e) => { if (e.currentTarget.open && issued === null) loadIssued(); }}>
-                <summary className="text-xs font-semibold text-gray-500 cursor-pointer select-none flex items-center gap-2">
-                  Danh sách đã cấp ({issuedCount})
-                  <button type="button" onClick={(e) => { e.preventDefault(); loadIssued(); loadSetup(); }}
-                    className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100" title="Làm mới">
-                    <RefreshCw size={12} />
-                  </button>
-                </summary>
-                {issued === null ? (
-                  <div className="py-3 flex justify-center"><Spinner size="sm" /></div>
-                ) : (
-                  <div className="mt-2 max-h-72 overflow-y-auto divide-y divide-gray-100 border border-border rounded-lg">
-                    {issued.map((c) => {
-                      const badge = EMAIL_BADGE[c.emailStatus] || { label: c.emailStatus, variant: 'gray' };
-                      return (
-                        <div key={c.id} className="flex items-center gap-2 px-3 py-2 text-xs">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-gray-800 truncate">{c.recipientName}</p>
-                            <p className="text-gray-400 font-mono">{c.user?.mssv || c.user?.email} · {c.code}</p>
-                          </div>
-                          <Badge variant={badge.variant}>{badge.label}</Badge>
-                          <button onClick={() => handleRevoke(c)} className="p-1 rounded text-gray-300 hover:text-red-600 hover:bg-red-50" title="Thu hồi">
-                            <XCircle size={14} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </details>
-            )}
           </div>
-        </div>
+
+          {issuedCount > 0 && (
+            <details
+              className="group mt-6 border-t border-border pt-4"
+              onToggle={(e) => { if (e.currentTarget.open && issued === null) loadIssued(); }}
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-foreground outline-none [&::-webkit-details-marker]:hidden">
+                Danh sách đã cấp
+                <span className="text-xs font-normal tabular-nums text-muted">{issuedCount}</span>
+                <ChevronDown className="size-4 text-muted transition-[transform,rotate] group-open:rotate-180" aria-hidden="true" />
+                <IconButton
+                  icon={RefreshCw}
+                  label="Làm mới"
+                  className="ml-auto"
+                  onClick={(e) => { e.preventDefault(); loadIssued(); loadSetup(); }}
+                />
+              </summary>
+              {issued === null ? (
+                <SkeletonRows rows={3} avatar={false} />
+              ) : (
+                <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto">
+                  {issued.map((c) => {
+                    const badge = EMAIL_BADGE[c.emailStatus] || { label: c.emailStatus, tone: 'neutral' };
+                    return (
+                      <li key={c.id} className="flex items-center gap-3 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">{c.recipientName}</p>
+                          <p className="truncate text-xs text-muted">
+                            {c.user?.mssv || c.user?.email} · <span className="font-mono">{c.code}</span>
+                          </p>
+                        </div>
+                        <Badge tone={badge.tone}>{badge.label}</Badge>
+                        <IconButton icon={CircleX} label="Thu hồi" danger onClick={() => handleRevoke(c)} />
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </details>
+          )}
+        </>
       )}
 
       {template && imageUrl && (
@@ -269,30 +278,34 @@ export default function EventCertificatePanel({ event }) {
         />
       )}
 
-      <Modal open={issueOpen} onClose={() => setIssueOpen(false)} title="Cấp chứng nhận tham gia" size="sm">
-        <div className="space-y-4 text-sm text-gray-600">
-          {pendingCount > 0 ? (
-            <p>Cấp chứng nhận cho <b>{pendingCount}</b> người đã check-out chưa có chứng nhận, và gửi email báo cho từng người.</p>
-          ) : (
-            <p>Không có ai mới đủ điều kiện. Hệ thống sẽ gửi lại <b>{emailFailed}</b> email thông báo bị lỗi lần trước.</p>
-          )}
-          {emailFailed > 0 && pendingCount > 0 && <p>Kèm gửi lại {emailFailed} email bị lỗi lần trước.</p>}
+      <Modal
+        open={issueOpen}
+        onClose={() => setIssueOpen(false)}
+        title="Cấp chứng nhận tham gia"
+        size="sm"
+        description={pendingCount > 0 ? (
+          <>Cấp chứng nhận cho <span className="font-medium text-foreground">{pendingCount}</span> người đã check-out chưa có chứng nhận, và gửi email báo cho từng người.</>
+        ) : (
+          <>Không có ai mới đủ điều kiện. Hệ thống sẽ gửi lại <span className="font-medium text-foreground">{emailFailed}</span> email thông báo bị lỗi lần trước.</>
+        )}
+        footer={(
+          <>
+            <Button variant="secondary" size="form" onClick={() => setIssueOpen(false)}>Huỷ</Button>
+            <Button variant="primary" size="form" loading={busy === 'issue'} onClick={handleIssue}>Cấp chứng nhận</Button>
+          </>
+        )}
+      >
+        <div className="flex flex-col gap-3 text-sm text-muted">
+          {emailFailed > 0 && pendingCount > 0 && <p className="text-foreground">Kèm gửi lại {emailFailed} email bị lỗi lần trước.</p>}
           {pendingCount + emailFailed > QUOTA_WARN && (
-            <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+            <Banner tone="warning" compact>
               Danh sách lớn: gói email miễn phí chỉ gửi được khoảng 300 email/ngày cho toàn hệ thống. Chứng nhận vẫn được cấp đủ,
               chỉ một số email thông báo có thể lỗi — bấm cấp lại vào hôm sau để gửi lại.
-            </p>
+            </Banner>
           )}
-          <p className="text-xs text-gray-400">Người check-out sau này sẽ chưa có chứng nhận — bấm "Cấp chứng nhận" lần nữa để cấp thêm.</p>
-          <div className="flex gap-3">
-            <button onClick={() => setIssueOpen(false)} className="btn-secondary btn-md flex-1">Huỷ</button>
-            <button onClick={handleIssue} disabled={busy === 'issue'} className="btn-primary btn-md flex-1">
-              {busy === 'issue' ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <Send size={15} />}
-              Cấp chứng nhận
-            </button>
-          </div>
+          <p className="text-pretty text-xs">Người check-out sau này sẽ chưa có chứng nhận — bấm “Cấp chứng nhận” lần nữa để cấp thêm.</p>
         </div>
       </Modal>
-    </div>
+    </Card>
   );
 }

@@ -1,23 +1,76 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  Plus, Search, Upload, Smartphone, UserX, UserCheck, RefreshCw, AlertCircle,
-  Pencil, Trash2, ChevronLeft, ChevronRight, KeyRound, Copy, X,
-} from 'lucide-react';
+import { Copy, Ellipsis, KeyRound, Lock, Pencil, Plus, Smartphone, Trash2, Upload, UserCheck, UserX } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import Layout from '../../components/layout/Layout';
-import Spinner from '../../components/ui/Spinner';
-import Badge, { roleBadge } from '../../components/ui/Badge';
-import Modal from '../../components/ui/Modal';
+import Button, { IconButton } from '../../components/ui/Button';
+import Badge, { RoleBadge } from '../../components/ui/Badge';
+import Avatar from '../../components/ui/Avatar';
+import Modal, { useConfirm } from '../../components/ui/Modal';
+import Select from '../../components/ui/Select';
+import Tabs from '../../components/ui/Tabs';
+import Pagination from '../../components/ui/Pagination';
+import Dropdown, { MenuGroup, MenuItem, MenuSeparator } from '../../components/ui/Dropdown';
+import { TableCard, Th } from '../../components/ui/Card';
+import { Field, Input, SearchInput } from '../../components/ui/Input';
+import { CheckCell } from '../../components/ui/Choice';
+import { LoadError, SkeletonRows } from '../../components/ui/States';
+import { cx } from '../../utils/cx';
 import ImportStudents from './ImportStudents';
 import BulkUserActions, { MAX_BULK } from './BulkUserActions';
 
 const PAGE_SIZES = [20, 50, 100];
 const EMPTY_FORM = { name: '', email: '', mssv: '', role: 'STUDENT', class: '', faculty: '', phone: '' };
 
+const ROLE_OPTIONS = [
+  { value: 'STUDENT', label: 'Sinh viên' },
+  { value: 'BTC', label: 'Ban tổ chức' },
+  { value: 'LECTURER', label: 'Giảng viên' },
+  { value: 'ADMIN', label: 'Admin' },
+];
+const ROLE_FILTERS = [{ value: '', label: 'Tất cả' }, ...ROLE_OPTIONS];
+const STATUS_TABS = [
+  { value: '', label: 'Tất cả' },
+  { value: 'active', label: 'Hoạt động' },
+  { value: 'locked', label: 'Bị khoá' },
+];
+
+// Các trường của tài khoản: một form cho cả tạo và sửa
+function UserFormFields({ state, setState }) {
+  const set = (key) => (e) => setState({ ...state, [key]: e.target.value });
+  return (
+    <div className="flex flex-col gap-5">
+      <Field label="Họ và tên" required>
+        {(id) => <Input id={id} placeholder="Nguyễn Văn An" value={state.name} onChange={set('name')} />}
+      </Field>
+      <Field label="Email" required>
+        {(id) => <Input id={id} type="email" placeholder="sv@fpt.edu.vn" value={state.email} onChange={set('email')} />}
+      </Field>
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field label="Vai trò">
+          {(id) => <Select id={id} value={state.role} options={ROLE_OPTIONS} onChange={(role) => setState({ ...state, role })} />}
+        </Field>
+        <Field label="MSSV" hint="Không bắt buộc với BTC, giảng viên">
+          {(id) => <Input id={id} placeholder="SE123456" value={state.mssv} onChange={set('mssv')} />}
+        </Field>
+        <Field label="Lớp" optional>
+          {(id) => <Input id={id} placeholder="SE1701" value={state.class} onChange={set('class')} />}
+        </Field>
+        <Field label="Khoa" optional>
+          {(id) => <Input id={id} placeholder="Software Engineering" value={state.faculty} onChange={set('faculty')} />}
+        </Field>
+      </div>
+      <Field label="Số điện thoại" optional>
+        {(id) => <Input id={id} type="tel" placeholder="09xxxxxxxx" value={state.phone} onChange={set('phone')} />}
+      </Field>
+    </div>
+  );
+}
+
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
+  const confirm = useConfirm();
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -202,7 +255,11 @@ export default function UserManagement() {
   };
 
   const handleDelete = async (u) => {
-    if (!confirm(`Xoá vĩnh viễn tài khoản "${u.name}"? Hành động này không thể hoàn tác.`)) return;
+    if (!(await confirm({
+      title: 'Xoá vĩnh viễn tài khoản?',
+      body: <>Tài khoản <span className="font-medium text-foreground">{u.name}</span> sẽ bị xoá. Hành động này không thể hoàn tác.</>,
+      confirmLabel: 'Xoá tài khoản',
+    }))) return;
     try {
       await adminApi.deleteUser(u.id);
       toast.success('Đã xoá người dùng');
@@ -254,7 +311,13 @@ export default function UserManagement() {
   };
 
   const handleResetDevice = async (id, name) => {
-    if (!confirm(`Reset thiết bị cho ${name}?`)) return;
+    if (!(await confirm({
+      title: 'Reset thiết bị?',
+      body: <>Thiết bị tin cậy của <span className="font-medium text-foreground">{name}</span> bị gỡ, lần đăng nhập kế tiếp sẽ cần mã OTP.</>,
+      confirmLabel: 'Reset thiết bị',
+      tone: 'neutral',
+      icon: Smartphone,
+    }))) return;
     try {
       await adminApi.resetDevice(id);
       toast.success('Đã reset thiết bị');
@@ -264,7 +327,15 @@ export default function UserManagement() {
   };
 
   const handleToggleActive = async (id, isActive, name) => {
-    if (!confirm(`${isActive ? 'Khoá' : 'Mở khoá'} tài khoản ${name}?`)) return;
+    if (!(await confirm({
+      title: isActive ? 'Khoá tài khoản?' : 'Mở khoá tài khoản?',
+      body: isActive
+        ? <><span className="font-medium text-foreground">{name}</span> sẽ không đăng nhập được, dữ liệu điểm danh vẫn giữ nguyên.</>
+        : <><span className="font-medium text-foreground">{name}</span> có thể đăng nhập lại bằng mật khẩu hiện tại.</>,
+      confirmLabel: isActive ? 'Khoá tài khoản' : 'Mở khoá',
+      tone: isActive ? 'danger' : 'neutral',
+      icon: isActive ? UserX : UserCheck,
+    }))) return;
     try {
       await adminApi.updateUser(id, { isActive: !isActive });
       toast.success(`Đã ${isActive ? 'khoá' : 'mở khoá'} tài khoản`);
@@ -275,245 +346,147 @@ export default function UserManagement() {
   };
 
   const totalPages = Math.ceil(total / pageSize);
-  const startRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const endRow = Math.min(page * pageSize, total);
   const hasFilters = Boolean(search || roleFilter || statusFilter);
 
-  const userFormFields = (state, setState) => (
-    <>
-      {[
-        { key: 'name', label: 'Họ và tên', required: true, placeholder: 'Nguyễn Văn An' },
-        { key: 'email', label: 'Email', required: true, type: 'email', placeholder: 'sv@fpt.edu.vn' },
-        { key: 'mssv', label: 'MSSV (không bắt buộc với BTC/GV)', placeholder: 'SE123456' },
-        { key: 'class', label: 'Lớp', placeholder: 'SE1701' },
-        { key: 'faculty', label: 'Khoa', placeholder: 'Software Engineering' },
-        { key: 'phone', label: 'Số điện thoại', placeholder: '09xxxxxxxx' },
-      ].map(({ key, label, required, type = 'text', placeholder }) => (
-        <div key={key}>
-          <label className="label">{label} {required && <span className="text-red-500">*</span>}</label>
-          <input className="input" type={type} placeholder={placeholder}
-            value={state[key]} onChange={(e) => setState({ ...state, [key]: e.target.value })} />
-        </div>
-      ))}
-      <div>
-        <label className="label">Vai trò</label>
-        <select className="input" value={state.role} onChange={(e) => setState({ ...state, role: e.target.value })}>
-          <option value="STUDENT">Sinh viên</option>
-          <option value="BTC">Ban tổ chức</option>
-          <option value="LECTURER">Giảng viên</option>
-          <option value="ADMIN">Admin</option>
-        </select>
-      </div>
-    </>
-  );
+  const rowMenu = (u) => {
+    const me = u.id === currentUser?.id;
+    return (
+      <Dropdown align="end" ariaLabel="Thao tác" trigger={<IconButton icon={Ellipsis} label="Thao tác" row />}>
+        <MenuGroup>
+          <MenuItem icon={Pencil} onSelect={() => openEdit(u)}>Sửa thông tin</MenuItem>
+          {!me && (
+            <>
+              <MenuItem icon={KeyRound} onSelect={() => openResetPassword(u)}>Đặt lại mật khẩu</MenuItem>
+              <MenuItem icon={Smartphone} onSelect={() => handleResetDevice(u.id, u.name)}>Reset thiết bị</MenuItem>
+              <MenuItem icon={u.isActive ? UserX : UserCheck} onSelect={() => handleToggleActive(u.id, u.isActive, u.name)}>
+                {u.isActive ? 'Khoá tài khoản' : 'Mở khoá'}
+              </MenuItem>
+            </>
+          )}
+        </MenuGroup>
+        {!me && (
+          <>
+            <MenuSeparator />
+            <MenuGroup><MenuItem icon={Trash2} danger onSelect={() => handleDelete(u)}>Xoá vĩnh viễn</MenuItem></MenuGroup>
+          </>
+        )}
+      </Dropdown>
+    );
+  };
 
-  return (
-    <Layout>
-      <div className="bg-gradient-brand px-6 py-8">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Quản lý người dùng</h1>
-            <p className="text-white/60 text-sm mt-1">{total} tài khoản</p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setImportModal(true)}
-              className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2.5 rounded-xl text-sm hover:bg-white/30 transition-colors">
-              <Upload size={16} /> Import Excel
-            </button>
-            <button onClick={() => { setForm(EMPTY_FORM); setCreateModal(true); }}
-              className="flex items-center gap-2 bg-white text-primary-700 font-semibold px-4 py-2.5 rounded-xl text-sm shadow hover:shadow-md transition-all">
-              <Plus size={16} /> Tạo tài khoản
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-4 md:p-6 max-w-6xl mx-auto">
-        {/* Filters */}
-        <div className="flex gap-3 mb-5 flex-wrap">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input className="input pl-10 pr-9 text-sm" placeholder="Tìm theo tên, MSSV, email..."
-              value={search} onChange={(e) => onSearchChange(e.target.value)} />
-            {search && (
-              <button onClick={() => onSearchChange('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500" title="Xoá tìm kiếm">
-                <X size={15} />
+  let table;
+  if (loading) table = <SkeletonRows rows={8} />;
+  else if (loadError) table = <LoadError title="Không tải được danh sách người dùng" onRetry={() => load(page)} />;
+  else if (users.length === 0) {
+    table = search ? (
+      <p className="text-pretty py-10 text-center text-sm text-muted">
+        Không có tài khoản nào khớp <span className="text-foreground">“{search}”</span>. Thử từ khoá khác.{' '}
+        <button type="button" onClick={() => onSearchChange('')} className="font-medium text-foreground underline-offset-4 hover:underline">Xoá tìm kiếm</button>
+      </p>
+    ) : (
+      <p className="py-10 text-center text-sm text-muted">Không có tài khoản nào{hasFilters ? ' khớp bộ lọc' : ''}.</p>
+    );
+  } else {
+    table = (
+      <>
+        {/* Chọn cả trang rồi thì mời chọn luôn toàn bộ kết quả khớp bộ lọc */}
+        {pageAllSelected && total > users.length && (
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-border bg-background px-4 py-2.5 text-sm text-foreground">
+            <span>Đã chọn {selected.size} tài khoản.</span>
+            {selected.size < total && (
+              <button type="button" onClick={selectAllMatching} disabled={selectingAll}
+                className="font-medium underline underline-offset-4 outline-none disabled:opacity-50">
+                {selectingAll ? 'Đang chọn…' : `Chọn tất cả ${total.toLocaleString('vi-VN')} kết quả${hasFilters ? ' khớp bộ lọc' : ''}`}
               </button>
             )}
           </div>
-          <select className="input text-sm w-36" value={roleFilter} onChange={(e) => applyFilter({ role: e.target.value })}>
-            <option value="">Tất cả vai trò</option>
-            <option value="STUDENT">Sinh viên</option>
-            <option value="BTC">Ban TC</option>
-            <option value="LECTURER">Giảng viên</option>
-            <option value="ADMIN">Admin</option>
-          </select>
-          <select className="input text-sm w-36" value={statusFilter} onChange={(e) => applyFilter({ status: e.target.value })}>
-            <option value="">Mọi trạng thái</option>
-            <option value="active">Hoạt động</option>
-            <option value="locked">Bị khoá</option>
-          </select>
-          <select className="input text-sm w-28" value={pageSize} onChange={(e) => applyFilter({ pageSize: Number(e.target.value) })}>
-            {PAGE_SIZES.map((n) => <option key={n} value={n}>{n} / trang</option>)}
-          </select>
-        </div>
+        )}
+        <table className="w-full text-sm">
+          <thead className="border-b border-border">
+            <tr>
+              <CheckCell as="th" checked={pageAllSelected} indeterminate={!pageAllSelected && pageSomeSelected} onChange={togglePage} ariaLabel="Chọn tất cả trên trang này" />
+              <Th className="w-full">Người dùng</Th>
+              <Th className="hidden md:table-cell">MSSV</Th>
+              <Th className="hidden lg:table-cell">Lớp</Th>
+              <Th className="hidden sm:table-cell">Vai trò</Th>
+              <th className="w-px px-2"><span className="sr-only">Thao tác</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u, index) => {
+              const checked = isSelected(u.id);
+              const me = u.id === currentUser?.id;
+              return (
+                <tr key={u.id} className={cx('border-b border-border last:border-0 hover:bg-surface-hover', checked && 'bg-surface-hover')}>
+                  {me ? (
+                    <td className="w-px p-0" />
+                  ) : (
+                    <CheckCell
+                      checked={checked}
+                      onChange={() => {}}
+                      onClick={(e) => toggleRow(index, e)}
+                      title="Giữ Shift để chọn cả dải"
+                      ariaLabel={`Chọn ${u.name}`}
+                    />
+                  )}
+                  <td className="max-w-0 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={u.name} seed={u.email} />
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <p className="truncate font-medium text-foreground" title={u.name}>{u.name}</p>
+                          {me && <span className="shrink-0 text-xs text-muted">Bạn</span>}
+                          {!u.isActive && <Badge tone="error" icon={Lock} className="shrink-0">Bị khoá</Badge>}
+                        </div>
+                        <p className="truncate text-xs text-muted">{u.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className={cx('hidden whitespace-nowrap px-4 py-3 tabular-nums md:table-cell', u.mssv ? 'text-foreground' : 'text-muted')}>{u.mssv || '—'}</td>
+                  <td className={cx('hidden whitespace-nowrap px-4 py-3 lg:table-cell', u.class ? 'text-foreground' : 'text-muted')}>{u.class || '—'}</td>
+                  <td className="hidden px-4 py-3 sm:table-cell"><RoleBadge role={u.role} /></td>
+                  <td className="px-2 py-3">{rowMenu(u)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <Pagination
+          page={page}
+          pages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          noun="tài khoản"
+          onPageChange={goToPage}
+          pageSizeOptions={PAGE_SIZES}
+          onPageSizeChange={(n) => applyFilter({ pageSize: n })}
+        />
+      </>
+    );
+  }
 
-        {loading ? (
-          <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-        ) : loadError ? (
-          <div className="card flex flex-col items-center gap-3 py-16 text-gray-400">
-            <AlertCircle size={36} className="text-red-400" />
-            <p className="text-sm font-medium text-gray-500">Không thể tải danh sách người dùng</p>
-            <p className="text-xs text-gray-400">Server có thể đang khởi động lại. Vui lòng thử lại.</p>
-            <button onClick={() => load(page)} className="flex items-center gap-2 btn-primary btn-sm mt-1">
-              <RefreshCw size={14} /> Thử lại
-            </button>
-          </div>
-        ) : (
-          <div className="card overflow-hidden">
-            {/* Chọn cả trang rồi thì mời chọn luôn toàn bộ kết quả khớp bộ lọc */}
-            {pageAllSelected && total > users.length && (
-              <div className="px-4 py-2.5 bg-primary-50 border-b border-primary-100 text-xs text-primary-800 flex items-center justify-center gap-2 flex-wrap">
-                <span>Đã chọn {selected.size} tài khoản.</span>
-                {selected.size < total && (
-                  <button onClick={selectAllMatching} disabled={selectingAll}
-                    className="font-semibold underline underline-offset-2 hover:text-primary-900 disabled:opacity-50">
-                    {selectingAll ? 'Đang chọn…' : `Chọn tất cả ${total} kết quả${hasFilters ? ' khớp bộ lọc' : ''}`}
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th className="w-10">
-                      <input type="checkbox" className="w-4 h-4 rounded accent-primary-600 cursor-pointer"
-                        checked={pageAllSelected}
-                        ref={(el) => { if (el) el.indeterminate = !pageAllSelected && pageSomeSelected; }}
-                        onChange={togglePage}
-                        title="Chọn tất cả trên trang này" />
-                    </th>
-                    <th>Người dùng</th>
-                    <th>MSSV</th>
-                    <th>Lớp</th>
-                    <th>Vai trò</th>
-                    <th>Trạng thái</th>
-                    <th>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-10 text-gray-400">Không có dữ liệu</td></tr>
-                  ) : users.map((u, index) => {
-                    const { label: roleLabel, variant: roleVariant } = roleBadge(u.role);
-                    const checked = isSelected(u.id);
-                    return (
-                      <tr key={u.id} className={checked ? 'bg-primary-50/60' : undefined}>
-                        <td>
-                          <input type="checkbox" className="w-4 h-4 rounded accent-primary-600 cursor-pointer"
-                            checked={checked}
-                            onChange={() => {}}
-                            onClick={(e) => toggleRow(index, e)}
-                            title="Giữ Shift để chọn cả dải" />
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm flex-shrink-0">
-                              {u.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm text-gray-900">
-                                {u.name}
-                                {u.id === currentUser?.id && (
-                                  <span className="ml-1.5 text-xs font-normal text-gray-400">(bạn)</span>
-                                )}
-                              </p>
-                              <p className="text-xs text-gray-400">{u.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="text-sm text-gray-600">{u.mssv || '—'}</td>
-                        <td className="text-xs text-gray-500">{u.class || '—'}</td>
-                        <td><Badge variant={roleVariant}>{roleLabel}</Badge></td>
-                        <td>
-                          <Badge variant={u.isActive ? 'green' : 'red'}>
-                            {u.isActive ? 'Hoạt động' : 'Bị khoá'}
-                          </Badge>
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => openEdit(u)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors" title="Sửa thông tin">
-                              <Pencil size={15} />
-                            </button>
-                            <button onClick={() => openResetPassword(u)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Đặt lại mật khẩu">
-                              <KeyRound size={15} />
-                            </button>
-                            <button onClick={() => handleResetDevice(u.id, u.name)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors" title="Reset thiết bị">
-                              <Smartphone size={15} />
-                            </button>
-                            <button onClick={() => handleToggleActive(u.id, u.isActive, u.name)}
-                              className={`p-1.5 rounded-lg transition-colors ${u.isActive ? 'text-gray-400 hover:text-red-500 hover:bg-red-50' : 'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
-                              title={u.isActive ? 'Khoá tài khoản' : 'Mở khoá'}>
-                              {u.isActive ? <UserX size={15} /> : <UserCheck size={15} />}
-                            </button>
-                            <button onClick={() => handleDelete(u)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Xoá vĩnh viễn">
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination footer */}
-            <div className="px-4 py-3 border-t border-border flex items-center justify-between flex-wrap gap-2">
-              <p className="text-xs text-gray-400">
-                {total === 0 ? 'Không có bản ghi' : `Hiển thị ${startRow}–${endRow} / ${total} tài khoản`}
-                {selected.size > 0 && ` · đang chọn ${selected.size}`}
-              </p>
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1">
-                  <button onClick={() => goToPage(page - 1)} disabled={page <= 1}
-                    className="p-1.5 rounded-lg border border-border text-gray-400 hover:text-gray-700 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                    <ChevronLeft size={15} />
-                  </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                    .reduce((acc, p, idx, arr) => {
-                      if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
-                      acc.push(p);
-                      return acc;
-                    }, [])
-                    .map((p, idx) =>
-                      p === '...' ? (
-                        <span key={`e-${idx}`} className="px-1 text-gray-400 text-xs">…</span>
-                      ) : (
-                        <button key={p} onClick={() => goToPage(p)}
-                          className={`min-w-[30px] h-[30px] rounded-lg text-xs font-medium transition-colors ${p === page ? 'bg-primary-600 text-white' : 'border border-border text-gray-600 hover:bg-gray-50'}`}>
-                          {p}
-                        </button>
-                      )
-                    )}
-                  <button onClick={() => goToPage(page + 1)} disabled={page >= totalPages}
-                    className="p-1.5 rounded-lg border border-border text-gray-400 hover:text-gray-700 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                    <ChevronRight size={15} />
-                  </button>
-                </div>
-              )}
+  return (
+    <Layout
+      title="Người dùng"
+      headerRight={(
+        <>
+          <Button size="hdr" icon={Upload} aria-label="Import Excel" onClick={() => setImportModal(true)}>
+            <span className="hidden sm:inline">Import Excel</span>
+          </Button>
+          <Button variant="primary" size="hdr" icon={Plus} onClick={() => { setForm(EMPTY_FORM); setCreateModal(true); }}>Tạo tài khoản</Button>
+        </>
+      )}
+    >
+      <div className="mb-4">
+        {selected.size === 0 && (
+          <div className="flex min-h-10 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <Tabs variant="boxed" ariaLabel="Lọc theo trạng thái" items={STATUS_TABS} value={statusFilter} onChange={(status) => applyFilter({ status })} />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <SearchInput className="w-full sm:w-64" placeholder="Tìm theo tên, MSSV, email" value={search} onChange={(e) => onSearchChange(e.target.value)} />
+              <Select inline label="Vai trò:" aria-label="Lọc theo vai trò" value={roleFilter} options={ROLE_FILTERS} onChange={(role) => applyFilter({ role })} />
             </div>
           </div>
         )}
-
         <BulkUserActions
           selected={[...selected.values()]}
           currentUserId={currentUser?.id}
@@ -522,110 +495,124 @@ export default function UserManagement() {
         />
       </div>
 
-      {/* Create modal */}
-      <Modal open={createModal} onClose={() => setCreateModal(false)} title="Tạo tài khoản mới" size="sm">
-        <form onSubmit={handleCreate} className="space-y-4">
-          {userFormFields(form, setForm)}
-          <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-            Mật khẩu tạm thời sẽ được gửi qua email.
-          </p>
-          <div className="flex gap-3">
-            <button type="button" onClick={() => setCreateModal(false)} className="btn-secondary btn-md flex-1">Huỷ</button>
-            <button type="submit" disabled={creating} className="btn-primary btn-md flex-1">
-              {creating ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-              Tạo tài khoản
-            </button>
-          </div>
+      <TableCard>{table}</TableCard>
+
+      {/* Tạo tài khoản */}
+      <Modal
+        open={createModal}
+        onClose={() => setCreateModal(false)}
+        title="Tạo tài khoản mới"
+        description="Mật khẩu tạm thời sẽ được gửi qua email."
+        size="md"
+        footer={(
+          <>
+            <Button variant="secondary" size="form" onClick={() => setCreateModal(false)}>Huỷ</Button>
+            <Button type="submit" form="create-user-form" variant="primary" size="form" loading={creating}>Tạo tài khoản</Button>
+          </>
+        )}
+      >
+        <form id="create-user-form" onSubmit={handleCreate}>
+          <UserFormFields state={form} setState={setForm} />
         </form>
       </Modal>
 
-      {/* Edit modal */}
-      <Modal open={editModal} onClose={() => setEditModal(false)} title="Sửa thông tin người dùng" size="sm">
-        <form onSubmit={handleSaveEdit} className="space-y-4">
-          {userFormFields(editForm, setEditForm)}
-          <div className="flex gap-3">
-            <button type="button" onClick={() => setEditModal(false)} className="btn-secondary btn-md flex-1">Huỷ</button>
-            <button type="submit" disabled={saving} className="btn-primary btn-md flex-1">
-              {saving ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-              Lưu thay đổi
-            </button>
-          </div>
+      {/* Sửa thông tin */}
+      <Modal
+        open={editModal}
+        onClose={() => setEditModal(false)}
+        title="Sửa thông tin người dùng"
+        size="md"
+        footer={(
+          <>
+            <Button variant="secondary" size="form" onClick={() => setEditModal(false)}>Huỷ</Button>
+            <Button type="submit" form="edit-user-form" variant="primary" size="form" loading={saving}>Lưu thay đổi</Button>
+          </>
+        )}
+      >
+        <form id="edit-user-form" onSubmit={handleSaveEdit}>
+          <UserFormFields state={editForm} setState={setEditForm} />
         </form>
       </Modal>
 
-      {/* Reset password modal */}
-      <Modal open={pwdModal} onClose={() => setPwdModal(false)} title="Đặt lại mật khẩu" size="sm">
+      {/* Đặt lại mật khẩu */}
+      <Modal
+        open={pwdModal}
+        onClose={() => setPwdModal(false)}
+        title="Đặt lại mật khẩu"
+        size="sm"
+        footer={pwdResult ? (
+          <Button variant="primary" size="form" onClick={() => setPwdModal(false)}>Đóng</Button>
+        ) : (
+          <>
+            <Button variant="secondary" size="form" onClick={() => setPwdModal(false)}>Huỷ</Button>
+            <Button type="submit" form="reset-password-form" variant="primary" size="form" loading={resetting}>Đặt lại mật khẩu</Button>
+          </>
+        )}
+      >
         {pwdResult ? (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Đã đặt lại mật khẩu của <strong>{pwdUser?.name}</strong>.
+          <div className="flex flex-col gap-4">
+            <p className="text-pretty text-sm text-muted">
+              Đã đặt lại mật khẩu của <span className="font-medium text-foreground">{pwdUser?.name}</span>.
             </p>
-            <div className="bg-surface rounded-lg p-4">
-              <p className="text-xs text-gray-400 mb-1">Mật khẩu mới</p>
+            <div className="rounded-xl bg-background p-4">
+              <p className="mb-1 text-xs text-muted">Mật khẩu mới</p>
               <div className="flex items-center gap-2">
-                <code className="flex-1 font-mono text-base text-primary-700 break-all select-all">{pwdResult.password}</code>
-                <button type="button" onClick={copyPassword}
-                  className="p-2 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors" title="Sao chép">
-                  <Copy size={15} />
-                </button>
+                <code className="flex-1 select-all break-all font-mono text-base text-foreground">{pwdResult.password}</code>
+                <IconButton icon={Copy} label="Sao chép" onClick={copyPassword} />
               </div>
             </div>
-            <p className={`text-xs rounded-lg p-3 ${pwdResult.emailSent ? 'text-gray-400 bg-surface' : 'text-red-600 bg-red-50'}`}>
+            <p className={cx('text-pretty text-sm', pwdResult.emailSent ? 'text-muted' : 'font-medium text-error-text')}>
               {pwdResult.emailSent
                 ? `Email kèm mật khẩu mới đã được gửi đến ${pwdUser?.email}.`
                 : 'Không gửi được email — hãy sao chép mật khẩu và bàn giao trực tiếp.'}
             </p>
-            <button type="button" onClick={() => setPwdModal(false)} className="btn-primary btn-md w-full">Đóng</button>
           </div>
         ) : (
-          <form onSubmit={handleResetPassword} className="space-y-4">
-            <div className="bg-surface rounded-lg p-3">
-              <p className="text-sm font-medium text-gray-900">{pwdUser?.name}</p>
-              <p className="text-xs text-gray-400">{pwdUser?.email}</p>
+          <form id="reset-password-form" onSubmit={handleResetPassword} className="flex flex-col gap-4">
+            <div className="rounded-xl bg-background p-3">
+              <p className="text-sm font-medium text-foreground">{pwdUser?.name}</p>
+              <p className="text-xs text-muted">{pwdUser?.email}</p>
             </div>
-
-            <div className="space-y-2">
+            <div role="radiogroup" aria-label="Cách đặt mật khẩu" className="flex flex-col gap-2">
               {[
                 { value: 'auto', label: 'Sinh mật khẩu tạm ngẫu nhiên', hint: 'Hệ thống tự tạo và gửi email cho người dùng' },
                 { value: 'manual', label: 'Tự nhập mật khẩu', hint: 'Tối thiểu 6 ký tự' },
               ].map((opt) => (
-                <label key={opt.value}
-                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${pwdMode === opt.value ? 'border-primary-500 bg-primary-50' : 'border-border hover:bg-gray-50'}`}>
-                  <input type="radio" name="pwdMode" className="mt-1" value={opt.value}
-                    checked={pwdMode === opt.value} onChange={() => setPwdMode(opt.value)} />
+                <label
+                  key={opt.value}
+                  className={cx(
+                    'flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors',
+                    pwdMode === opt.value ? 'border-primary bg-primary-light' : 'border-border-strong hover:bg-item-hover',
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="pwdMode"
+                    value={opt.value}
+                    checked={pwdMode === opt.value}
+                    onChange={() => setPwdMode(opt.value)}
+                    className="peer mt-0.5 size-5 shrink-0 cursor-pointer appearance-none rounded-full border-[1.5px] border-border-strong bg-surface outline-none checked:border-[6px] checked:border-primary"
+                  />
                   <span>
-                    <span className="block text-sm font-medium text-gray-900">{opt.label}</span>
-                    <span className="block text-xs text-gray-400">{opt.hint}</span>
+                    <span className="block text-sm font-medium text-foreground">{opt.label}</span>
+                    <span className="mt-0.5 block text-sm text-muted">{opt.hint}</span>
                   </span>
                 </label>
               ))}
             </div>
-
             {pwdMode === 'manual' && (
-              <div>
-                <label className="label">Mật khẩu mới <span className="text-red-500">*</span></label>
-                <input className="input" type="text" autoComplete="new-password" placeholder="Ít nhất 6 ký tự"
-                  value={pwdValue} onChange={(e) => setPwdValue(e.target.value)} />
-              </div>
+              <Field label="Mật khẩu mới" required>
+                {(id) => <Input id={id} type="text" autoComplete="new-password" placeholder="Ít nhất 6 ký tự" value={pwdValue} onChange={(e) => setPwdValue(e.target.value)} />}
+              </Field>
             )}
-
-            <p className="text-xs text-gray-400 bg-surface rounded-lg p-3">
-              Mật khẩu mới được gửi qua email, phải đổi ở lần đăng nhập kế tiếp.
-              Tài khoản đang bị khoá cũng được mở.
+            <p className="text-pretty text-sm text-muted">
+              Mật khẩu mới được gửi qua email, phải đổi ở lần đăng nhập kế tiếp. Tài khoản đang bị khoá cũng được mở.
             </p>
-
-            <div className="flex gap-3">
-              <button type="button" onClick={() => setPwdModal(false)} className="btn-secondary btn-md flex-1">Huỷ</button>
-              <button type="submit" disabled={resetting} className="btn-primary btn-md flex-1">
-                {resetting ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-                Đặt lại mật khẩu
-              </button>
-            </div>
           </form>
         )}
       </Modal>
 
-      {/* Import modal */}
+      {/* Import */}
       <Modal open={importModal} onClose={() => setImportModal(false)} title="Import sinh viên từ Excel" size="sm">
         <ImportStudents onSuccess={() => { setImportModal(false); setPage(1); load(1); }} />
       </Modal>

@@ -22,3 +22,18 @@ export const GPS_ERROR_MESSAGES = {
   GPS_UNAVAILABLE: 'Không lấy được vị trí GPS. Vui lòng ra ngoài trời hoặc bật Wi-Fi.',
   GPS_TIMEOUT: 'Lấy GPS quá lâu. Vui lòng thử lại.',
 };
+
+// Toạ độ → địa chỉ đọc được (OpenStreetMap), để BTC kiểm tra vị trí vừa lấy có đúng chỗ không.
+// Lỗi mạng thì trả null, form vẫn dùng được toạ độ.
+export async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=vi`,
+      { headers: { 'Accept-Language': 'vi' } }
+    );
+    const data = await res.json();
+    return data.display_name || null;
+  } catch {
+    return null;
+  }
+}

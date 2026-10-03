@@ -1,18 +1,25 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import {
-  QrCode, Download, Search, Users, CheckCircle, LogOut,
-  RefreshCw, ExternalLink, UserCheck, ChevronLeft, ChevronRight,
-  Pencil, UserPlus, Link2, TicketCheck, PlayCircle, StopCircle,
-  FileCode2, Circle, Eye,
+  Ellipsis, FileCode2, FileSpreadsheet, FileText, Link2, Lock, Pencil, QrCode, UserCheck, Users,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { eventApi, reportApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import Layout from '../../components/layout/Layout';
-import Spinner from '../../components/ui/Spinner';
-import Badge, { attendanceStatusBadge } from '../../components/ui/Badge';
+import Button, { OutlineIconButton } from '../../components/ui/Button';
+import Badge, { AttendanceBadge, PhaseBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
+import Tabs from '../../components/ui/Tabs';
+import Select from '../../components/ui/Select';
+import Pagination from '../../components/ui/Pagination';
+import Dropdown, { MenuGroup, MenuItem } from '../../components/ui/Dropdown';
+import { Card, StatGrid, TableCard, Th } from '../../components/ui/Card';
+import { Field, Input, SearchInput } from '../../components/ui/Input';
+import { EmptyText, Skeleton, SkeletonRows } from '../../components/ui/States';
+import { eventPhase, longDate, timeRange } from '../../utils/eventStatus';
+import { cx } from '../../utils/cx';
 import EventEditModal from './EventEditModal';
 import EventMembersModal from './EventMembersModal';
 import ReportViewerModal from './ReportViewerModal';
@@ -22,8 +29,18 @@ import EventCertificatePanel from './EventCertificatePanel';
 
 const PAGE_SIZE = 20;
 
+const STATUS_OPTIONS = [
+  { value: '', label: 'Tất cả' },
+  { value: 'REGISTERED', label: 'Đã đăng ký' },
+  { value: 'CHECKED_IN', label: 'Đã check-in' },
+  { value: 'CHECKED_OUT', label: 'Đã check-out' },
+  { value: 'ABSENT', label: 'Vắng' },
+];
+
 export default function EventDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [event, setEvent] = useState(null);
   const [attendances, setAttendances] = useState([]);
   const [stats, setStats] = useState({});
@@ -41,6 +58,10 @@ export default function EventDetail() {
   const [editModal, setEditModal] = useState(false);
   const [membersModal, setMembersModal] = useState(false);
   const [reportModal, setReportModal] = useState(false);
+  const [tab, setTab] = useState('attendance');
+  const [unavailable, setUnavailable] = useState({}); // tab bị 403 thì ẩn
+
+  const canProject = ['ADMIN', 'BTC'].includes(user?.role);
 
   const reloadEvent = () => eventApi.get(id).then(({ data }) => setEvent(data.data));
 
@@ -76,6 +97,15 @@ export default function EventDetail() {
     const timer = setInterval(() => loadAttendance(page), 15000);
     return () => clearInterval(timer);
   }, [loadAttendance, page]);
+
+  // Mở thẳng modal sửa khi tới từ menu "Sửa sự kiện" ở danh sách (?edit=1)
+  useEffect(() => {
+    if (!event || searchParams.get('edit') !== '1') return;
+    setEditModal(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('edit');
+    setSearchParams(next, { replace: true });
+  }, [event]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const goToPage = (p) => {
     setPage(p);
@@ -115,18 +145,19 @@ export default function EventDetail() {
     }
   };
 
-  // Nút "Mở điểm danh" / "Đóng điểm danh" — chủ động điều khiển cổng check-in
-  // hoặc check-out mà không cần đặt trước giờ bắt đầu/kết thúc.
+  // Ba nấc của mỗi cổng: Theo lịch (AUTO) · Mở (OPEN) · Đóng (CLOSED). Mở/Đóng ghi đè hoàn
+  // toàn khung giờ đã đặt; Theo lịch trả cổng về chạy theo khung giờ.
   const handleSetGate = async (type, state) => {
     setGateLoading(type);
     try {
       const field = type === 'checkin' ? 'checkinState' : 'checkoutState';
       const { data } = await eventApi.update(id, { [field]: state });
       setEvent((e) => ({ ...e, [field]: data.data[field], gate: data.data.gate }));
+      const target = type === 'checkin' ? 'điểm danh' : 'check-out';
       toast.success(
-        state === 'OPEN'
-          ? `Đã mở ${type === 'checkin' ? 'điểm danh' : 'check-out'}`
-          : `Đã đóng ${type === 'checkin' ? 'điểm danh' : 'check-out'}`
+        state === 'OPEN' ? `Đã mở ${target}`
+          : state === 'CLOSED' ? `Đã đóng ${target}`
+            : `${type === 'checkin' ? 'Điểm danh' : 'Check-out'} chạy theo lịch`
       );
     } catch (err) {
       toast.error(err.response?.data?.message || 'Thao tác thất bại');
@@ -148,7 +179,8 @@ export default function EventDetail() {
     }
   };
 
-  const handleManualCheckin = async () => {
+  const handleManualCheckin = async (e) => {
+    e?.preventDefault();
     if (!manualUser.trim()) return toast.error('Nhập MSSV hoặc Email sinh viên');
     try {
       await eventApi.manualCheckin(id, { identifier: manualUser, type: manualType });
@@ -161,257 +193,255 @@ export default function EventDetail() {
     }
   };
 
-  if (loading) return <Layout><div className="flex justify-center py-20"><Spinner size="xl" /></div></Layout>;
-  if (!event) return <Layout><div className="p-8 text-center text-gray-400">Không tìm thấy sự kiện</div></Layout>;
+  const shell = (content) => (
+    <Layout parent={{ label: 'Sự kiện', to: '/events' }} activeNav="/events">{content}</Layout>
+  );
+
+  if (loading) {
+    return shell(
+      <div aria-busy="true">
+        <div className="mb-6 space-y-3"><Skeleton className="h-6 w-1/2" /><Skeleton className="h-4 w-1/3" /></div>
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="space-y-4 rounded-2xl border border-border bg-surface p-5"><Skeleton className="h-4 w-32" /><Skeleton className="h-10 w-full rounded-xl" /><Skeleton className="h-10 w-full rounded-xl" /></div>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-border sm:grid-cols-4 xl:grid-cols-2">
+            {Array.from({ length: 4 }, (_, i) => <div key={i} className="space-y-3 bg-surface p-5"><Skeleton className="h-3 w-16" /><Skeleton className="h-6 w-12" /></div>)}
+          </div>
+        </div>
+        <TableCard className="mt-6"><SkeletonRows rows={6} /></TableCard>
+      </div>,
+    );
+  }
+
+  if (!event) {
+    return shell(
+      <div className="mx-auto max-w-md pb-16 pt-16 text-center sm:pt-24">
+        <p className="text-sm font-medium tabular-nums text-muted">404</p>
+        <h1 className="mt-1 text-xl font-semibold text-foreground">Không tìm thấy sự kiện</h1>
+        <p className="mt-2 text-pretty text-sm/6 text-muted">Sự kiện có thể đã bị xoá, hoặc đường dẫn bị gõ sai.</p>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Button as={Link} to="/events" variant="primary" size="form">Về danh sách sự kiện</Button>
+        </div>
+      </div>,
+    );
+  }
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const startRow = (page - 1) * PAGE_SIZE + 1;
-  const endRow = Math.min(page * PAGE_SIZE, total);
+  const phase = eventPhase(event);
+  const when = event.checkinOpen ? `${longDate(event.checkinOpen)} · ${timeRange(event)}` : 'Chưa đặt lịch';
 
-  const statCards = [
-    { label: 'Tổng đăng ký', value: stats.total || 0, icon: Users, color: 'text-primary-600 bg-primary-50' },
-    { label: 'Chưa check-in', value: stats.registered || 0, icon: TicketCheck, color: 'text-amber-600 bg-amber-50' },
-    { label: 'Đã check-in', value: stats.checkedIn || 0, icon: CheckCircle, color: 'text-emerald-600 bg-emerald-50' },
-    { label: 'Đã check-out', value: stats.checkedOut || 0, icon: LogOut, color: 'text-teal-600 bg-teal-50' },
-  ];
+  const checkedPct = stats.total ? Math.round(((stats.checkedIn || 0) / stats.total) * 100) : 0;
+  const checkoutNote = event.gate?.checkout?.reason === 'NOT_STARTED' && event.checkoutOpen
+    ? `Check-out mở lúc ${format(new Date(event.checkoutOpen), 'HH:mm')}` : undefined;
 
-  return (
-    <Layout>
-      <div className="bg-gradient-brand px-6 py-8">
-        <div className="max-w-5xl mx-auto">
-          <h1 className="text-2xl font-bold text-white line-clamp-1">{event.name}</h1>
-          <p className="text-white/60 text-sm mt-1">{event.location}</p>
-          <div className="flex flex-wrap gap-2 mt-3">
-            <Link to={`/events/${id}/qr`} target="_blank"
-              className="flex items-center gap-2 bg-white text-primary-700 font-semibold px-4 py-2 rounded-xl text-sm shadow hover:shadow-md transition-all">
-              <QrCode size={16} /> Mở màn hình QR
-              <ExternalLink size={13} />
-            </Link>
-            <button onClick={handleExport} disabled={exporting}
-              className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
-              {exporting ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <Download size={16} />}
-              Xuất Excel
-            </button>
-            <button onClick={() => setReportModal(true)}
-              className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
-              <Eye size={16} /> Xem báo cáo
-            </button>
-            <button onClick={handleExportHtml} disabled={exportingHtml}
-              className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
-              {exportingHtml ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <FileCode2 size={16} />}
-              Tải HTML
-            </button>
-            <button onClick={() => setManualModal(true)}
-              className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
-              <UserCheck size={16} /> Check-in thủ công
-            </button>
-            <button onClick={() => setMembersModal(true)}
-              className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
-              <UserPlus size={16} /> Danh sách tham gia
-            </button>
-            {event.allowRegistration !== false && (
-              <button onClick={handleCopyRegistrationLink}
-                className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
-                <Link2 size={16} /> Copy link đăng ký
-              </button>
-            )}
-            <button onClick={() => setEditModal(true)}
-              className="flex items-center gap-2 bg-white/20 text-white font-medium px-4 py-2 rounded-xl text-sm hover:bg-white/30 transition-colors">
-              <Pencil size={16} /> Sửa sự kiện
-            </button>
+  const hideTab = (key) => setUnavailable((u) => ({ ...u, [key]: true }));
+  const tabs = [
+    { value: 'attendance', label: 'Điểm danh', count: stats.total || 0 },
+    !unavailable.reminders && { value: 'reminders', label: 'Nhắc lịch' },
+    !unavailable.feedback && { value: 'feedback', label: 'Đánh giá' },
+    !unavailable.certificate && { value: 'certificate', label: 'Chứng nhận' },
+  ].filter(Boolean);
+
+  return shell(
+    <>
+      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-balance text-lg font-semibold text-foreground">{event.name}</h1>
+          <div className="mt-2 flex flex-col items-start gap-2 text-sm text-muted sm:flex-row sm:items-center sm:gap-3">
+            <PhaseBadge phase={phase} />
+            <span>{when}</span>
           </div>
+          <p className="mt-2 max-w-[55ch] text-pretty text-sm/6 text-muted">{event.location}</p>
         </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {canProject && (
+            <Button as="a" href={`/events/${id}/qr`} target="_blank" rel="noopener noreferrer" variant="primary" icon={QrCode}>Mở màn QR</Button>
+          )}
+          <Button icon={FileText} onClick={() => setReportModal(true)}>Báo cáo</Button>
+          <Dropdown align="end" ariaLabel="Thêm thao tác" trigger={<OutlineIconButton icon={Ellipsis} label="Thêm thao tác" />}>
+            <MenuGroup>
+              <MenuItem icon={Pencil} onSelect={() => setEditModal(true)}>Sửa sự kiện</MenuItem>
+              {event.allowRegistration !== false && (
+                <MenuItem icon={Link2} onSelect={handleCopyRegistrationLink}>Sao chép link đăng ký</MenuItem>
+              )}
+              <MenuItem icon={FileSpreadsheet} disabled={exporting} onSelect={handleExport}>Tải file Excel</MenuItem>
+              <MenuItem icon={FileCode2} disabled={exportingHtml} onSelect={handleExportHtml}>Tải file HTML</MenuItem>
+            </MenuGroup>
+          </Dropdown>
+        </div>
+      </header>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card title="Cổng điểm danh">
+          <div className="divide-y divide-border">
+            <GateRow
+              label="Check-in"
+              gate={event.gate?.checkin}
+              state={event.checkinState}
+              openAt={event.checkinOpen}
+              closeAt={event.checkinClose}
+              loading={gateLoading === 'checkin'}
+              onChange={(state) => handleSetGate('checkin', state)}
+            />
+            <GateRow
+              label="Check-out"
+              gate={event.gate?.checkout}
+              state={event.checkoutState}
+              openAt={event.checkoutOpen}
+              closeAt={event.checkoutClose}
+              loading={gateLoading === 'checkout'}
+              onChange={(state) => handleSetGate('checkout', state)}
+            />
+          </div>
+        </Card>
+        <StatGrid
+          cols="grid-cols-2 sm:grid-cols-4 xl:grid-cols-2"
+          tiles={[
+            { label: 'Đăng ký', value: stats.total || 0 },
+            { label: 'Đã check-in', value: stats.checkedIn || 0, sub: stats.total ? `${checkedPct}% số đăng ký` : undefined },
+            { label: 'Đã check-out', value: stats.checkedOut || 0, sub: checkoutNote },
+            {
+              label: 'Chưa check-in',
+              value: stats.registered || 0,
+              sub: event.gate?.checkin?.open && stats.registered > 0 ? 'Cổng vẫn đang mở' : undefined,
+              subTone: 'warning',
+            },
+          ]}
+        />
       </div>
 
-      <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
-        {/* Điều khiển cổng điểm danh — mở/đóng thủ công, không cần đặt lịch */}
-        <div className="card p-4 space-y-3">
-          <GateControlRow
-            label="Điểm danh (check-in)"
-            gate={event.gate?.checkin}
-            loading={gateLoading === 'checkin'}
-            onOpen={() => handleSetGate('checkin', 'OPEN')}
-            onClose={() => handleSetGate('checkin', 'CLOSED')}
-          />
-          <div className="border-t border-border" />
-          <GateControlRow
-            label="Check-out"
-            gate={event.gate?.checkout}
-            loading={gateLoading === 'checkout'}
-            onOpen={() => handleSetGate('checkout', 'OPEN')}
-            onClose={() => handleSetGate('checkout', 'CLOSED')}
-          />
-        </div>
+      <div className="mb-4 mt-6">
+        <Tabs variant="underline" ariaLabel="Nội dung sự kiện" items={tabs} value={tab} onChange={setTab} />
+      </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {statCards.map(({ label, value, icon: Icon, color }) => (
-            <div key={label} className="card p-4 flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
-                <Icon size={20} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{value}</p>
-                <p className="text-xs text-gray-400 leading-tight">{label}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Nhắc lịch qua email cho người đã đăng ký */}
-        <EventReminderPanel event={event} />
-
-        {/* Chứng nhận tham gia (tuỳ chọn) */}
-        <EventCertificatePanel event={event} />
-
-        {/* Form đánh giá sau sự kiện */}
-        <EventFeedbackPanel eventId={id} eventName={event.name} />
-
-        {/* Attendance table */}
-        <div className="card overflow-hidden">
-          <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input className="input pl-10 text-sm py-2.5" placeholder="Tìm theo tên, MSSV..."
-                value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
-            <select className="input text-sm py-2.5 w-full sm:w-40" value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">Tất cả</option>
-              <option value="REGISTERED">Đã đăng ký</option>
-              <option value="CHECKED_IN">Đã check-in</option>
-              <option value="CHECKED_OUT">Đã check-out</option>
-              <option value="ABSENT">Vắng</option>
-            </select>
-            <button onClick={() => loadAttendance(page)} className="btn-secondary btn-md flex-shrink-0">
-              <RefreshCw size={15} />
-            </button>
+      <div hidden={tab !== 'attendance'}>
+        <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <SearchInput className="w-full sm:w-64" placeholder="Tìm theo tên, MSSV" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Select inline label="Trạng thái:" aria-label="Lọc theo trạng thái" value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} />
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>STT</th>
-                  <th>Sinh viên</th>
-                  <th>Lớp</th>
-                  <th>Check-in</th>
-                  <th>Check-out</th>
-                  <th>Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attendances.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-10 text-gray-400">Chưa có dữ liệu điểm danh</td></tr>
-                ) : attendances.map((att, i) => {
-                  const { label, variant } = attendanceStatusBadge(att.status);
-                  return (
-                    <tr key={att.id}>
-                      <td className="text-gray-400 text-xs">{startRow + i}</td>
-                      <td>
-                        <p className="font-medium text-gray-900 text-sm">{att.user.name}</p>
-                        <p className="text-xs text-gray-400">{att.user.mssv}</p>
+          <div className="grid grid-cols-2 gap-2 sm:flex xl:ml-auto">
+            <Button icon={UserCheck} iconClassName="hidden size-4 shrink-0 sm:block" onClick={() => setManualModal(true)}>Check-in thủ công</Button>
+            <Button icon={Users} iconClassName="hidden size-4 shrink-0 sm:block" onClick={() => setMembersModal(true)}>Danh sách tham gia</Button>
+          </div>
+        </div>
+        <TableCard>
+          {attendances.length === 0 ? (
+            <EmptyText className="py-10">
+              {search || statusFilter ? 'Không có ai khớp bộ lọc.' : 'Chưa có ai trong danh sách tham gia.'}
+            </EmptyText>
+          ) : (
+            <>
+              <table className="hidden w-full text-sm sm:table">
+                <thead className="border-b border-border">
+                  <tr>
+                    <Th className="w-full">Sinh viên</Th>
+                    <Th>Lớp</Th>
+                    <Th>Check-in</Th>
+                    <Th>Check-out</Th>
+                    <Th>Trạng thái</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendances.map((att) => (
+                    <tr key={att.id} className="border-b border-border last:border-0">
+                      <td className="max-w-0 px-4 py-3">
+                        <p className="truncate font-medium text-foreground" title={att.user.name}>{att.user.name}</p>
+                        <p className="mt-0.5 text-xs tabular-nums text-muted">{att.user.mssv || att.user.email}</p>
                       </td>
-                      <td><span className="text-xs text-gray-500">{att.user.class || '—'}</span></td>
-                      <td className="text-xs text-gray-600">
-                        {att.checkinTime ? format(new Date(att.checkinTime), 'HH:mm:ss') : <span className="text-gray-300">—</span>}
+                      <td className={cx('whitespace-nowrap px-4 py-3', att.user.class ? 'text-foreground' : 'text-muted')}>{att.user.class || '—'}</td>
+                      <td className={cx('whitespace-nowrap px-4 py-3 tabular-nums', att.checkinTime ? 'text-foreground' : 'text-muted')}>
+                        {att.checkinTime ? format(new Date(att.checkinTime), 'HH:mm:ss') : '—'}
                       </td>
-                      <td className="text-xs text-gray-600">
-                        {att.checkoutTime ? format(new Date(att.checkoutTime), 'HH:mm:ss') : <span className="text-gray-300">—</span>}
+                      <td className={cx('whitespace-nowrap px-4 py-3 tabular-nums', att.checkoutTime ? 'text-foreground' : 'text-muted')}>
+                        {att.checkoutTime ? format(new Date(att.checkoutTime), 'HH:mm:ss') : '—'}
                       </td>
-                      <td><Badge variant={variant}>{label}</Badge></td>
+                      <td className="px-4 py-3"><AttendanceBadge status={att.status} /></td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination footer */}
-          <div className="px-4 py-3 border-t border-border flex items-center justify-between flex-wrap gap-2">
-            <p className="text-xs text-gray-400">
-              {total === 0
-                ? 'Tự động cập nhật mỗi 15 giây'
-                : `Hiển thị ${startRow}–${endRow} / ${total} bản ghi · Tự động cập nhật mỗi 15 giây`}
-            </p>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => goToPage(page - 1)}
-                  disabled={page <= 1}
-                  className="p-1.5 rounded-lg border border-border text-gray-400 hover:text-gray-700 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft size={15} />
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                  .reduce((acc, p, idx, arr) => {
-                    if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
-                    acc.push(p);
-                    return acc;
-                  }, [])
-                  .map((p, idx) =>
-                    p === '...' ? (
-                      <span key={`ellipsis-${idx}`} className="px-1 text-gray-400 text-xs">…</span>
-                    ) : (
-                      <button
-                        key={p}
-                        onClick={() => goToPage(p)}
-                        className={`min-w-[30px] h-[30px] rounded-lg text-xs font-medium transition-colors ${
-                          p === page
-                            ? 'bg-primary-600 text-white'
-                            : 'border border-border text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  )}
-                <button
-                  onClick={() => goToPage(page + 1)}
-                  disabled={page >= totalPages}
-                  className="p-1.5 rounded-lg border border-border text-gray-400 hover:text-gray-700 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight size={15} />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+                  ))}
+                </tbody>
+              </table>
+              <ul className="divide-y divide-border sm:hidden">
+                {attendances.map((att) => (
+                  <li key={att.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">{att.user.name}</p>
+                        <p className="mt-0.5 text-xs tabular-nums text-muted">
+                          {att.user.mssv || att.user.email}{att.user.class ? ` · ${att.user.class}` : ''}
+                        </p>
+                      </div>
+                      <AttendanceBadge status={att.status} />
+                    </div>
+                    {att.checkinTime && (
+                      <p className="mt-1 text-xs tabular-nums text-muted">
+                        Vào {format(new Date(att.checkinTime), 'HH:mm:ss')}
+                        {att.checkoutTime && ` · Ra ${format(new Date(att.checkoutTime), 'HH:mm:ss')}`}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <Pagination
+                compact
+                page={page}
+                pages={totalPages}
+                total={total}
+                pageSize={PAGE_SIZE}
+                noun="người"
+                note="tự cập nhật mỗi 15 giây"
+                onPageChange={goToPage}
+              />
+            </>
+          )}
+        </TableCard>
       </div>
 
-      {/* Manual checkin modal */}
-      <Modal open={manualModal} onClose={() => setManualModal(false)} title="Check-in thủ công" size="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-500">Dùng khi sinh viên không thể quét QR (hết pin, lỗi GPS...)</p>
-          <div>
-            <label className="label">MSSV hoặc Email sinh viên</label>
-            <input className="input" placeholder="SE123456 hoặc email@fpt.edu.vn"
-              value={manualUser} onChange={(e) => setManualUser(e.target.value)} />
+      <div hidden={tab !== 'reminders'}>
+        <EventReminderPanel event={event} onUnavailable={() => hideTab('reminders')} />
+      </div>
+      <div hidden={tab !== 'feedback'}>
+        <EventFeedbackPanel eventId={id} eventName={event.name} onUnavailable={() => hideTab('feedback')} />
+      </div>
+      <div hidden={tab !== 'certificate'}>
+        <EventCertificatePanel event={event} onUnavailable={() => hideTab('certificate')} />
+      </div>
+
+      {/* Check-in thủ công */}
+      <Modal
+        open={manualModal}
+        onClose={() => setManualModal(false)}
+        title="Check-in thủ công"
+        description="Dùng khi sinh viên không thể quét QR (hết pin, lỗi GPS...)"
+        size="sm"
+        footer={(
+          <>
+            <Button variant="secondary" size="form" onClick={() => setManualModal(false)}>Huỷ</Button>
+            <Button type="submit" form="manual-checkin-form" variant="primary" size="form">Xác nhận</Button>
+          </>
+        )}
+      >
+        <form id="manual-checkin-form" onSubmit={handleManualCheckin} className="flex flex-col gap-5">
+          <Field label="MSSV hoặc Email sinh viên">
+            {(fid) => (
+              <Input id={fid} placeholder="SE123456 hoặc email@fpt.edu.vn" value={manualUser} onChange={(e) => setManualUser(e.target.value)} />
+            )}
+          </Field>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium text-foreground">Loại</p>
+            <Tabs
+              variant="segmented"
+              layout="full"
+              ariaLabel="Loại điểm danh"
+              value={manualType}
+              onChange={setManualType}
+              items={[{ value: 'checkin', label: 'Check-in', grow: true }, { value: 'checkout', label: 'Check-out', grow: true }]}
+            />
           </div>
-          <div>
-            <label className="label">Loại</label>
-            <select className="input" value={manualType} onChange={(e) => setManualType(e.target.value)}>
-              <option value="checkin">Check-in</option>
-              <option value="checkout">Check-out</option>
-            </select>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => setManualModal(false)} className="btn-secondary btn-md flex-1">Huỷ</button>
-            <button onClick={handleManualCheckin} className="btn-primary btn-md flex-1">Xác nhận</button>
-          </div>
-        </div>
+        </form>
       </Modal>
 
-      {/* Edit event modal */}
-      <EventEditModal
-        open={editModal}
-        event={event}
-        onClose={() => setEditModal(false)}
-        onSaved={reloadEvent}
-      />
+      <EventEditModal open={editModal} event={event} onClose={() => setEditModal(false)} onSaved={reloadEvent} />
 
-      {/* Members modal */}
       <EventMembersModal
         open={membersModal}
         eventId={id}
@@ -420,50 +450,52 @@ export default function EventDetail() {
       />
 
       {/* Xem báo cáo HTML ngay trên web (kèm nút tải file / in PDF bên trong) */}
-      <ReportViewerModal
-        open={reportModal}
-        eventId={id}
-        eventName={event.name}
-        onClose={() => setReportModal(false)}
-      />
-    </Layout>
+      <ReportViewerModal open={reportModal} eventId={id} eventName={event.name} onClose={() => setReportModal(false)} />
+    </>,
   );
 }
 
-// Một hàng điều khiển cổng điểm danh: trạng thái hiện tại (tính sẵn từ server,
-// xem attendanceGate.js) + hai nút Mở/Đóng ghi đè hoàn toàn khung giờ đã đặt
-// (nếu có) — BTC không cần huỷ lịch để chủ động mở/đóng.
-function GateControlRow({ label, gate, loading, onOpen, onClose }) {
-  const isOpen = gate?.open;
-  const statusText = {
-    MANUALLY_OPEN: 'Đang mở (thủ công)',
-    MANUALLY_CLOSED: 'Đang đóng (thủ công)',
-    SCHEDULED: 'Đang mở (theo lịch)',
-    NOT_STARTED: 'Chưa tới giờ mở',
-    ENDED: 'Đã hết giờ',
-    NOT_OPENED: 'Chưa mở',
-  }[gate?.reason] || '—';
+// Một hàng điều khiển cổng: trạng thái hiện tại (máy chủ tính sẵn, xem attendanceGate.js) và ba
+// nấc Theo lịch / Mở / Đóng. Mở, Đóng ghi đè hoàn toàn khung giờ đã đặt.
+function GateRow({ label, gate, state, openAt, closeAt, loading, onChange }) {
+  const isOpen = Boolean(gate?.open);
+  const hhmm = (d) => format(new Date(d), 'HH:mm');
+  const sameDay = openAt && closeAt && new Date(openAt).toDateString() === new Date(closeAt).toDateString();
+  const isToday = openAt && new Date(openAt).toDateString() === new Date().toDateString();
+  const windowText = openAt && closeAt
+    ? `${isToday ? '' : `${format(new Date(openAt), 'dd/MM')} `}${hhmm(openAt)} – ${sameDay ? '' : `${format(new Date(closeAt), 'dd/MM')} `}${hhmm(closeAt)}`
+    : null;
+  const detail = {
+    SCHEDULED: closeAt && `tự đóng lúc ${hhmm(closeAt)}`,
+    NOT_STARTED: openAt && `tự mở lúc ${hhmm(openAt)}`,
+    ENDED: 'đã hết giờ',
+    MANUALLY_OPEN: 'đang mở thủ công',
+    MANUALLY_CLOSED: 'đang đóng thủ công',
+  }[gate?.reason];
+  const line = windowText ? [windowText, detail].filter(Boolean).join(' · ') : 'Không đặt lịch, BTC tự mở và đóng';
 
   return (
-    <div className="flex items-center justify-between gap-3 flex-wrap">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${
-          isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
-        }`}>
-          <Circle size={7} className={isOpen ? 'fill-emerald-500 text-emerald-500' : 'fill-gray-400 text-gray-400'} />
-          {statusText}
-        </span>
-        <p className="text-sm font-medium text-gray-700 truncate">{label}</p>
+    <div className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          {isOpen ? <Badge tone="success">Đang mở</Badge> : <Badge icon={Lock}>Đang đóng</Badge>}
+        </div>
+        <p className="mt-1 text-sm text-muted">{line}</p>
       </div>
-      <div className="flex gap-2 flex-shrink-0">
-        <button onClick={onOpen} disabled={loading}
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50">
-          {loading ? <Spinner size="sm" /> : <PlayCircle size={14} />} Mở
-        </button>
-        <button onClick={onClose} disabled={loading}
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50">
-          {loading ? <Spinner size="sm" /> : <StopCircle size={14} />} Đóng
-        </button>
+      <div aria-busy={loading || undefined} className={cx(loading && 'pointer-events-none opacity-60')}>
+        <Tabs
+          variant="segmented"
+          layout="fullMobile"
+          ariaLabel={`Chế độ cổng ${label}`}
+          value={state || 'AUTO'}
+          onChange={(v) => { if (v !== (state || 'AUTO')) onChange(v); }}
+          items={[
+            { value: 'AUTO', label: 'Theo lịch', grow: true },
+            { value: 'OPEN', label: 'Mở', grow: true },
+            { value: 'CLOSED', label: 'Đóng', grow: true },
+          ]}
+        />
       </div>
     </div>
   );

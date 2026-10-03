@@ -1,93 +1,105 @@
 import { useState, useEffect } from 'react';
-import { ShieldAlert, AlertTriangle, MapPin, Smartphone, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { reportApi } from '../services/api';
 import Layout from '../components/layout/Layout';
-import Spinner from '../components/ui/Spinner';
-import Badge from '../components/ui/Badge';
+import { FraudBadge } from '../components/ui/Badge';
+import { TableCard, Th } from '../components/ui/Card';
+import { EmptyText, LoadError, SkeletonRows } from '../components/ui/States';
+import { cx } from '../utils/cx';
 
-const REASON_MAP = {
-  INVALID_QR_TOKEN: { label: 'QR hết hạn / giả', variant: 'yellow' },
-  GPS_OUT_OF_RANGE: { label: 'Ngoài phạm vi GPS', variant: 'red' },
-  UNBOUND_DEVICE: { label: 'Thiết bị lạ', variant: 'red' },
-};
+// Chi tiết của một lần chặn: khoảng cách GPS hoặc thiết bị lạ
+function detailOf(log) {
+  if (log.metadata?.distance) return `${log.metadata.distance} m`;
+  if (log.deviceId) return 'Thiết bị lạ';
+  return '';
+}
 
 export default function FraudLogs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
+    setLoadError(false);
     reportApi.getFraudLogs()
       .then(({ data }) => setLogs(data.data || []))
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  let body;
+  if (loading) body = <SkeletonRows rows={6} />;
+  else if (loadError) body = <LoadError title="Không tải được log gian lận" onRetry={load} />;
+  else if (logs.length === 0) body = <EmptyText className="py-10">Chưa có lần check-in nào bị chặn.</EmptyText>;
+  else {
+    body = (
+      <>
+        <table className="hidden w-full text-sm md:table">
+          <thead className="border-b border-border">
+            <tr>
+              <Th>Thời gian</Th>
+              <Th>Sinh viên</Th>
+              <Th className="w-full">Sự kiện</Th>
+              <Th>Lý do</Th>
+              <Th>Chi tiết</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.map((log) => {
+              const detail = detailOf(log);
+              return (
+                <tr key={log.id} className="border-b border-border last:border-0">
+                  <td className="whitespace-nowrap px-4 py-3 tabular-nums text-foreground">{format(new Date(log.createdAt), 'HH:mm:ss · dd/MM')}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    {log.user?.name ? (
+                      <>
+                        <p className="font-medium text-foreground">{log.user.name}</p>
+                        <p className="mt-0.5 text-xs tabular-nums text-muted">{log.user.mssv || '—'}</p>
+                      </>
+                    ) : <p className="text-muted">Không rõ</p>}
+                  </td>
+                  <td className="max-w-0 px-4 py-3">
+                    <p className="truncate text-foreground" title={log.event?.name || ''}>{log.event?.name || '—'}</p>
+                  </td>
+                  <td className="px-4 py-3"><FraudBadge reason={log.reason} /></td>
+                  <td className={cx('whitespace-nowrap px-4 py-3 tabular-nums', detail ? 'text-foreground' : 'text-muted')}>{detail || '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <ul className="divide-y divide-border md:hidden">
+          {logs.map((log) => {
+            const detail = detailOf(log);
+            return (
+              <li key={log.id} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">{log.user?.name || 'Không rõ'}</p>
+                    <p className="mt-0.5 text-xs tabular-nums text-muted">{format(new Date(log.createdAt), 'HH:mm:ss · dd/MM')}</p>
+                  </div>
+                  <FraudBadge reason={log.reason} />
+                </div>
+                <p className="mt-1 line-clamp-2 text-pretty text-xs text-muted">
+                  {log.event?.name || '—'}{detail ? ` · ${detail}` : ''}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="border-t border-border px-4 py-3">
+          <p className="text-sm text-muted">{logs.length} lần chặn gần nhất</p>
+        </div>
+      </>
+    );
+  }
 
   return (
-    <Layout>
-      <div className="bg-gradient-brand px-6 py-8">
-        <div className="max-w-5xl mx-auto">
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <ShieldAlert size={24} /> Log gian lận
-          </h1>
-          <p className="text-white/60 text-sm mt-1">Các lần check-in bị hệ thống chặn</p>
-        </div>
-      </div>
-
-      <div className="p-4 md:p-6 max-w-5xl mx-auto">
-        {loading ? (
-          <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-        ) : logs.length === 0 ? (
-          <div className="card p-16 text-center">
-            <ShieldAlert size={48} className="text-gray-200 mx-auto mb-3" />
-            <p className="text-gray-400">Chưa có log gian lận</p>
-          </div>
-        ) : (
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Thời gian</th>
-                    <th>Sinh viên</th>
-                    <th>Sự kiện</th>
-                    <th>Lý do</th>
-                    <th>Chi tiết</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((log) => {
-                    const reason = REASON_MAP[log.reason] || { label: log.reason, variant: 'gray' };
-                    return (
-                      <tr key={log.id}>
-                        <td className="text-xs text-gray-500 whitespace-nowrap">
-                          <Clock size={11} className="inline mr-1" />
-                          {format(new Date(log.createdAt), 'dd/MM HH:mm:ss')}
-                        </td>
-                        <td>
-                          <p className="text-sm font-medium text-gray-900">{log.user?.name || 'Unknown'}</p>
-                          <p className="text-xs text-gray-400">{log.user?.mssv || '—'}</p>
-                        </td>
-                        <td className="text-sm text-gray-600 max-w-xs truncate">
-                          {log.event?.name || '—'}
-                        </td>
-                        <td><Badge variant={reason.variant}>{reason.label}</Badge></td>
-                        <td className="text-xs text-gray-400">
-                          {log.metadata?.distance && (
-                            <span className="flex items-center gap-1"><MapPin size={11} />{log.metadata.distance}m</span>
-                          )}
-                          {log.deviceId && (
-                            <span className="flex items-center gap-1"><Smartphone size={11} />Device ID</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
+    <Layout title="Log gian lận">
+      <TableCard>{body}</TableCard>
     </Layout>
   );
 }

@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  Search, UserPlus, Trash2, ChevronLeft, ChevronRight, X, Check,
-  GraduationCap, Users,
-} from 'lucide-react';
+import { GraduationCap, Trash2, UserMinus, UserPlus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { eventApi } from '../../services/api';
-import Modal from '../../components/ui/Modal';
-import Spinner from '../../components/ui/Spinner';
+import Modal, { useConfirm } from '../../components/ui/Modal';
+import Button, { IconButton } from '../../components/ui/Button';
+import Pagination from '../../components/ui/Pagination';
+import { SearchInput } from '../../components/ui/Input';
+import { Checkbox } from '../../components/ui/Choice';
+import { Banner, EmptyText, SkeletonRows } from '../../components/ui/States';
+import { cx } from '../../utils/cx';
 
 const PAGE_SIZE = 20;
 
 export default function EventMembersModal({ open, eventId, onClose, onChanged }) {
+  const confirm = useConfirm();
   // 'list' = danh sách hiện có · 'search' = thêm từng người · 'class' = thêm cả lớp
   const [mode, setMode] = useState('list');
 
@@ -151,7 +154,12 @@ export default function EventMembersModal({ open, eventId, onClose, onChanged })
   };
 
   const handleRemove = async (m) => {
-    if (!confirm(`Xoá ${m.user.name} khỏi danh sách tham gia?`)) return;
+    if (!(await confirm({
+      title: 'Xoá khỏi danh sách tham gia?',
+      body: <><span className="font-medium text-foreground">{m.user.name}</span> sẽ bị xoá khỏi danh sách tham gia sự kiện.</>,
+      confirmLabel: 'Xoá khỏi danh sách',
+      icon: UserMinus,
+    }))) return;
     try {
       await eventApi.removeMember(eventId, m.user.id);
       toast.success('Đã xoá khỏi danh sách');
@@ -176,189 +184,154 @@ export default function EventMembersModal({ open, eventId, onClose, onChanged })
 
   const backToList = () => { setMode('list'); resetPanels(); };
 
+  let footer = null;
+  if (mode === 'search') {
+    footer = (
+      <>
+        <Button variant="secondary" size="form" onClick={backToList}>Huỷ</Button>
+        <Button variant="primary" size="form" loading={savingAdd} disabled={selectedCount === 0} onClick={handleAddSelected}>
+          Thêm{selectedCount > 0 ? ` ${selectedCount} người` : ''}
+        </Button>
+      </>
+    );
+  } else if (mode === 'class') {
+    footer = (
+      <>
+        <Button variant="secondary" size="form" onClick={backToList}>Huỷ</Button>
+        <Button variant="primary" size="form" loading={savingClasses} disabled={selectedClassCount === 0} onClick={handleAddClasses}>
+          {selectedClassCount === 0 ? 'Thêm cả lớp' : `Thêm ${willAddCount} sinh viên từ ${selectedClassCount} lớp`}
+        </Button>
+      </>
+    );
+  }
+
   return (
-    <Modal open={open} onClose={onClose} title="Danh sách tham gia sự kiện" size="lg">
-      <div className="space-y-4">
-        {mode === 'list' && (
-          <>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative flex-1">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input className="input pl-10 text-sm" placeholder="Tìm trong danh sách..."
-                  value={search} onChange={(e) => handleSearchMembers(e.target.value)} />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={openClassPanel} className="btn-secondary btn-md flex-1 sm:flex-none">
-                  <GraduationCap size={16} /> Thêm cả lớp
-                </button>
-                <button onClick={() => setMode('search')} className="btn-primary btn-md flex-1 sm:flex-none">
-                  <UserPlus size={16} /> Thêm
-                </button>
-              </div>
+    <Modal open={open} onClose={onClose} title="Danh sách tham gia sự kiện" size="lg" footer={footer}>
+      {mode === 'list' && (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <SearchInput
+              className="flex-1"
+              placeholder="Tìm trong danh sách…"
+              value={search}
+              onChange={(e) => handleSearchMembers(e.target.value)}
+            />
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <Button icon={GraduationCap} onClick={openClassPanel}>Thêm cả lớp</Button>
+              <Button variant="primary" icon={UserPlus} onClick={() => setMode('search')}>Thêm</Button>
             </div>
+          </div>
 
-            {loading ? (
-              <div className="flex justify-center py-12"><Spinner size="lg" /></div>
-            ) : members.length === 0 ? (
-              <div className="text-center py-12 text-gray-400 text-sm">
-                Chưa có thành viên nào trong danh sách tham gia
-              </div>
+          {loading ? (
+            <SkeletonRows rows={5} />
+          ) : members.length === 0 ? (
+            <EmptyText className="py-10">Chưa có thành viên nào trong danh sách tham gia</EmptyText>
+          ) : (
+            <ul className="divide-y divide-border">
+              {members.map((m) => (
+                <li key={m.id} className="flex items-center gap-3 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{m.user.name}</p>
+                    <p className="truncate text-xs text-muted">
+                      {[m.user.mssv, m.user.class, m.user.email].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  <IconButton icon={Trash2} label="Xoá khỏi danh sách" danger onClick={() => handleRemove(m)} />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {total > 0 && (
+            <Pagination bare compact page={page} pages={totalPages} total={total} pageSize={PAGE_SIZE} noun="thành viên" onPageChange={goToPage} />
+          )}
+        </div>
+      )}
+
+      {mode === 'search' && (
+        <div className="flex flex-col gap-4">
+          <PanelHeader title="Thêm thành viên" onClose={backToList} />
+          <SearchInput
+            autoFocus
+            placeholder="Tìm sinh viên theo tên, MSSV, email…"
+            value={query}
+            onChange={(e) => runUserSearch(e.target.value)}
+          />
+          <div className="max-h-72 overflow-y-auto">
+            {searching ? (
+              <SkeletonRows rows={3} avatar={false} right={false} />
+            ) : results.length === 0 ? (
+              <EmptyText>{query.trim() ? 'Không tìm thấy (hoặc đã có trong danh sách)' : 'Nhập từ khoá để tìm sinh viên'}</EmptyText>
             ) : (
-              <div className="border border-border rounded-xl overflow-hidden">
-                <table className="table">
-                  <thead>
-                    <tr><th>Sinh viên</th><th>MSSV</th><th>Lớp</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {members.map((m) => (
-                      <tr key={m.id}>
-                        <td>
-                          <p className="font-medium text-sm text-gray-900">{m.user.name}</p>
-                          <p className="text-xs text-gray-400">{m.user.email}</p>
-                        </td>
-                        <td className="text-sm text-gray-600">{m.user.mssv || '—'}</td>
-                        <td className="text-xs text-gray-500">{m.user.class || '—'}</td>
-                        <td>
-                          <button onClick={() => handleRemove(m)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Xoá khỏi danh sách">
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <p className="text-xs text-gray-400">{total} thành viên</p>
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1">
-                  <button onClick={() => goToPage(page - 1)} disabled={page <= 1}
-                    className="p-1.5 rounded-lg border border-border text-gray-400 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                    <ChevronLeft size={15} />
-                  </button>
-                  <span className="text-xs text-gray-500 px-2">{page} / {totalPages}</span>
-                  <button onClick={() => goToPage(page + 1)} disabled={page >= totalPages}
-                    className="p-1.5 rounded-lg border border-border text-gray-400 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                    <ChevronRight size={15} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {mode === 'search' && (
-          <>
-            <PanelHeader title="Thêm thành viên" onClose={backToList} />
-
-            <div className="relative">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input className="input pl-10 text-sm" placeholder="Tìm sinh viên theo tên, MSSV, email..."
-                value={query} onChange={(e) => runUserSearch(e.target.value)} autoFocus />
-            </div>
-
-            <div className="border border-border rounded-xl max-h-64 overflow-y-auto">
-              {searching ? (
-                <div className="flex justify-center py-8"><Spinner size="md" /></div>
-              ) : results.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">
-                  {query.trim() ? 'Không tìm thấy (hoặc đã có trong danh sách)' : 'Nhập từ khoá để tìm sinh viên'}
-                </div>
-              ) : (
-                results.map((u) => {
+              <ul className="flex flex-col gap-0.5">
+                {results.map((u) => {
                   const isSel = !!selected[u.id];
                   return (
-                    <button key={u.id} type="button" onClick={() => toggleSelect(u)}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left border-b border-border last:border-0 transition-colors ${isSel ? 'bg-primary-50' : 'hover:bg-gray-50'}`}>
-                      <CheckBox checked={isSel} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                        <p className="text-xs text-gray-400 truncate">{u.mssv || u.email} {u.class ? `· ${u.class}` : ''}</p>
-                      </div>
-                    </button>
+                    <li key={u.id}>
+                      <label className={cx('flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5', isSel ? 'bg-secondary' : 'hover:bg-item-hover')}>
+                        <Checkbox small checked={isSel} onChange={() => toggleSelect(u)} ariaLabel={`Chọn ${u.name}`} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-foreground">{u.name}</span>
+                          <span className="block truncate text-xs text-muted">{u.mssv || u.email}{u.class ? ` · ${u.class}` : ''}</span>
+                        </span>
+                      </label>
+                    </li>
                   );
-                })
-              )}
-            </div>
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
-            <div className="flex gap-3">
-              <button type="button" onClick={backToList} className="btn-secondary btn-md flex-1">Huỷ</button>
-              <button type="button" onClick={handleAddSelected} disabled={savingAdd || selectedCount === 0} className="btn-primary btn-md flex-1">
-                {savingAdd ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-                Thêm {selectedCount > 0 ? `(${selectedCount})` : ''}
-              </button>
-            </div>
-          </>
-        )}
-
-        {mode === 'class' && (
-          <>
-            <PanelHeader title="Thêm cả lớp vào sự kiện" onClose={backToList} />
-
-            <p className="text-xs text-gray-500 bg-primary-50 rounded-lg p-3">
-              Thêm toàn bộ sinh viên đang hoạt động của lớp. Người đã có trong danh sách được bỏ qua.
-            </p>
-
-            <div className="relative">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input className="input pl-10 text-sm" placeholder="Lọc theo tên lớp..."
-                value={classFilter} onChange={(e) => setClassFilter(e.target.value)} autoFocus />
-            </div>
-
-            <div className="border border-border rounded-xl max-h-64 overflow-y-auto">
-              {loadingClasses ? (
-                <div className="flex justify-center py-8"><Spinner size="md" /></div>
-              ) : visibleClasses.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">
-                  {classes.length === 0
-                    ? 'Chưa có sinh viên nào được gán lớp trong hệ thống'
-                    : 'Không có lớp nào khớp từ khoá'}
-                </div>
-              ) : (
-                visibleClasses.map((c) => {
+      {mode === 'class' && (
+        <div className="flex flex-col gap-4">
+          <PanelHeader title="Thêm cả lớp vào sự kiện" onClose={backToList} />
+          <Banner tone="info" compact>
+            Thêm toàn bộ sinh viên đang hoạt động của lớp. Người đã có trong danh sách được bỏ qua.
+          </Banner>
+          <SearchInput
+            autoFocus
+            placeholder="Lọc theo tên lớp…"
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+          />
+          <div className="max-h-72 overflow-y-auto">
+            {loadingClasses ? (
+              <SkeletonRows rows={3} avatar={false} />
+            ) : visibleClasses.length === 0 ? (
+              <EmptyText>
+                {classes.length === 0 ? 'Chưa có sinh viên nào được gán lớp trong hệ thống' : 'Không có lớp nào khớp từ khoá'}
+              </EmptyText>
+            ) : (
+              <ul className="flex flex-col gap-0.5">
+                {visibleClasses.map((c) => {
                   const isSel = selectedClasses[c.class] !== undefined;
                   const isFull = c.remaining === 0;
                   return (
-                    <button
-                      key={c.class} type="button"
-                      onClick={() => !isFull && toggleClass(c)}
-                      disabled={isFull}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left border-b border-border last:border-0 transition-colors
-                        ${isFull ? 'opacity-50 cursor-not-allowed' : isSel ? 'bg-primary-50' : 'hover:bg-gray-50'}`}
-                    >
-                      <CheckBox checked={isSel} disabled={isFull} />
-                      <div className="min-w-0 flex-1 flex items-center gap-2">
-                        <GraduationCap size={14} className="text-gray-400 flex-shrink-0" />
-                        <span className="text-sm font-medium text-gray-900 truncate">{c.class}</span>
-                      </div>
-                      <span className="text-xs flex-shrink-0 flex items-center gap-1 text-gray-400">
-                        <Users size={12} />
-                        {isFull
-                          ? <span className="text-emerald-600 font-medium">đã có đủ {c.total}</span>
-                          : <span><span className="font-semibold text-gray-600">{c.remaining}</span> / {c.total} chưa có</span>}
-                      </span>
-                    </button>
+                    <li key={c.class}>
+                      <label
+                        className={cx(
+                          'flex items-center gap-3 rounded-xl px-3 py-2.5',
+                          isFull ? 'cursor-not-allowed opacity-50' : isSel ? 'cursor-pointer bg-secondary' : 'cursor-pointer hover:bg-item-hover',
+                        )}
+                      >
+                        <Checkbox small checked={isSel} disabled={isFull} onChange={() => !isFull && toggleClass(c)} ariaLabel={`Chọn lớp ${c.class}`} />
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{c.class}</span>
+                        <span className="shrink-0 text-xs tabular-nums text-muted">
+                          {isFull
+                            ? <span className="font-medium text-success">đã có đủ {c.total}</span>
+                            : <><span className="font-medium text-foreground">{c.remaining}</span> / {c.total} chưa có</>}
+                        </span>
+                      </label>
+                    </li>
                   );
-                })
-              )}
-            </div>
-
-            <div className="flex gap-3">
-              <button type="button" onClick={backToList} className="btn-secondary btn-md flex-1">Huỷ</button>
-              <button type="button" onClick={handleAddClasses}
-                disabled={savingClasses || selectedClassCount === 0} className="btn-primary btn-md flex-[2]">
-                {savingClasses ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-                {selectedClassCount === 0
-                  ? 'Thêm cả lớp'
-                  : `Thêm ${willAddCount} sinh viên từ ${selectedClassCount} lớp`}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -367,20 +340,9 @@ export default function EventMembersModal({ open, eventId, onClose, onChanged })
 
 function PanelHeader({ title, onClose }) {
   return (
-    <div className="flex items-center justify-between">
-      <p className="text-sm font-semibold text-gray-700">{title}</p>
-      <button onClick={onClose} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
-        <X size={13} /> Đóng
-      </button>
-    </div>
-  );
-}
-
-function CheckBox({ checked, disabled }) {
-  return (
-    <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border
-      ${checked ? 'bg-primary-600 border-primary-600' : disabled ? 'border-gray-200 bg-gray-50' : 'border-gray-300'}`}>
-      {checked && <Check size={13} className="text-white" />}
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      <Button variant="ghost" size="sm" icon={X} onClick={onClose}>Đóng</Button>
     </div>
   );
 }

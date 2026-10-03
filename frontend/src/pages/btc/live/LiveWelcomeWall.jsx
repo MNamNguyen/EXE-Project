@@ -4,10 +4,10 @@ import useLiveCheckins from './useLiveCheckins';
 
 const EMOJIS = ['🎉', '🌟', '🚀', '🎈', '🦄', '🐯', '🐼', '🦊', '🐧', '🌈', '🍀', '⚡', '🎸', '🎨', '🏆', '💎', '🐳', '🍉', '🔥', '🎯'];
 const GREETINGS = ['Chào mừng', 'Xin chào', 'Hoan nghênh', 'Rất vui được gặp'];
+// Cặp màu đậm (mức 700) để chữ trắng trên bong bóng đủ tương phản trên máy chiếu
 const GRADIENTS = [
-  ['#FF6B9D', '#FF9A5A'], ['#FFB020', '#FF6B6B'], ['#22D3A6', '#0EA5E9'], ['#8B5CF6', '#EC4899'],
-  ['#38BDF8', '#6366F1'], ['#F472B6', '#FB7185'], ['#A3E635', '#22C55E'], ['#FACC15', '#F97316'],
-  ['#2DD4BF', '#3B82F6'], ['#C084FC', '#6366F1'],
+  ['#BE185D', '#C2410C'], ['#047857', '#0369A1'], ['#6D28D9', '#BE185D'],
+  ['#0369A1', '#4338CA'], ['#B45309', '#C2410C'], ['#0F766E', '#1D4ED8'],
 ];
 const CONFETTI_COLORS = ['#FF6B9D', '#FFD166', '#06D6A0', '#4CC9F0', '#B388FF', '#FF9F1C', '#FFFFFF'];
 
@@ -63,49 +63,49 @@ export default function LiveWelcomeWall({ eventId, audio, enabled = true, fullWi
   const pct = registered ? Math.min(100, Math.round(((data?.checkedIn || 0) / registered) * 100)) : 0;
 
   return (
-    <div className={`relative flex flex-col min-h-0 h-full rounded-3xl bg-white/10 backdrop-blur-sm border border-white/15 overflow-hidden ${
-      fullWidth ? 'p-8' : 'p-5 md:p-6'
+    <section className={`relative flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/15 bg-white/10 ${
+      fullWidth ? 'p-8' : 'p-6'
     }`}>
       {/* Bộ đếm */}
-      <div className="flex items-end justify-between gap-4 flex-wrap">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-white/70 text-sm font-semibold uppercase tracking-widest flex items-center gap-2">
-            <Users size={16} /> Đã tham gia
+          <p className="flex items-center gap-2 text-sm font-medium text-white">
+            <Users className="size-4" aria-hidden="true" /> Đã tham gia
           </p>
-          <p className={`font-black text-white leading-none mt-1 tabular-nums ${fullWidth ? 'text-8xl' : 'text-6xl'}`}>
+          <p className={`mt-1 font-bold tabular-nums leading-none text-white ${fullWidth ? 'text-7xl' : 'text-5xl'}`}>
             {checkedIn}
-            {registered > 0 && <span className="text-white/40 text-3xl font-bold"> / {registered}</span>}
+            {registered > 0 && <span className="text-2xl font-semibold text-white/70"> / {registered}</span>}
           </p>
         </div>
         {offline && (
-          <span className="flex items-center gap-1.5 text-xs text-amber-200 bg-amber-500/20 px-3 py-1.5 rounded-full">
-            <WifiOff size={13} /> Mất kết nối, đang thử lại...
+          <span className="flex items-center gap-1.5 rounded-full bg-black/25 px-3 py-1.5 text-xs font-medium text-white">
+            <WifiOff className="size-3.5" aria-hidden="true" /> Mất kết nối, đang thử lại...
           </span>
         )}
       </div>
       {registered > 0 && (
-        <div className="mt-3 h-3 rounded-full bg-white/10 overflow-hidden">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/15">
           <div className="h-full rounded-full live-progress transition-all duration-1000" style={{ width: `${pct}%` }} />
         </div>
       )}
 
       {/* Bức tường tên */}
-      <div className="relative flex-1 min-h-[240px] mt-5 overflow-hidden">
+      <div className="relative mt-6 min-h-[240px] flex-1 overflow-hidden">
         {recent.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-white/60">
-            <p className="text-6xl live-float">🎈</p>
-            <p className="mt-3 text-lg font-semibold">Chưa có ai check-in</p>
-            <p className="text-sm">Quét mã QR để xuất hiện trên màn hình này!</p>
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <p className="live-float text-5xl" aria-hidden="true">🎈</p>
+            <p className="mt-4 text-xl font-semibold text-white">Chưa có ai check-in</p>
+            <p className="mt-1 text-white">Quét mã QR để xuất hiện trên màn hình này!</p>
           </div>
         ) : (
-          <div className="flex flex-wrap content-start gap-2.5">
+          <div className="flex flex-wrap content-start gap-3">
             {recent.map((p, i) => {
               const seed = hash(p.id);
               const [a, b] = pick(GRADIENTS, seed);
               return (
                 <span
                   key={p.id}
-                  className="live-chip inline-flex items-center gap-2 rounded-full pl-1.5 pr-4 py-1.5 text-white font-bold shadow-lg"
+                  className="live-chip inline-flex items-center gap-2 rounded-full px-4 py-2 font-semibold text-white shadow-lg"
                   style={{
                     background: `linear-gradient(135deg, ${a}, ${b})`,
                     fontSize: fullWidth ? '1.25rem' : '1rem',
@@ -113,7 +113,7 @@ export default function LiveWelcomeWall({ eventId, audio, enabled = true, fullWi
                     opacity: i > 40 ? 0.55 : 1,
                   }}
                 >
-                  <span className="w-8 h-8 rounded-full bg-white/25 flex items-center justify-center text-lg">{pick(EMOJIS, seed)}</span>
+                  <span aria-hidden="true">{pick(EMOJIS, seed)}</span>
                   {p.name}
                 </span>
               );
@@ -125,7 +125,7 @@ export default function LiveWelcomeWall({ eventId, audio, enabled = true, fullWi
       {/* Lời chào — nằm TRONG khung này để không che mã QR bên cạnh */}
       {current && <WelcomeCard key={current.key} item={current} fullWidth={fullWidth} />}
       {confetti && <Confetti key={confetti.id} pieces={confetti.pieces} />}
-    </div>
+    </section>
   );
 }
 
@@ -135,10 +135,10 @@ function WelcomeCard({ item, fullWidth }) {
   const nameSize = fullWidth ? 'text-[clamp(2.5rem,7vw,6.5rem)]' : 'text-[clamp(2rem,4.2vw,4.5rem)]';
 
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center p-6 bg-[#0B1240]/55 backdrop-blur-[2px] pointer-events-none">
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-[#0B1240]/70 p-6">
       <div className="live-welcome text-center max-w-full">
         <p className={`live-wiggle ${fullWidth ? 'text-8xl' : 'text-7xl'}`}>{item.group ? '🥳' : emoji}</p>
-        <p className="mt-2 text-white/80 font-extrabold uppercase tracking-[0.3em] text-lg md:text-xl">
+        <p className="mt-2 text-lg font-bold uppercase tracking-[0.3em] text-white md:text-xl">
           {item.group ? 'Chào mừng cả nhóm' : pick(GREETINGS, seed)}
         </p>
         {item.group ? (
@@ -151,7 +151,7 @@ function WelcomeCard({ item, fullWidth }) {
         ) : (
           <>
             <p className={`text-white drop-shadow-lg font-black leading-tight break-words ${nameSize}`}>{item.person.name}</p>
-            <p className="text-white/90 text-xl md:text-2xl font-semibold mt-2">đã tham gia sự kiện! 🎉</p>
+            <p className="mt-2 text-xl font-semibold text-white md:text-2xl">đã tham gia sự kiện! 🎉</p>
           </>
         )}
       </div>

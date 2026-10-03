@@ -1,53 +1,63 @@
 /** @type {import('tailwindcss').Config} */
+
+// Màu lấy từ biến CSS trong src/index.css (một chỗ cho cả bản sáng lẫn tối).
+// Màu nào cần độ mờ kiểu `bg-foreground/5` thì khai dạng kênh `--x-rgb`, vì Tailwind v3
+// chỉ ghép được `<alpha-value>` vào rgb(), không ghép được vào một mã hex có sẵn.
+const v = (name) => `var(--${name})`;
+const ch = (name) => `rgb(var(--${name}-rgb) / <alpha-value>)`;
+
 export default {
   content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
         primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#1A6BFF',
-          700: '#0052D4',
-          800: '#003FAB',
-          900: '#002F8A',
+          DEFAULT: ch('primary'),
+          hover: v('primary-hover'),
+          foreground: ch('primary-foreground'),
+          light: v('primary-light'),
         },
-        surface: '#F0F7FF',
-        border: '#D6E4FF',
+        background: { DEFAULT: v('background'), hover: v('background-hover') },
+        surface: { DEFAULT: v('surface'), hover: v('surface-hover'), overlay: v('surface-overlay') },
+        'item-hover': v('item-hover'),
+        foreground: ch('foreground'),
+        muted: ch('muted'),
+        border: { DEFAULT: v('border'), strong: v('border-strong') },
+        'chart-fill': v('chart-fill'),
+        secondary: { DEFAULT: v('secondary'), hover: v('secondary-hover') },
+        'button-hover': v('button-hover'),
+        danger: { DEFAULT: v('danger'), bg: v('danger-bg'), 'bg-hover': v('danger-bg-hover') },
+        error: {
+          DEFAULT: ch('error'),
+          text: v('error-text'),
+          bg: v('error-bg'),
+          border: v('error-border'),
+          strong: v('error-strong'),
+        },
+        success: { DEFAULT: v('success'), bg: v('success-bg') },
+        warning: { DEFAULT: v('warning'), bg: v('warning-bg') },
+        neutral: { DEFAULT: v('neutral'), bg: v('neutral-bg') },
+        info: { DEFAULT: v('info'), bg: v('info-bg') },
+        'cat-violet': { DEFAULT: v('cat-violet'), bg: v('cat-violet-bg') },
+        'cat-teal': { DEFAULT: v('cat-teal'), bg: v('cat-teal-bg') },
+        'cat-pink': { DEFAULT: v('cat-pink'), bg: v('cat-pink-bg') },
       },
+      borderColor: { focus: v('border-focus') },
+      ringColor: { focus: v('ring-focus') },
       fontFamily: {
-        sans: ['Inter', 'Be Vietnam Pro', 'system-ui', 'sans-serif'],
+        sans: ['var(--app-font)'],
       },
+      opacity: { 4: '0.04', 8: '0.08', 13: '0.13', 16: '0.16' },
       boxShadow: {
-        card: '0 2px 16px 0 rgba(26, 107, 255, 0.08)',
-        'card-hover': '0 8px 32px 0 rgba(26, 107, 255, 0.16)',
-        glow: '0 0 20px rgba(26, 107, 255, 0.25)',
+        popover: v('elevation-popover'),
+        modal: v('elevation-modal'),
+        'segment-track': v('shadow-segment-track'),
+        'segment-thumb': v('shadow-segment-thumb'),
       },
-      animation: {
-        'fade-in': 'fadeIn 0.3s ease-out',
-        'slide-up': 'slideUp 0.4s ease-out',
-        'pulse-slow': 'pulse 3s ease-in-out infinite',
-        'spin-slow': 'spin 3s linear infinite',
-        'bounce-in': 'bounceIn 0.5s ease-out',
-        'countdown': 'countdown 1s linear infinite',
-      },
-      keyframes: {
-        fadeIn: { from: { opacity: 0 }, to: { opacity: 1 } },
-        slideUp: { from: { opacity: 0, transform: 'translateY(16px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
-        bounceIn: {
-          '0%': { opacity: 0, transform: 'scale(0.7)' },
-          '70%': { transform: 'scale(1.05)' },
-          '100%': { opacity: 1, transform: 'scale(1)' },
-        },
-      },
-      backgroundImage: {
-        'gradient-brand': 'linear-gradient(135deg, #1A6BFF 0%, #00A3FF 100%)',
-        'gradient-brand-dark': 'linear-gradient(135deg, #0052D4 0%, #1A6BFF 100%)',
-        'gradient-surface': 'linear-gradient(180deg, #F0F7FF 0%, #FFFFFF 100%)',
+      transitionTimingFunction: {
+        // Đường cong "sheet" cho panel trượt (500ms vào / 350ms ra)
+        sheet: 'cubic-bezier(0.32, 0.72, 0, 1)',
       },
     },
   },

@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { EyeOff, MessageSquare, RefreshCw } from 'lucide-react';
+import { EyeOff, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { feedbackApi } from '../../services/api';
 import Modal from '../../components/ui/Modal';
-import Spinner from '../../components/ui/Spinner';
+import Badge from '../../components/ui/Badge';
+import Tabs from '../../components/ui/Tabs';
+import { IconButton } from '../../components/ui/Button';
 import StarRating from '../../components/ui/StarRating';
+import { EmptyText, LoadError, SkeletonRows } from '../../components/ui/States';
 
 // Kết quả đánh giá của một sự kiện. Form ẩn danh: backend không trả thông tin
 // người gửi nên tab "Từng phiếu" cũng không tồn tại.
@@ -26,83 +29,70 @@ export default function FeedbackResultsModal({ open, eventId, onClose }) {
   }, [open, eventId]); // eslint-disable-line
 
   return (
-    <Modal open={open} onClose={onClose} title="Kết quả đánh giá" size="xl">
+    <Modal open={open} onClose={onClose} title="Kết quả đánh giá" size="xl" closeOnOverlay>
       {error ? (
-        <div className="text-center py-10 space-y-3">
-          <p className="text-sm text-gray-500">Không tải được kết quả</p>
-          <button onClick={load} className="btn-primary btn-sm inline-flex"><RefreshCw size={14} /> Thử lại</button>
-        </div>
+        <LoadError title="Không tải được kết quả" onRetry={load} />
       ) : !data ? (
-        <div className="flex justify-center py-12"><Spinner size="lg" /></div>
+        <SkeletonRows rows={4} avatar={false} />
       ) : (
-        <div className="space-y-5">
-          <div className="flex items-center gap-3 flex-wrap">
-            <p className="font-semibold text-gray-900">{data.form.title}</p>
-            {data.form.isAnonymous && (
-              <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-violet-100 text-violet-700">
-                <EyeOff size={11} /> Ẩn danh
-              </span>
-            )}
-            <p className="text-sm text-gray-500">
-              <b className="text-gray-900">{data.responseCount}</b> phiếu / {data.eligibleCount} người đã check-out
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className="font-semibold text-foreground">{data.form.title}</p>
+            {data.form.isAnonymous && <Badge icon={EyeOff}>Ẩn danh</Badge>}
+            <p className="text-sm text-muted">
+              <span className="font-medium tabular-nums text-foreground">{data.responseCount}</span> phiếu / {data.eligibleCount} người đã check-out
             </p>
-            <div className="flex-1" />
-            <button onClick={load} className="btn-secondary btn-sm"><RefreshCw size={14} /></button>
+            <IconButton icon={RefreshCw} label="Làm mới" onClick={load} className="ml-auto" />
           </div>
 
           {!data.form.isAnonymous && (
-            <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-              {[['summary', 'Tổng hợp'], ['responses', 'Từng phiếu']].map(([key, label]) => (
-                <button key={key} onClick={() => setTab(key)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-                    tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}>
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              variant="segmented"
+              ariaLabel="Cách xem kết quả"
+              value={tab}
+              onChange={setTab}
+              items={[{ value: 'summary', label: 'Tổng hợp' }, { value: 'responses', label: 'Từng phiếu' }]}
+            />
           )}
 
           {data.responseCount === 0 ? (
-            <div className="text-center py-10 text-gray-400">
-              <MessageSquare size={36} className="mx-auto mb-2 text-gray-200" />
-              <p className="text-sm">Chưa có ai gửi đánh giá</p>
-            </div>
+            <EmptyText className="py-10">Chưa có ai gửi đánh giá</EmptyText>
           ) : tab === 'summary' ? (
-            <div className="space-y-4">
+            <div className="divide-y divide-border">
               {data.questions.map((q, i) => (
-                <div key={q.id} className="rounded-xl border border-border p-4">
-                  <p className="text-sm font-medium text-gray-800">{i + 1}. {q.label}</p>
+                <section key={q.id} className="py-5 first:pt-0 last:pb-0">
+                  <p className="text-pretty text-sm font-medium text-foreground">{i + 1}. {q.label}</p>
                   {q.type === 'RATING' ? <RatingSummary q={q} /> : <TextSummary q={q} />}
-                </div>
+                </section>
               ))}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="divide-y divide-border">
               {data.responses.map((r, idx) => (
-                <div key={idx} className="rounded-xl border border-border p-4 space-y-2">
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-gray-900">{r.name}</p>
-                    {r.mssv && <p className="text-xs text-gray-400">{r.mssv}</p>}
-                    {r.class && <p className="text-xs text-gray-400">· {r.class}</p>}
-                    <p className="text-xs text-gray-400 ml-auto">{format(new Date(r.submittedAt), 'HH:mm dd/MM/yyyy')}</p>
+                <section key={idx} className="flex flex-col gap-3 py-5 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <p className="text-sm font-medium text-foreground">{r.name}</p>
+                    {(r.mssv || r.class) && (
+                      <p className="text-xs tabular-nums text-muted">{[r.mssv, r.class].filter(Boolean).join(' · ')}</p>
+                    )}
+                    <p className="ml-auto text-xs tabular-nums text-muted">{format(new Date(r.submittedAt), 'HH:mm dd/MM/yyyy')}</p>
                   </div>
                   {data.questions.map((q) => {
                     const v = r.answers[q.id];
                     return (
-                      <div key={q.id} className="text-sm">
-                        <p className="text-xs text-gray-500">{q.label}</p>
+                      <div key={q.id}>
+                        <p className="text-xs text-muted">{q.label}</p>
                         {v === undefined ? (
-                          <p className="text-gray-300 text-xs">(bỏ trống)</p>
+                          <p className="mt-0.5 text-sm text-muted">(bỏ trống)</p>
                         ) : q.type === 'RATING' ? (
-                          <StarRating value={v} size={16} />
+                          <StarRating value={v} size={16} className="mt-1" />
                         ) : (
-                          <p className="text-gray-800 whitespace-pre-line">{v}</p>
+                          <p className="mt-0.5 whitespace-pre-line text-sm text-foreground">{v}</p>
                         )}
                       </div>
                     );
                   })}
-                </div>
+                </section>
               ))}
             </div>
           )}
@@ -115,23 +105,23 @@ export default function FeedbackResultsModal({ open, eventId, onClose }) {
 function RatingSummary({ q }) {
   const max = Math.max(1, ...q.distribution);
   return (
-    <div className="mt-3 flex flex-col sm:flex-row gap-5">
-      <div className="flex flex-col items-center justify-center sm:w-36 flex-shrink-0">
-        <p className="text-3xl font-bold text-gray-900">{q.average ?? '—'}</p>
-        <StarRating value={q.average || 0} size={16} />
-        <p className="text-xs text-gray-400 mt-1">{q.count} lượt</p>
+    <div className="mt-4 flex flex-col gap-5 sm:flex-row">
+      <div className="flex shrink-0 flex-col items-center justify-center sm:w-36">
+        <p className="text-3xl font-semibold tabular-nums text-foreground">{q.average ?? '—'}</p>
+        <StarRating value={q.average || 0} size={16} className="mt-1" />
+        <p className="mt-1 text-xs tabular-nums text-muted">{q.count} lượt</p>
       </div>
-      <div className="flex-1 space-y-1.5">
+      <div className="flex flex-1 flex-col gap-1.5">
         {[5, 4, 3, 2, 1].map((star) => {
           const n = q.distribution[star - 1];
           const pct = q.count ? Math.round((n / q.count) * 100) : 0;
           return (
             <div key={star} className="flex items-center gap-2 text-xs">
-              <span className="w-8 text-gray-500 text-right">{star} ★</span>
-              <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-400 rounded-full" style={{ width: `${(n / max) * 100}%` }} />
+              <span className="w-8 text-right tabular-nums text-muted">{star} ★</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-foreground/5">
+                <div className="h-full rounded-full bg-amber-400" style={{ width: `${(n / max) * 100}%` }} />
               </div>
-              <span className="w-16 text-gray-500">{n} ({pct}%)</span>
+              <span className="w-16 tabular-nums text-muted">{n} ({pct}%)</span>
             </div>
           );
         })}
@@ -141,15 +131,13 @@ function RatingSummary({ q }) {
 }
 
 function TextSummary({ q }) {
-  if (!q.answers.length) return <p className="text-xs text-gray-400 mt-2">Chưa có câu trả lời</p>;
+  if (!q.answers.length) return <p className="mt-2 text-sm text-muted">Chưa có câu trả lời</p>;
   return (
-    <div className="mt-3 space-y-2 max-h-72 overflow-y-auto pr-1">
+    <div className="mt-3 flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
       {q.answers.map((a, idx) => (
-        <div key={idx} className="bg-gray-50 rounded-lg px-3 py-2">
-          <p className="text-sm text-gray-800 whitespace-pre-line">{a.text}</p>
-          {a.name && (
-            <p className="text-[11px] text-gray-400 mt-1">— {a.name}{a.mssv ? ` (${a.mssv})` : ''}</p>
-          )}
+        <div key={idx} className="rounded-xl bg-background px-3 py-2.5">
+          <p className="whitespace-pre-line text-sm text-foreground">{a.text}</p>
+          {a.name && <p className="mt-1 text-xs text-muted">— {a.name}{a.mssv ? ` (${a.mssv})` : ''}</p>}
         </div>
       ))}
     </div>

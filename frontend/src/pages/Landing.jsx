@@ -1,415 +1,158 @@
 import { Link } from 'react-router-dom';
-import {
-  QrCode, MapPin, Clock, Users, ShieldCheck,
-  BarChart3, ArrowRight, CheckCircle, ChevronRight,
-  Smartphone, Zap, Globe,
-} from 'lucide-react';
+import { ArrowRight, ChartColumn, Check, MapPin, QrCode, ShieldCheck, Smartphone, Users } from 'lucide-react';
+import Button from '../components/ui/Button';
+import Logo, { ProductBrand } from '../components/ui/Logo';
+import { RoleBadge } from '../components/ui/Badge';
 
+// Màu ô icon của từng tính năng giữ như bản cũ (mỗi tính năng một màu), bản tối dùng nền mờ
 const features = [
-  {
-    icon: QrCode,
-    color: 'bg-blue-50 text-blue-600',
-    title: 'QR Động thông minh',
-    desc: 'Mã QR tự động đổi mới mỗi 30 giây, được mã hóa HMAC-SHA256. Không thể chụp màn hình để gian lận.',
-  },
-  {
-    icon: MapPin,
-    color: 'bg-emerald-50 text-emerald-600',
-    title: 'Xác thực GPS thời gian thực',
-    desc: 'Chỉ cho phép check-in trong bán kính địa lý được cấu hình. Phát hiện ngay sinh viên đứng bên ngoài.',
-  },
-  {
-    icon: ShieldCheck,
-    color: 'bg-violet-50 text-violet-600',
-    title: 'Chống gian lận đa lớp',
-    desc: 'Binding thiết bị qua OTP email, kiểm tra QR token, GPS và thời gian – 4 lớp bảo mật song song.',
-  },
-  {
-    icon: BarChart3,
-    color: 'bg-orange-50 text-orange-600',
-    title: 'Báo cáo & Export Excel',
-    desc: 'Xem thống kê điểm danh real-time, export Excel đẹp mắt với đầy đủ thông tin sinh viên theo sự kiện.',
-  },
-  {
-    icon: Smartphone,
-    color: 'bg-pink-50 text-pink-600',
-    title: 'Quét QR bằng điện thoại',
-    desc: 'Sinh viên chỉ cần camera điện thoại hoặc Zalo quét QR – không cần cài thêm ứng dụng nào.',
-  },
-  {
-    icon: Users,
-    color: 'bg-sky-50 text-sky-600',
-    title: 'Quản lý đa vai trò',
-    desc: 'Hệ thống phân quyền 4 cấp: Admin · BTC · Giảng viên · Sinh viên. Import hàng loạt bằng Excel.',
-  },
+  { icon: QrCode, title: 'QR động thông minh', desc: 'Mã tự đổi mỗi 30 giây, ký HMAC-SHA256. Chụp màn hình gửi bạn là hết hạn.', color: 'bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300' },
+  { icon: MapPin, title: 'Xác thực GPS thời gian thực', desc: 'Chỉ check-in được trong bán kính đã cấu hình quanh địa điểm.', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300' },
+  { icon: ShieldCheck, title: 'Chống gian lận nhiều lớp', desc: 'Khoá thiết bị qua OTP email, kiểm mã QR, GPS và khung giờ.', color: 'bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300' },
+  { icon: ChartColumn, title: 'Báo cáo và xuất Excel', desc: 'Số liệu điểm danh theo thời gian thực, xuất Excel đủ thông tin sinh viên.', color: 'bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-300' },
+  { icon: Smartphone, title: 'Quét bằng điện thoại', desc: 'Dùng camera hoặc Zalo, không phải cài ứng dụng.', color: 'bg-pink-50 text-pink-600 dark:bg-pink-500/15 dark:text-pink-300' },
+  { icon: Users, title: 'Bốn vai trò', desc: 'Admin · Ban tổ chức · Giảng viên · Sinh viên. Import hàng loạt bằng Excel.', color: 'bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300' },
 ];
 
 const steps = [
-  {
-    num: '01',
-    title: 'BTC tạo sự kiện',
-    desc: 'Nhập thông tin sự kiện, vị trí GPS, khung giờ check-in/out và danh sách whitelist sinh viên.',
-    icon: Globe,
-  },
-  {
-    num: '02',
-    title: 'Hiển thị mã QR',
-    desc: 'Mở màn hình QR fullscreen trên laptop hoặc TV tại cổng vào. QR tự động đổi mới mỗi 30 giây.',
-    icon: QrCode,
-  },
-  {
-    num: '03',
-    title: 'Sinh viên đăng ký & quét QR',
-    desc: 'Điền form đăng ký (họ tên, MSSV, email) → hệ thống tự tạo tài khoản nếu chưa có → quét QR để điểm danh.',
-    icon: Smartphone,
-  },
-  {
-    num: '04',
-    title: 'Xem báo cáo real-time',
-    desc: 'BTC theo dõi danh sách điểm danh cập nhật liên tục, export Excel khi kết thúc sự kiện.',
-    icon: BarChart3,
-  },
+  { title: 'BTC tạo sự kiện', desc: 'Nhập thông tin, vị trí GPS, khung giờ và danh sách tham dự.' },
+  { title: 'Chiếu mã QR', desc: 'Mở màn QR toàn màn hình ở cổng vào, mã tự đổi mỗi 30 giây.' },
+  { title: 'Sinh viên quét QR', desc: 'Đăng ký bằng họ tên, MSSV, email rồi quét để điểm danh.' },
+  { title: 'Xem báo cáo', desc: 'Theo dõi điểm danh trực tiếp, xuất Excel khi kết thúc.' },
 ];
 
-const stats = [
-  { value: '30s', label: 'QR đổi mới mỗi', icon: Zap },
-  { value: '4 lớp', label: 'Bảo mật chống gian lận', icon: ShieldCheck },
-  { value: '100%', label: 'Không cần cài app', icon: Smartphone },
-  { value: 'Real-time', label: 'Cập nhật điểm danh', icon: Clock },
+const highlights = [
+  ['30 giây', 'QR đổi mới mỗi'],
+  ['4 lớp', 'Bảo mật chống gian lận'],
+  ['100%', 'Không cần cài ứng dụng'],
+  ['Tức thì', 'Cập nhật điểm danh'],
 ];
+
+const roles = [
+  ['ADMIN', ['Quản lý toàn bộ người dùng', 'Import sinh viên từ Excel', 'Xem log gian lận', 'Reset thiết bị']],
+  ['BTC', ['Tạo và quản lý sự kiện', 'Chiếu mã QR check-in', 'Xem báo cáo theo thời gian thực', 'Xuất Excel']],
+  ['LECTURER', ['Xem danh sách sự kiện', 'Theo dõi điểm danh', 'Xem thống kê lớp']],
+  ['STUDENT', ['Đăng ký tham gia sự kiện', 'Quét QR check-in, check-out', 'Xem sự kiện sắp tới', 'Lịch sử tham dự']],
+];
+
+// Nền thương hiệu: gradient xanh đậm, mã đặc dự phòng phía dưới, chữ trắng đặc. Nút sáng đổi sang nền
+// surface ở giao diện tối để không thành mảng trắng chói giữa màn tối
+const BRAND_BG = 'bg-[#0B47C9] bg-[linear-gradient(135deg,#0A3BAA_0%,#1A63F0_100%)] text-white';
+const LIGHT_CTA = 'inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-[#0052D4] outline-none transition-colors hover:bg-white/90 dark:bg-surface dark:text-foreground dark:hover:bg-surface-hover';
+const GHOST_CTA = 'inline-flex h-12 items-center justify-center rounded-xl border border-white/40 px-6 text-sm font-semibold text-white outline-none transition-colors hover:bg-white/10';
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-white text-gray-900">
-
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/favicon.svg" alt="logo" className="w-8 h-8" />
-            <span className="font-bold text-gray-900 text-base">FPT Event</span>
-          </div>
-          <nav className="hidden md:flex items-center gap-8 text-sm text-gray-600">
-            <a href="#features" className="hover:text-primary-600 transition-colors">Tính năng</a>
-            <a href="#how-it-works" className="hover:text-primary-600 transition-colors">Cách hoạt động</a>
-            <Link to="/dang-ky" className="hover:text-primary-600 transition-colors">Đăng ký sự kiện</Link>
+    <div className="min-h-screen bg-surface">
+      <header className="sticky top-0 z-30 border-b border-border bg-surface">
+        <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
+          <Link to="/" className="outline-none"><ProductBrand /></Link>
+          <nav className="hidden items-center gap-6 text-sm text-foreground/70 md:flex">
+            <a href="#features" className="hover:text-foreground">Tính năng</a>
+            <a href="#how-it-works" className="hover:text-foreground">Cách hoạt động</a>
+            <Link to="/dang-ky" className="hover:text-foreground">Đăng ký sự kiện</Link>
           </nav>
-          <Link
-            to="/login"
-            className="btn-primary btn-md flex items-center gap-1.5"
-          >
-            Đăng nhập
-            <ChevronRight size={14} />
-          </Link>
+          <div className="ml-auto">
+            <Button as={Link} to="/login" size="hdr">Đăng nhập</Button>
+          </div>
         </div>
       </header>
 
-      {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#0052D4] via-[#1A6BFF] to-[#00A3FF] text-white">
-        {/* Decorative bg */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full bg-white/5" />
-          <div className="absolute bottom-0 left-0 w-80 h-80 rounded-full bg-white/5" />
-          <div className="absolute top-1/2 left-1/3 w-96 h-96 rounded-full bg-white/3" />
-        </div>
-
-        <div className="relative z-10 max-w-6xl mx-auto px-6 py-20 lg:py-28 flex flex-col lg:flex-row items-center gap-12">
-          {/* Text */}
-          <div className="flex-1 text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 bg-white/15 border border-white/25 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-              <Zap size={13} className="text-yellow-300" />
-              Hệ thống điểm danh thế hệ mới
-            </div>
-            <h1 className="text-4xl lg:text-5xl font-extrabold leading-tight mb-5">
-              Điểm danh thông minh<br />
-              <span className="text-blue-200">không thể gian lận</span>
-            </h1>
-            <p className="text-white/75 text-lg leading-relaxed mb-8 max-w-xl">
-              Hệ thống quản lý sự kiện &amp; điểm danh toàn diện cho Đại học FPT.
-              QR động · GPS xác thực · Báo cáo real-time.
+      <section className={BRAND_BG}>
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:py-24">
+          <div>
+            <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-5xl">Điểm danh thông minh, không thể gian lận</h1>
+            <p className="mt-4 max-w-[55ch] text-base/7 text-white">
+              Hệ thống quản lý sự kiện và điểm danh cho Đại học FPT. QR động · GPS xác thực · Báo cáo theo thời gian thực.
             </p>
-            <div className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
-              <Link
-                to="/dang-ky"
-                className="inline-flex items-center gap-2 bg-white text-primary-700 font-bold px-7 py-3.5 rounded-xl hover:bg-blue-50 transition-colors shadow-lg text-sm"
-              >
-                Đăng ký tham gia sự kiện
-                <ArrowRight size={15} />
-              </Link>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 bg-white/15 border border-white/25 text-white font-semibold px-7 py-3.5 rounded-xl hover:bg-white/25 transition-colors text-sm"
-              >
-                Đăng nhập
-                <ChevronRight size={14} />
-              </Link>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link to="/dang-ky" className={LIGHT_CTA}>Đăng ký tham gia sự kiện <ArrowRight className="size-4" aria-hidden="true" /></Link>
+              <Link to="/login" className={GHOST_CTA}>Đăng nhập</Link>
             </div>
           </div>
-
-          {/* Logo banner */}
-          <div className="flex-shrink-0 w-full max-w-sm lg:max-w-[380px]">
-            <img
-              src="/logo.svg"
-              alt="FPT Event System"
-              className="w-full drop-shadow-2xl rounded-2xl"
-            />
+          <div className="hidden justify-center lg:flex">
+            <div className="rounded-[40px] bg-white/10 p-6"><Logo className="size-48" /></div>
           </div>
         </div>
-
-        {/* Stats bar */}
-        <div className="relative z-10 border-t border-white/15">
-          <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-2 md:grid-cols-4 gap-6">
-            {stats.map(({ value, label, icon: Icon }) => (
-              <div key={label} className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
-                  <Icon size={16} className="text-blue-200" />
-                </div>
-                <div>
-                  <p className="font-bold text-white text-base leading-none">{value}</p>
-                  <p className="text-white/60 text-xs mt-0.5">{label}</p>
-                </div>
+        <div className="border-t border-white/15">
+          <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-4">
+            {highlights.map(([n, l]) => (
+              <div key={n}>
+                <p className="text-xl font-semibold">{n}</p>
+                <p className="mt-0.5 text-sm text-white">{l}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section id="features" className="py-20 bg-surface">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <span className="text-primary-600 text-sm font-semibold uppercase tracking-wider">Tính năng</span>
-            <h2 className="text-3xl font-bold text-gray-900 mt-2">Mọi thứ bạn cần cho sự kiện</h2>
-            <p className="text-gray-500 mt-3 text-base max-w-xl mx-auto">
-              Từ tạo sự kiện đến báo cáo sau sự kiện – tất cả trong một nền tảng duy nhất.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {features.map(({ icon: Icon, color, title, desc }) => (
-              <div key={title} className="bg-white rounded-2xl p-6 border border-border/60 hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 ${color}`}>
-                  <Icon size={20} />
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-2">{title}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+      <section id="features" className="mx-auto max-w-6xl scroll-mt-16 px-4 py-16 sm:px-6">
+        <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">Mọi thứ bạn cần cho sự kiện</h2>
+        <p className="mt-3 max-w-[55ch] text-base/7 text-muted">Từ tạo sự kiện tới báo cáo sau sự kiện, trong một nền tảng.</p>
+        <div className="mt-10 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+          {features.map(({ icon: Icon, title, desc, color }) => (
+            <div key={title}>
+              <div className={`flex size-10 items-center justify-center rounded-xl ${color}`}>
+                <Icon className="size-5" aria-hidden="true" />
               </div>
-            ))}
-          </div>
+              <h3 className="mt-4 text-base font-semibold text-foreground">{title}</h3>
+              <p className="mt-1 text-pretty text-sm/6 text-muted">{desc}</p>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* ── How it works ── */}
-      <section id="how-it-works" className="py-20 bg-white">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <span className="text-primary-600 text-sm font-semibold uppercase tracking-wider">Quy trình</span>
-            <h2 className="text-3xl font-bold text-gray-900 mt-2">Hoạt động như thế nào?</h2>
-            <p className="text-gray-500 mt-3 text-base max-w-lg mx-auto">
-              Từ setup đến check-in hoàn tất chỉ trong 4 bước đơn giản.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {steps.map(({ num, title, desc, icon: Icon }, i) => (
-              <div key={num} className="relative">
-                {i < steps.length - 1 && (
-                  <div className="hidden lg:block absolute top-8 left-full w-full h-0.5 bg-border z-0 -translate-y-1/2" style={{ width: 'calc(100% - 2rem)', left: 'calc(50% + 2rem)' }} />
-                )}
-                <div className="relative z-10 text-center">
-                  <div className="relative inline-block mb-5">
-                    <div className="w-16 h-16 rounded-2xl bg-primary-50 flex items-center justify-center mx-auto">
-                      <Icon size={24} className="text-primary-600" />
-                    </div>
-                    <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gradient-brand text-white text-xs font-bold flex items-center justify-center">
-                      {i + 1}
-                    </span>
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-2">{title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
-                </div>
-              </div>
+      <section id="how-it-works" className="scroll-mt-16 bg-background">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+          <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">Hoạt động như thế nào?</h2>
+          <ol className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {steps.map(({ title, desc }, i) => (
+              <li key={title} className="rounded-2xl border border-border bg-surface p-5">
+                <span className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">{i + 1}</span>
+                <h3 className="mt-4 text-base font-semibold text-foreground">{title}</h3>
+                <p className="mt-1 text-pretty text-sm/6 text-muted">{desc}</p>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
       </section>
 
-      {/* ── Roles ── */}
-      <section className="py-16 bg-surface">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-10">
-            <h2 className="text-2xl font-bold text-gray-900">Dành cho tất cả mọi người</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { role: 'Admin', color: 'border-red-200 bg-red-50', badge: 'bg-red-100 text-red-700', perms: ['Quản lý toàn bộ người dùng', 'Import sinh viên Excel', 'Xem log gian lận', 'Reset thiết bị'] },
-              { role: 'BTC', color: 'border-blue-200 bg-blue-50', badge: 'bg-blue-100 text-blue-700', perms: ['Tạo & quản lý sự kiện', 'Hiển thị QR check-in', 'Xem báo cáo real-time', 'Export Excel'] },
-              { role: 'Giảng viên', color: 'border-violet-200 bg-violet-50', badge: 'bg-violet-100 text-violet-700', perms: ['Xem danh sách sự kiện', 'Theo dõi điểm danh', 'Xem thống kê lớp', ''] },
-              { role: 'Sinh viên', color: 'border-emerald-200 bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700', perms: ['Đăng ký tham gia sự kiện', 'Quét QR check-in/out', 'Xem sự kiện sắp tới', 'Lịch sử tham dự'] },
-            ].map(({ role, color, badge, perms }) => (
-              <div key={role} className={`rounded-2xl border p-5 ${color}`}>
-                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold mb-4 ${badge}`}>{role}</span>
-                <ul className="space-y-2">
-                  {perms.filter(Boolean).map((p) => (
-                    <li key={p} className="flex items-start gap-2 text-sm text-gray-700">
-                      <CheckCircle size={13} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">Dành cho tất cả mọi người</h2>
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {roles.map(([role, perms]) => (
+            <div key={role} className="rounded-2xl border border-border bg-surface p-5">
+              <RoleBadge role={role} />
+              <ul className="mt-4 space-y-2">
+                {perms.map((p) => (
+                  <li key={p} className="flex gap-2 text-sm text-foreground">
+                    <Check className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden="true" />
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* ── CTA ── */}
-      <section className="py-20 bg-gradient-to-br from-[#0052D4] via-[#1A6BFF] to-[#00A3FF]">
-        <div className="max-w-2xl mx-auto px-6 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Sẵn sàng triển khai?
-          </h2>
-          <p className="text-white/75 text-base mb-8">
-            Đăng ký tham gia sự kiện chỉ với họ tên, MSSV và email — chưa có tài khoản
-            hệ thống sẽ tự tạo và gửi thông tin đăng nhập cho bạn.
+      <section className={BRAND_BG}>
+        <div className="mx-auto max-w-6xl px-4 py-14 text-center sm:px-6">
+          <h2 className="text-balance text-2xl font-bold sm:text-3xl">Sẵn sàng triển khai?</h2>
+          <p className="mx-auto mt-3 max-w-[55ch] text-pretty text-base/7 text-white">
+            Đăng ký tham gia sự kiện chỉ với họ tên, MSSV và email. Chưa có tài khoản thì hệ thống tự tạo và gửi thông tin đăng nhập cho bạn.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link
-              to="/dang-ky"
-              className="inline-flex items-center gap-2 bg-white text-primary-700 font-bold px-8 py-4 rounded-xl hover:bg-blue-50 transition-colors shadow-xl text-sm"
-            >
-              Đăng ký tham gia sự kiện
-              <ArrowRight size={16} />
-            </Link>
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 bg-white/15 border border-white/25 text-white font-semibold px-8 py-4 rounded-xl hover:bg-white/25 transition-colors text-sm"
-            >
-              Đăng nhập hệ thống
-              <ChevronRight size={15} />
-            </Link>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link to="/dang-ky" className={LIGHT_CTA}>Đăng ký tham gia sự kiện <ArrowRight className="size-4" aria-hidden="true" /></Link>
+            <Link to="/login" className={GHOST_CTA}>Đăng nhập hệ thống</Link>
           </div>
         </div>
       </section>
 
-      {/* ── Footer ── */}
-      <footer className="bg-surface border-t border-border">
-        {/* Top accent line */}
-        <div className="h-1 bg-gradient-brand" />
-
-        {/* Main content */}
-        <div className="max-w-6xl mx-auto px-6 pt-12 pb-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
-
-            {/* Col 1: Brand */}
-            <div className="lg:col-span-1">
-              <div className="flex items-center gap-2.5 mb-4">
-                <img src="/favicon.svg" alt="FPT Event" className="w-9 h-9" />
-                <div>
-                  <p className="font-extrabold text-gray-900 text-base leading-none">FPT Event</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">EventPass System</p>
-                </div>
-              </div>
-              <p className="text-sm text-gray-500 leading-relaxed mb-5">
-                Hệ thống quản lý sự kiện &amp; điểm danh thông minh — QR động, GPS xác thực, báo cáo real-time.
-              </p>
-              {/* Tech stack badges */}
-              <div className="flex flex-wrap gap-2">
-                {['React', 'Node.js', 'Prisma', 'Supabase'].map((t) => (
-                  <span key={t} className="px-2.5 py-1 rounded-lg bg-white border border-border text-xs font-medium text-gray-500">
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Col 2: Tính năng */}
-            <div>
-              <p className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-4">Tính năng</p>
-              <ul className="space-y-2.5">
-                {[
-                  { label: 'QR Check-in động',      href: '#features' },
-                  { label: 'Xác thực GPS',           href: '#features' },
-                  { label: 'Chống gian lận đa lớp',  href: '#features' },
-                  { label: 'Báo cáo & Export Excel', href: '#features' },
-                  { label: 'Import sinh viên Excel', href: '#features' },
-                  { label: 'Đăng ký tham gia sự kiện', href: '/dang-ky' },
-                ].map(({ label, href }) => {
-                  // Anchor trong trang dùng <a>, route nội bộ dùng <Link> để không reload trang.
-                  const Tag = href.startsWith('#') ? 'a' : Link;
-                  const linkProps = href.startsWith('#') ? { href } : { to: href };
-                  return (
-                    <li key={label}>
-                      <Tag {...linkProps} className="text-sm text-gray-500 hover:text-primary-600 transition-colors flex items-center gap-1.5 group">
-                        <ChevronRight size={12} className="text-gray-300 group-hover:text-primary-500 transition-colors" />
-                        {label}
-                      </Tag>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-
-            {/* Col 3: Vai trò */}
-            <div>
-              <p className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-4">Dành cho</p>
-              <ul className="space-y-2.5">
-                {[
-                  { label: 'Admin',       desc: 'Quản trị toàn hệ thống',     color: 'bg-red-100 text-red-600' },
-                  { label: 'BTC',         desc: 'Ban tổ chức sự kiện',         color: 'bg-blue-100 text-blue-600' },
-                  { label: 'Giảng viên',  desc: 'Theo dõi điểm danh lớp',     color: 'bg-violet-100 text-violet-600' },
-                  { label: 'Sinh viên',   desc: 'Quét QR, xem lịch sử',        color: 'bg-emerald-100 text-emerald-600' },
-                ].map(({ label, desc, color }) => (
-                  <li key={label} className="flex items-center gap-2.5">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${color}`}>{label}</span>
-                    <span className="text-sm text-gray-500">{desc}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Col 4: Liên hệ & Bảo mật */}
-            <div>
-              <p className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-4">Bảo mật & Hỗ trợ</p>
-              <ul className="space-y-3 mb-6">
-                {[
-                  { icon: ShieldCheck, label: 'JWT Authentication',   color: 'text-blue-500' },
-                  { icon: MapPin,      label: 'GPS Geofencing',        color: 'text-emerald-500' },
-                  { icon: Clock,       label: 'HMAC-SHA256 QR Token',  color: 'text-violet-500' },
-                  { icon: Zap,         label: 'Rate Limiting & Helmet', color: 'text-orange-500' },
-                ].map(({ icon: Icon, label, color }) => (
-                  <li key={label} className="flex items-center gap-2.5">
-                    <Icon size={14} className={`flex-shrink-0 ${color}`} />
-                    <span className="text-sm text-gray-500">{label}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors"
-              >
-                Đăng nhập hệ thống
-                <ArrowRight size={13} />
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom bar */}
-        <div className="border-t border-border bg-white">
-          <div className="max-w-6xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-xs text-gray-400">
-              © 2026 <span className="font-semibold text-gray-600">FPT University</span>. All rights reserved.
-            </p>
-            <div className="flex items-center gap-4">
-              <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Hệ thống đang hoạt động
-              </span>
-              <span className="text-gray-200">|</span>
-              <span className="text-xs text-gray-400">v1.0.0</span>
-            </div>
-          </div>
+      <footer className="border-t border-border">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-8 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex items-center gap-2"><Logo className="size-6" /><span>© 2026 FPT University</span></div>
+          <Link to="/dang-ky" className="inline-flex h-10 items-center hover:text-foreground">Đăng ký tham gia sự kiện</Link>
         </div>
       </footer>
     </div>

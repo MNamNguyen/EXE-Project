@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  ClipboardCheck, LogOut, CheckCircle2, QrCode, Columns2, PartyPopper,
-  Music, VolumeX, FileAudio, Maximize, Minimize, Sparkles,
+  Columns2, FileAudio, LogIn, LogOut, Maximize, Minimize, Music, PartyPopper, QrCode, ScanLine, Sparkles, VolumeX,
 } from 'lucide-react';
 import { eventApi } from '../../services/api';
+import { RangeInput } from '../../components/ui/Input';
+import { cx } from '../../utils/cx';
 import LiveWelcomeWall from './live/LiveWelcomeWall';
 import PartyAudio from './live/partyAudio';
 
@@ -20,6 +21,13 @@ function readLayout() {
     return 'split';
   }
 }
+
+// Màn trình diễn chiếu lên máy chiếu: giữ nền gradient thương hiệu (check-out đổi sang nền xanh
+// lá để BTC ở cửa nhìn là biết đang chiếu mã nào). Màu nền có mã đặc dự phòng phía dưới gradient.
+const STAGE = {
+  checkin: 'bg-[#14307A] bg-[linear-gradient(135deg,#0D1B5E_0%,#1A3A8F_50%,#0052D4_100%)]',
+  checkout: 'bg-[#065F46] bg-[linear-gradient(135deg,#064E3B_0%,#065F46_50%,#047857_100%)]',
+};
 
 export default function QRDisplay() {
   const { id } = useParams();
@@ -55,11 +63,11 @@ export default function QRDisplay() {
     // Refetch every 30s to get fresh token
     const refetchTimer = setInterval(fetchQR, 30000);
     return () => clearInterval(refetchTimer);
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Countdown timer
   useEffect(() => {
-    if (!data) return;
+    if (!data) return undefined;
     timerRef.current = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) {
@@ -70,7 +78,7 @@ export default function QRDisplay() {
       });
     }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [data]);
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep screen awake
   useEffect(() => {
@@ -122,16 +130,16 @@ export default function QRDisplay() {
   const token = isCheckin ? data?.checkinToken : data?.checkoutToken;
   const qrUrl = token ? `${data?.frontendUrl}/scan?e=${data?.eventId}&t=${token}&type=${activeType}` : '';
 
-  const progress = (countdown / 30) * 100;
-  const circumference = 2 * Math.PI * 28;
-  const strokeDash = (progress / 100) * circumference;
+  // Vòng đếm ngược 44px: phần sáng là thời gian còn lại của mã đang chiếu
+  const circumference = 2 * Math.PI * 18;
+  const strokeDash = (countdown / 30) * circumference;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-brand flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-white/70">Đang tải...</p>
+      <div className={cx('flex min-h-screen items-center justify-center text-white', STAGE.checkin)}>
+        <div className="text-center">
+          <span className="mx-auto mb-4 block size-10 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+          <p className="text-white">Đang tải...</p>
         </div>
       </div>
     );
@@ -141,132 +149,124 @@ export default function QRDisplay() {
   const showWall = layout !== 'qr';
   const qrSize = layout === 'split'
     ? Math.min(window.innerWidth - 80, Math.round(window.innerHeight * 0.42), 340)
-    : Math.min(window.innerWidth - 80, 280);
+    : Math.min(window.innerWidth - 80, 300);
 
   const qrPanel = (
-    <div className="flex flex-col items-center justify-center">
-      {/* Tab switcher */}
-      <div className="relative z-10 flex bg-white/10 backdrop-blur-sm p-1 rounded-2xl mb-8 gap-1">
-        {['checkin', 'checkout'].map((type) => (
-          <button key={type} onClick={() => setActiveType(type)}
-            className={`px-8 py-3 rounded-xl font-bold text-sm transition-all duration-300 ${
-              activeType === type ? 'bg-white text-gray-900 shadow-lg' : 'text-white/70 hover:text-white'
-            }`}>
-            {type === 'checkin'
-              ? <span className="flex items-center gap-1.5"><ClipboardCheck size={15} />CHECK-IN</span>
-              : <span className="flex items-center gap-1.5"><LogOut size={15} />CHECK-OUT</span>
-            }
+    <section className="flex flex-col items-center justify-center gap-6 text-center">
+      <div className="inline-flex gap-1 rounded-2xl bg-white/10 p-1">
+        {[['checkin', 'CHECK-IN', LogIn], ['checkout', 'CHECK-OUT', LogOut]].map(([type, label, Icon]) => (
+          <button
+            key={type}
+            type="button"
+            aria-pressed={activeType === type}
+            onClick={() => setActiveType(type)}
+            className={cx(
+              'inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl px-6 text-sm font-semibold outline-none transition-colors',
+              activeType === type ? 'bg-white text-[#0D1B5E]' : 'text-white hover:bg-white/10',
+            )}
+          >
+            <Icon className="size-4" aria-hidden="true" />
+            {label}
           </button>
         ))}
       </div>
 
-      {/* Event name */}
-      <h1 className="text-white text-xl md:text-2xl font-bold text-center mb-8 relative z-10 max-w-lg">
-        {data?.eventName}
-      </h1>
+      <h1 className="max-w-xl text-balance text-2xl font-bold sm:text-3xl">{data?.eventName}</h1>
 
-      {/* QR Card */}
-      <div className="relative z-10 bg-white rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center qr-pulse">
+      <div className="rounded-3xl bg-white p-5 shadow-[0_20px_60px_rgb(0_0_0/0.35)]">
         {qrUrl ? (
-          <QRCodeSVG
-            value={qrUrl}
-            size={qrSize}
-            level="M"
-            includeMargin={false}
-            bgColor="#FFFFFF"
-            fgColor="#0D1B5E"
-          />
+          <QRCodeSVG value={qrUrl} size={qrSize} level="M" includeMargin={false} bgColor="#FFFFFF" fgColor="#0D1B5E" />
         ) : (
-          <div className="w-64 h-64 flex items-center justify-center">
-            <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+          <div className="flex items-center justify-center" style={{ width: qrSize, height: qrSize }}>
+            <span className="size-8 animate-spin rounded-full border-4 border-[#0D1B5E]/15 border-t-[#1A6BFF]" />
           </div>
         )}
-
-        {/* Type label */}
-        <div className={`mt-4 px-6 py-2 rounded-full font-bold text-sm flex items-center gap-1.5 ${
-          isCheckin ? 'bg-primary-600 text-white' : 'bg-emerald-600 text-white'
-        }`}>
-          {isCheckin
-            ? <><CheckCircle2 size={15} />Quét để CHECK-IN</>
-            : <><LogOut size={15} />Quét để CHECK-OUT</>
-          }
-        </div>
+        <p
+          className={cx(
+            'mt-4 inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold text-white',
+            isCheckin ? 'bg-[#1A6BFF]' : 'bg-[#047857]',
+          )}
+        >
+          <ScanLine className="size-4" aria-hidden="true" />
+          {isCheckin ? 'Quét để CHECK-IN' : 'Quét để CHECK-OUT'}
+        </p>
       </div>
 
-      {/* Countdown */}
-      <div className="relative z-10 flex items-center gap-4 mt-8">
-        <svg width="72" height="72" className="transform">
-          <circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="5" />
-          <circle cx="36" cy="36" r="28" fill="none"
-            stroke={countdown <= 5 ? '#FCD34D' : 'white'}
-            strokeWidth="5"
-            strokeDasharray={`${strokeDash} ${circumference}`}
+      <div className="flex items-center gap-3">
+        <svg width="44" height="44" viewBox="0 0 44 44" className="-rotate-90" aria-hidden="true">
+          <circle cx="22" cy="22" r="18" fill="none" stroke="rgb(255 255 255 / .2)" strokeWidth="4" />
+          <circle
+            cx="22" cy="22" r="18" fill="none"
+            stroke={countdown <= 5 ? '#FCD34D' : '#fff'}
+            strokeWidth="4"
             strokeLinecap="round"
-            className="countdown-ring transition-all duration-1000"
+            strokeDasharray={`${strokeDash} ${circumference}`}
+            className="transition-all duration-1000"
           />
-          <text x="36" y="40" textAnchor="middle" fill="white" fontSize="18" fontWeight="bold">
-            {countdown}
-          </text>
         </svg>
-        <div className="text-white/70 text-sm">
-          <p className="font-medium text-white">Mã tự động đổi</p>
-          <p>sau {countdown} giây</p>
-        </div>
+        <p className="text-left text-sm text-white">
+          Mã tự đổi sau <span className="font-semibold tabular-nums">{countdown}</span> giây
+          <br />
+          Dùng camera điện thoại hoặc Zalo để quét
+        </p>
       </div>
-
-      {/* Footer */}
-      <p className="relative z-10 text-white/30 text-xs mt-8">
-        Dùng camera điện thoại / Zalo để quét
-      </p>
-    </div>
+    </section>
   );
 
   return (
-    <div className={`relative min-h-screen overflow-hidden transition-colors duration-700 ${
-      isCheckin ? 'bg-gradient-to-br from-[#0D1B5E] via-[#1A3A8F] to-[#0052D4]' : 'bg-gradient-to-br from-[#064E3B] via-[#065F46] to-[#047857]'
-    }`}>
-      {/* Background circles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-white/5" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-white/5" />
-      </div>
-
+    <div className={cx('relative min-h-screen overflow-hidden text-white transition-colors duration-700', STAGE[activeType])}>
       {/* Thanh điều khiển — mờ đi để không rối màn chiếu, rê chuột vào mới rõ */}
-      <div className="fixed top-3 right-3 z-40 flex items-center gap-1 bg-black/30 backdrop-blur-md rounded-2xl p-1.5 opacity-30 hover:opacity-100 focus-within:opacity-100 transition-opacity">
-        <ToolButton active={layout === 'split'} onClick={() => setLayout('split')} title="QR + chào mừng"><Columns2 size={17} /></ToolButton>
-        <ToolButton active={layout === 'welcome'} onClick={() => setLayout('welcome')} title="Chỉ màn chào mừng"><PartyPopper size={17} /></ToolButton>
-        <ToolButton active={layout === 'qr'} onClick={() => setLayout('qr')} title="Chỉ mã QR"><QrCode size={17} /></ToolButton>
-        <span className="w-px h-6 bg-white/20 mx-1" />
-        <ToolButton active={music.mode === 'synth'} onClick={toggleSynth}
-          title={music.mode === 'off' ? 'Bật nhạc nền vui nhộn' : 'Tắt nhạc'}>
-          {music.mode === 'off' ? <Music size={17} /> : <VolumeX size={17} />}
-        </ToolButton>
-        <ToolButton active={music.mode === 'file'} onClick={() => fileInputRef.current?.click()}
-          title={music.fileName ? `Đang phát: ${music.fileName}` : 'Chọn file nhạc từ máy'}>
-          <FileAudio size={17} />
-        </ToolButton>
+      <div className="fixed right-4 top-4 z-40 flex items-center gap-1 rounded-2xl bg-black/20 p-1 opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100">
+        <ToolButton active={layout === 'split'} onClick={() => setLayout('split')} label="QR và màn chào" icon={Columns2} />
+        <ToolButton active={layout === 'welcome'} onClick={() => setLayout('welcome')} label="Chỉ màn chào" icon={PartyPopper} />
+        <ToolButton active={layout === 'qr'} onClick={() => setLayout('qr')} label="Chỉ mã QR" icon={QrCode} />
+        <span className="mx-1 h-5 w-px bg-white/20" />
+        <ToolButton
+          active={music.mode === 'synth'}
+          onClick={toggleSynth}
+          label={music.mode === 'off' ? 'Bật nhạc nền' : 'Tắt nhạc'}
+          icon={music.mode === 'off' ? Music : VolumeX}
+        />
+        <ToolButton
+          active={music.mode === 'file'}
+          onClick={() => fileInputRef.current?.click()}
+          label={music.fileName ? `Đang phát: ${music.fileName}` : 'Chọn file nhạc'}
+          icon={FileAudio}
+        />
         <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={pickFile} />
-        <input type="range" min="0" max="1" step="0.05" value={volume}
+        <RangeInput
+          min="0"
+          max="1"
+          step="0.05"
+          value={volume}
           onChange={(e) => changeVolume(Number(e.target.value))}
-          className="w-20 accent-amber-300" title="Âm lượng" aria-label="Âm lượng" />
-        <span className="w-px h-6 bg-white/20 mx-1" />
-        <ToolButton onClick={toggleFullscreen} title={fullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}>
-          {fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}
-        </ToolButton>
+          className="w-20"
+          title="Âm lượng"
+          aria-label="Âm lượng"
+        />
+        <span className="mx-1 h-5 w-px bg-white/20" />
+        <ToolButton onClick={toggleFullscreen} label={fullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'} icon={fullscreen ? Minimize : Maximize} />
       </div>
 
       {/* Chưa bấm bật nhạc thì trình duyệt chặn mọi âm thanh — nhắc BTC một lần */}
       {showWall && music.mode === 'off' && (
-        <button onClick={toggleSynth}
-          className="fixed bottom-4 right-4 z-40 flex items-center gap-2 bg-amber-400 text-gray-900 font-bold text-sm px-4 py-2.5 rounded-full shadow-xl hover:bg-amber-300 transition-colors">
-          <Sparkles size={16} /> Bật nhạc & âm thanh
+        <button
+          type="button"
+          onClick={toggleSynth}
+          className="fixed bottom-4 right-4 z-40 inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#0D1B5E] shadow-lg outline-none transition-colors hover:bg-white/90"
+        >
+          <Sparkles className="size-4" aria-hidden="true" />
+          Bật nhạc & âm thanh
         </button>
       )}
 
       {/* pt-20 dưới lg: chừa chỗ cho thanh điều khiển cố định, không đè nút CHECK-IN */}
-      <div className={`relative z-10 min-h-screen px-6 pb-6 pt-20 lg:pt-6 ${
-        layout === 'split' ? 'grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-6 items-stretch' : 'flex flex-col justify-center'
-      }`}>
+      <div
+        className={cx(
+          'relative grid min-h-screen gap-6 p-6 pt-20 lg:pt-6',
+          layout === 'split' ? 'lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]' : 'content-center',
+        )}
+      >
         {showQR && qrPanel}
         {showWall && (
           <div className={layout === 'welcome' ? 'h-[calc(100vh-3rem)]' : 'min-h-[60vh] lg:h-[calc(100vh-3rem)]'}>
@@ -278,11 +278,20 @@ export default function QRDisplay() {
   );
 }
 
-function ToolButton({ active, onClick, title, children }) {
+function ToolButton({ active, onClick, label, icon: Icon }) {
   return (
-    <button onClick={onClick} title={title} aria-label={title}
-      className={`p-2 rounded-xl transition-colors ${active ? 'bg-white text-gray-900' : 'text-white hover:bg-white/15'}`}>
-      {children}
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      className={cx(
+        'inline-flex size-10 cursor-pointer items-center justify-center rounded-xl text-white outline-none transition-colors',
+        active ? 'bg-white/25' : 'hover:bg-white/15',
+      )}
+    >
+      <Icon className="size-[18px]" aria-hidden="true" />
     </button>
   );
 }

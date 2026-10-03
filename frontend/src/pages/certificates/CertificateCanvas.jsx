@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import Spinner from '../../components/ui/Spinner';
+import { cx } from '../../utils/cx';
 import { loadCertFonts, loadImage, drawCertificate } from './certRender';
 
 // Độ phân giải canvas tối đa — đủ nét để xem/tải PNG mà không nặng máy khi
@@ -43,13 +44,13 @@ const CertificateCanvas = forwardRef(function CertificateCanvas(
   }, [img, template, fields, values]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className={`relative ${className}`} style={{ aspectRatio: `${template.width} / ${template.height}` }}>
-      <canvas ref={canvasRef} className="w-full h-full block rounded-lg shadow-sm bg-gray-50" />
+    <div className={cx('relative', className)} style={{ aspectRatio: `${template.width} / ${template.height}` }}>
+      <canvas ref={canvasRef} className="block h-full w-full rounded-xl border border-border bg-background" />
       {!img && !error && (
         <div className="absolute inset-0 flex items-center justify-center"><Spinner size="lg" /></div>
       )}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-red-500 bg-gray-50 rounded-lg">{error}</div>
+        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-background p-4 text-center text-sm text-error-text">{error}</div>
       )}
     </div>
   );

@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import {
-  CalendarDays, MapPin, Clock, Users, User, Mail, IdCard, Phone,
-  ChevronLeft, CheckCircle2, AlertCircle, Info, LogIn, GraduationCap,
-} from 'lucide-react';
+import { ChevronLeft, CircleCheck, Info, LogIn } from 'lucide-react';
 import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
 import { publicApi, eventApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import Spinner from '../../components/ui/Spinner';
+import Button from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { Field, Input } from '../../components/ui/Input';
+import { Banner, Skeleton } from '../../components/ui/States';
+import { formatNumber, longDate } from '../../utils/eventStatus';
+import PublicHeader from './PublicHeader';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -70,256 +71,175 @@ export default function EventRegister() {
     }
   };
 
+  let body;
   if (loading || authLoading) {
-    return <Shell><div className="flex justify-center py-20"><Spinner size="xl" /></div></Shell>;
-  }
-
-  if (notFound || !event) {
-    return (
-      <Shell>
-        <div className="card p-12 text-center max-w-lg mx-auto">
-          <AlertCircle size={40} className="text-red-400 mx-auto mb-3" />
-          <p className="font-semibold text-gray-700">Không tìm thấy sự kiện</p>
-          <p className="text-sm text-gray-400 mt-1">Link có thể đã hết hạn hoặc sự kiện đã bị gỡ.</p>
-          <Link to="/dang-ky" className="btn-primary btn-md mt-5 inline-flex">Xem sự kiện khác</Link>
-        </div>
-      </Shell>
+    body = (
+      <div className="space-y-4 rounded-2xl border border-border bg-surface p-5" aria-busy="true">
+        <Skeleton className="h-5 w-3/5" /><Skeleton className="h-3 w-2/5" /><Skeleton className="h-3 w-1/2" /><Skeleton className="h-3 w-1/3" />
+      </div>
+    );
+  } else if (notFound || !event) {
+    body = (
+      <div className="mx-auto max-w-md pb-16 pt-12 text-center">
+        <h1 className="text-xl font-semibold text-foreground">Không tìm thấy sự kiện</h1>
+        <p className="mt-2 text-pretty text-sm/6 text-muted">Link có thể đã hết hạn hoặc sự kiện đã bị gỡ.</p>
+        <div className="mt-6"><Button as={Link} to="/dang-ky" variant="primary" size="form">Xem sự kiện khác</Button></div>
+      </div>
+    );
+  } else if (result) {
+    body = <SuccessCard event={event} result={result} loggedIn={Boolean(user)} />;
+  } else {
+    body = (
+      <>
+        <EventSummary event={event} />
+        {event.registrationClosed ? (
+          <section className="rounded-2xl border border-border bg-surface p-6 text-center">
+            <h2 className="text-base font-semibold text-foreground">Sự kiện đã đóng đăng ký</h2>
+            <p className="mt-2 text-pretty text-sm/6 text-muted">Ban tổ chức không còn nhận đăng ký trực tuyến cho sự kiện này.</p>
+            <div className="mt-4"><Button as={Link} to="/dang-ky">Xem sự kiện khác</Button></div>
+          </section>
+        ) : (
+          <Card
+            title="Thông tin đăng ký"
+            sub={user
+              ? 'Bạn đang đăng nhập — hệ thống dùng thông tin tài khoản của bạn.'
+              : 'Chưa có tài khoản thì hệ thống tự tạo và gửi mật khẩu tạm qua email.'}
+          >
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              <Field label="Họ và tên">
+                {(fid) => <Input id={fid} autoComplete="name" value={form.name} disabled={Boolean(user)} onChange={(e) => set('name', e.target.value)} />}
+              </Field>
+              <Field label="Mã số sinh viên">
+                {(fid) => <Input id={fid} placeholder="VD: SE170001" autoComplete="off" value={form.mssv} disabled={Boolean(user?.mssv)} onChange={(e) => set('mssv', e.target.value)} />}
+              </Field>
+              <Field label="Email">
+                {(fid) => <Input id={fid} type="email" autoComplete="email" value={form.email} disabled={Boolean(user)} onChange={(e) => set('email', e.target.value)} />}
+              </Field>
+              {!user && (
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <Field label="Lớp" optional>
+                    {(fid) => <Input id={fid} placeholder="VD: SE1701" value={form.class} onChange={(e) => set('class', e.target.value)} />}
+                  </Field>
+                  <Field label="Số điện thoại" optional>
+                    {(fid) => <Input id={fid} type="tel" placeholder="0901 234 567" autoComplete="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} />}
+                  </Field>
+                </div>
+              )}
+              {error && <Banner tone="error" compact>{error}</Banner>}
+              <Button type="submit" variant="primary" size="form" loading={submitting} className="w-full">Xác nhận đăng ký</Button>
+              {!user && (
+                <p className="text-center text-sm text-muted">
+                  {'Đã có tài khoản? '}
+                  <Link to={`/login?redirect=/dang-ky/${event.id}`} className="whitespace-nowrap font-medium text-foreground underline-offset-4 hover:underline">
+                    Đăng nhập để đăng ký nhanh
+                  </Link>
+                </p>
+              )}
+            </form>
+          </Card>
+        )}
+      </>
     );
   }
 
-  if (result) {
-    return <Shell><SuccessCard event={event} result={result} loggedIn={Boolean(user)} /></Shell>;
-  }
-
   return (
-    <Shell>
-      <div className="max-w-lg mx-auto space-y-5">
-        <EventSummary event={event} />
-
-        {event.registrationClosed ? (
-          <div className="card p-8 text-center">
-            <AlertCircle size={36} className="text-amber-500 mx-auto mb-3" />
-            <p className="font-semibold text-gray-700">Sự kiện đã đóng đăng ký</p>
-            <p className="text-sm text-gray-400 mt-1">
-              Ban tổ chức không còn nhận đăng ký trực tuyến cho sự kiện này.
-            </p>
-            <Link to="/dang-ky" className="btn-secondary btn-md mt-5 inline-flex">Xem sự kiện khác</Link>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="card p-6 space-y-4">
-            <div>
-              <h2 className="font-bold text-gray-900">Thông tin đăng ký</h2>
-              <p className="text-xs text-gray-400 mt-1">
-                {user
-                  ? 'Bạn đang đăng nhập — hệ thống dùng thông tin tài khoản của bạn.'
-                  : 'Chưa có tài khoản? Hệ thống sẽ tự tạo và gửi mật khẩu tạm qua email.'}
-              </p>
-            </div>
-
-            <Field icon={User} label="Họ và tên" required>
-              <input
-                className="input pl-11" placeholder="VD: Nguyễn Văn A" autoComplete="name"
-                value={form.name} disabled={Boolean(user)}
-                onChange={(e) => set('name', e.target.value)}
-              />
-            </Field>
-
-            <Field icon={IdCard} label="Mã số sinh viên" required>
-              <input
-                className="input pl-11" placeholder="VD: SE170001" autoComplete="off"
-                value={form.mssv} disabled={Boolean(user?.mssv)}
-                onChange={(e) => set('mssv', e.target.value)}
-              />
-            </Field>
-
-            <Field icon={Mail} label="Email" required>
-              <input
-                className="input pl-11" type="email" placeholder="VD: an@fpt.edu.vn" autoComplete="email"
-                value={form.email} disabled={Boolean(user)}
-                onChange={(e) => set('email', e.target.value)}
-              />
-            </Field>
-
-            {!user && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field icon={GraduationCap} label="Lớp">
-                  <input
-                    className="input pl-11" placeholder="VD: SE1701"
-                    value={form.class} onChange={(e) => set('class', e.target.value)}
-                  />
-                </Field>
-                <Field icon={Phone} label="Số điện thoại">
-                  <input
-                    className="input pl-11" placeholder="VD: 0901234567" autoComplete="tel"
-                    value={form.phone} onChange={(e) => set('phone', e.target.value)}
-                  />
-                </Field>
-              </div>
-            )}
-
-            {error && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
-                <AlertCircle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-
-            <button type="submit" disabled={submitting} className="btn-primary btn-lg btn-full">
-              {submitting ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-              {submitting ? 'Đang đăng ký...' : 'Xác nhận đăng ký'}
-            </button>
-
-            {!user && (
-              <p className="text-xs text-center text-gray-400">
-                Đã có tài khoản?{' '}
-                <Link to={`/login?redirect=/dang-ky/${event.id}`} className="text-primary-600 font-medium hover:underline">
-                  Đăng nhập để đăng ký nhanh
-                </Link>
-              </p>
-            )}
-          </form>
+    <div className="min-h-screen bg-background">
+      <PublicHeader
+        right={(
+          <Link to="/dang-ky" className="inline-flex h-10 items-center gap-1 text-sm text-muted outline-none hover:text-foreground">
+            <ChevronLeft className="size-4" aria-hidden="true" /> Sự kiện khác
+          </Link>
         )}
-      </div>
-    </Shell>
+      />
+      <main className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-8">{body}</main>
+    </div>
   );
 }
 
 /* ─────────────────────────────────────── */
 
-function Shell({ children }) {
+// Khối nhãn và giá trị: nhãn cột trái 7rem từ sm, dưới sm nhãn nằm trên giá trị
+function InfoList({ rows }) {
   return (
-    <div className="min-h-screen bg-surface">
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-5 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5">
-            <img src="/favicon.svg" alt="logo" className="w-8 h-8" />
-            <span className="font-bold text-gray-900">FPT Event</span>
-          </Link>
-          <Link to="/dang-ky" className="inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:underline">
-            <ChevronLeft size={14} /> Sự kiện khác
-          </Link>
+    <dl className="space-y-3 text-sm">
+      {rows.map(([label, value]) => (
+        <div key={label} className="grid gap-1 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-6">
+          <dt className="text-muted">{label}</dt>
+          <dd className="min-w-0 text-pretty font-medium text-foreground">{value}</dd>
         </div>
-      </header>
-      <div className="max-w-4xl mx-auto px-5 py-8">{children}</div>
-    </div>
-  );
-}
-
-function Field({ icon: Icon, label, required, children }) {
-  return (
-    <div>
-      <label className="label">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <div className="relative">
-        <Icon size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-        {children}
-      </div>
-    </div>
+      ))}
+    </dl>
   );
 }
 
 function EventSummary({ event }) {
   const start = event.checkinOpen ? new Date(event.checkinOpen) : null;
   const end = event.checkinClose ? new Date(event.checkinClose) : null;
+  const rows = [['Địa điểm', event.location]];
+  if (start) {
+    rows.push(['Ngày', longDate(event.checkinOpen)]);
+    rows.push(['Check-in', end ? `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}` : format(start, 'HH:mm')]);
+  } else {
+    rows.push(['Thời gian', 'Ban tổ chức sẽ chủ động mở điểm danh']);
+  }
+  rows.push(['Đã đăng ký', `${formatNumber(event._count?.eventMembers ?? 0)} người`]);
 
   return (
-    <div className="card overflow-hidden">
-      <div className="bg-gradient-brand px-6 py-5">
-        <h1 className="text-xl font-bold text-white leading-snug">{event.name}</h1>
-        {event.createdBy?.name && (
-          <p className="text-white/70 text-xs mt-1">Tổ chức bởi {event.createdBy.name}</p>
-        )}
-      </div>
-      <div className="p-6 space-y-3">
-        {event.description && (
-          <p className="text-sm text-gray-500 leading-relaxed">{event.description}</p>
-        )}
-        <InfoRow icon={MapPin} label="Địa điểm" value={event.location} />
-        {start ? (
-          <>
-            <InfoRow icon={CalendarDays} label="Ngày" value={format(start, 'EEEE, dd/MM/yyyy', { locale: vi })} />
-            <InfoRow icon={Clock} label="Check-in" value={end ? `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}` : format(start, 'HH:mm')} />
-          </>
-        ) : (
-          <InfoRow icon={Clock} label="Thời gian" value="Ban tổ chức sẽ chủ động mở điểm danh" />
-        )}
-        <InfoRow icon={Users} label="Đã đăng ký" value={`${event._count?.eventMembers ?? 0} người`} />
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({ icon: Icon, label, value }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center justify-center flex-shrink-0">
-        <Icon size={15} className="text-primary-600" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">{label}</p>
-        <p className="text-sm text-gray-700 font-medium truncate">{value}</p>
-      </div>
-    </div>
+    <Card title={event.name} titleAs="h1" sub={event.createdBy?.name ? `Tổ chức bởi ${event.createdBy.name}` : undefined}>
+      {event.description && <p className="mb-4 whitespace-pre-line text-pretty text-sm text-muted">{event.description}</p>}
+      <InfoList rows={rows} />
+    </Card>
   );
 }
 
 function SuccessCard({ event, result, loggedIn }) {
   return (
-    <div className="max-w-lg mx-auto space-y-5">
-      <div className="card p-8 text-center">
-        <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4">
-          <CheckCircle2 size={34} className="text-emerald-500" />
-        </div>
-        <h1 className="text-xl font-bold text-gray-900">
-          {result.alreadyRegistered ? 'Bạn đã đăng ký rồi' : 'Đăng ký thành công!'}
-        </h1>
-        <p className="text-sm text-gray-500 mt-2">
-          {result.alreadyRegistered
-            ? 'Tên bạn đã có sẵn trong danh sách tham gia sự kiện này.'
-            : 'Tên bạn đã được thêm vào danh sách tham gia sự kiện.'}
-        </p>
-
-        <div className="bg-surface rounded-xl p-4 mt-5 text-left space-y-1">
-          <p className="text-sm font-semibold text-gray-900">{event.name}</p>
-          <p className="text-xs text-gray-500">{event.location}</p>
-          <p className="text-xs text-gray-500">
-            {event.checkinOpen ? format(new Date(event.checkinOpen), "HH:mm 'ngày' dd/MM/yyyy") : 'Ban tổ chức sẽ chủ động mở điểm danh'}
-          </p>
-          <p className="text-xs text-gray-400 pt-1">Người tham dự: {result.name} · {result.email}</p>
-        </div>
-
-        {result.isNewAccount && (
-          <div className="flex items-start gap-2.5 bg-primary-50 border border-primary-200 rounded-xl p-4 mt-4 text-left">
-            <Info size={16} className="text-primary-600 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-primary-800 leading-relaxed">
-              Đã tạo tài khoản mới cho bạn, mật khẩu tạm được gửi tới{' '}
-              <strong>{result.email}</strong>.
-            </p>
-          </div>
-        )}
-
-        {result.emailSent === false && (
-          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4 text-left">
-            <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-800 leading-relaxed">
-              Đã ghi nhận đăng ký nhưng chưa gửi được email — liên hệ Ban tổ chức để nhận
-              thông tin đăng nhập.
-            </p>
-          </div>
-        )}
-
-        <p className="text-xs text-gray-400 mt-5">
-          Đến ngày sự kiện, đăng nhập và quét mã QR tại cửa vào để điểm danh.
-        </p>
-
-        <div className="flex flex-col sm:flex-row gap-3 mt-6">
-          <Link to="/dang-ky" className="btn-secondary btn-md flex-1">Đăng ký sự kiện khác</Link>
-          <Link to={loggedIn ? '/dashboard' : '/login'} className="btn-primary btn-md flex-1">
-            <LogIn size={15} /> {loggedIn ? 'Về trang chính' : 'Đăng nhập'}
-          </Link>
-        </div>
+    <section className="rounded-2xl border border-border bg-surface p-6">
+      <div className="flex size-12 items-center justify-center rounded-full bg-success-bg text-success">
+        <CircleCheck className="size-6" aria-hidden="true" />
       </div>
-    </div>
+      <h1 className="mt-4 text-xl font-semibold text-foreground">
+        {result.alreadyRegistered ? 'Bạn đã đăng ký rồi' : 'Đăng ký thành công'}
+      </h1>
+      <p className="mt-2 text-pretty text-sm/6 text-muted">
+        {result.alreadyRegistered
+          ? 'Tên bạn đã có sẵn trong danh sách tham gia sự kiện này.'
+          : 'Tên bạn đã được thêm vào danh sách tham gia sự kiện.'}
+      </p>
+
+      <div className="mt-5 rounded-xl bg-background p-4">
+        <InfoList
+          rows={[
+            ['Sự kiện', event.name],
+            ['Thời gian', event.checkinOpen ? format(new Date(event.checkinOpen), "HH:mm 'ngày' dd/MM/yyyy") : 'Ban tổ chức sẽ chủ động mở điểm danh'],
+            ['Người tham dự', `${result.name} · ${result.email}`],
+          ]}
+        />
+      </div>
+
+      {result.isNewAccount && (
+        <div className="mt-4 flex gap-3 rounded-xl border border-border bg-background p-4">
+          <Info className="mt-0.5 size-5 shrink-0 text-muted" aria-hidden="true" />
+          <p className="text-pretty text-sm/6 text-foreground">
+            Đã tạo tài khoản mới cho bạn, mật khẩu tạm được gửi tới <span className="font-medium">{result.email}</span>.
+          </p>
+        </div>
+      )}
+
+      {result.emailSent === false && (
+        <Banner tone="warning" compact className="mt-4">
+          Đã ghi nhận đăng ký nhưng chưa gửi được email — liên hệ Ban tổ chức để nhận thông tin đăng nhập.
+        </Banner>
+      )}
+
+      <p className="mt-4 text-pretty text-sm/6 text-muted">Đến ngày sự kiện, đăng nhập rồi quét mã QR tại cửa vào để điểm danh.</p>
+
+      <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button as={Link} to="/dang-ky" size="form">Đăng ký sự kiện khác</Button>
+        <Button as={Link} to={loggedIn ? '/dashboard' : '/login'} variant="primary" size="form" icon={LogIn}>
+          {loggedIn ? 'Về trang chính' : 'Đăng nhập'}
+        </Button>
+      </div>
+    </section>
   );
 }

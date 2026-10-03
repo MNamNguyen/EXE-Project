@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
-import Spinner from './components/ui/Spinner';
+import { PageSpinner } from './components/ui/States';
 
 // Pages
 import Landing from './pages/Landing';
@@ -25,7 +25,7 @@ import MyCertificates from './pages/student/MyCertificates';
 
 function RequireAuth({ children, roles }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="xl" /></div>;
+  if (loading) return <PageSpinner />;
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
   return children;
@@ -34,7 +34,7 @@ function RequireAuth({ children, roles }) {
 function PublicOnly({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="xl" /></div>;
+  if (loading) return <PageSpinner />;
   if (user) {
     const params = new URLSearchParams(location.search);
     const redirectTo = params.get('redirect') || '/dashboard';
@@ -45,7 +45,7 @@ function PublicOnly({ children }) {
 
 function RootRoute() {
   const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="xl" /></div>;
+  if (loading) return <PageSpinner />;
   if (user) return <Navigate to="/dashboard" replace />;
   return <Landing />;
 }

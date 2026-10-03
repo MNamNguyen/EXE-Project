@@ -1,8 +1,12 @@
 import { Star, AlignLeft, ArrowUp, ArrowDown, Trash2, Plus } from 'lucide-react';
+import Button, { IconButton } from '../../components/ui/Button';
+import Select from '../../components/ui/Select';
+import { Textarea } from '../../components/ui/Input';
+import { Checkbox } from '../../components/ui/Choice';
 
 export const QUESTION_TYPE_META = {
-  RATING: { label: 'Đánh giá sao (1–5)', icon: Star, color: 'text-amber-600 bg-amber-50' },
-  TEXT: { label: 'Trả lời văn bản', icon: AlignLeft, color: 'text-primary-600 bg-primary-50' },
+  RATING: { label: 'Đánh giá sao (1–5)', icon: Star },
+  TEXT: { label: 'Trả lời văn bản', icon: AlignLeft },
 };
 
 // id sinh ở client để key React ổn định khi sắp xếp; backend giữ nguyên id hợp lệ
@@ -24,73 +28,55 @@ export default function QuestionListEditor({ questions, onChange, disabled = fal
   };
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {questions.length === 0 && (
-        <p className="text-sm text-gray-400 text-center py-6 border border-dashed border-gray-200 rounded-xl">
+        <p className="rounded-xl border border-dashed border-border-strong py-6 text-center text-sm text-muted">
           Chưa có câu hỏi nào — thêm câu hỏi bên dưới.
         </p>
       )}
 
-      {questions.map((q, idx) => {
-        const meta = QUESTION_TYPE_META[q.type];
-        const Icon = meta.icon;
-        return (
-          <div key={q.id} className="rounded-xl border border-border p-3 space-y-2.5 bg-white">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-400 w-6">{idx + 1}.</span>
-              <select
-                className="input py-1.5 text-xs w-auto"
-                value={q.type}
-                disabled={disabled}
-                onChange={(e) => update(idx, { type: e.target.value })}
-              >
-                {Object.entries(QUESTION_TYPE_META).map(([value, m]) => (
-                  <option key={value} value={value}>{m.label}</option>
-                ))}
-              </select>
-              <span className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${meta.color}`}>
-                <Icon size={14} />
-              </span>
-              <div className="flex-1" />
-              <button type="button" disabled={disabled || idx === 0} onClick={() => move(idx, -1)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30" title="Lên trên">
-                <ArrowUp size={14} />
-              </button>
-              <button type="button" disabled={disabled || idx === questions.length - 1} onClick={() => move(idx, 1)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30" title="Xuống dưới">
-                <ArrowDown size={14} />
-              </button>
-              <button type="button" disabled={disabled} onClick={() => remove(idx)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30" title="Xoá câu hỏi">
-                <Trash2 size={14} />
-              </button>
-            </div>
-            <textarea
-              className="input resize-none text-sm"
-              rows={2}
-              maxLength={500}
+      {questions.map((q, idx) => (
+        <div key={q.id} className="flex flex-col gap-3 rounded-xl bg-background p-3">
+          <div className="flex items-center gap-2">
+            <span className="w-6 shrink-0 text-sm font-medium tabular-nums text-muted">{idx + 1}.</span>
+            <Select
+              inline
+              size="sm"
+              aria-label={`Loại câu hỏi ${idx + 1}`}
+              value={q.type}
               disabled={disabled}
-              placeholder={q.type === 'RATING' ? 'VD: Bạn đánh giá chất lượng diễn giả thế nào?' : 'VD: Bạn muốn góp ý gì cho lần sau?'}
-              value={q.label}
-              onChange={(e) => update(idx, { label: e.target.value })}
+              onChange={(type) => update(idx, { type })}
+              options={Object.entries(QUESTION_TYPE_META).map(([value, m]) => ({ value, label: m.label }))}
             />
-            <label className="flex items-center gap-2 text-xs text-gray-600 select-none">
-              <input type="checkbox" className="rounded" disabled={disabled}
-                checked={q.required} onChange={(e) => update(idx, { required: e.target.checked })} />
-              Bắt buộc trả lời
-            </label>
+            <div className="flex-1" />
+            <IconButton icon={ArrowUp} label="Lên trên" disabled={disabled || idx === 0} onClick={() => move(idx, -1)} />
+            <IconButton icon={ArrowDown} label="Xuống dưới" disabled={disabled || idx === questions.length - 1} onClick={() => move(idx, 1)} />
+            <IconButton icon={Trash2} label="Xoá câu hỏi" danger disabled={disabled} onClick={() => remove(idx)} />
           </div>
-        );
-      })}
+          <Textarea
+            aria-label={`Nội dung câu hỏi ${idx + 1}`}
+            className="resize-none"
+            rows={2}
+            maxLength={500}
+            disabled={disabled}
+            placeholder={q.type === 'RATING' ? 'VD: Bạn đánh giá chất lượng diễn giả thế nào?' : 'VD: Bạn muốn góp ý gì cho lần sau?'}
+            value={q.label}
+            onChange={(e) => update(idx, { label: e.target.value })}
+          />
+          <Checkbox
+            small
+            label="Bắt buộc trả lời"
+            disabled={disabled}
+            checked={q.required}
+            onChange={(e) => update(idx, { required: e.target.checked })}
+          />
+        </div>
+      ))}
 
       {!disabled && (
-        <div className="flex gap-2 flex-wrap">
-          <button type="button" onClick={() => onChange([...questions, newQuestion('RATING')])} className="btn-secondary btn-sm">
-            <Plus size={14} /> <Star size={14} /> Câu đánh giá sao
-          </button>
-          <button type="button" onClick={() => onChange([...questions, newQuestion('TEXT')])} className="btn-secondary btn-sm">
-            <Plus size={14} /> <AlignLeft size={14} /> Câu trả lời văn bản
-          </button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" icon={Plus} onClick={() => onChange([...questions, newQuestion('RATING')])}>Câu đánh giá sao</Button>
+          <Button size="sm" icon={Plus} onClick={() => onChange([...questions, newQuestion('TEXT')])}>Câu trả lời văn bản</Button>
         </div>
       )}
     </div>

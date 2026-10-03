@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { useParams, Link, Navigate, useLocation } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { useParams, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Layout from '../../components/layout/Layout';
-import Spinner from '../../components/ui/Spinner';
+import { PageSpinner, Skeleton } from '../../components/ui/States';
 import FeedbackResponseForm from '../feedback/FeedbackResponseForm';
 
 // Trang gửi đánh giá sau sự kiện (/feedback/:eventId). BTC phát link này cho
@@ -14,22 +13,26 @@ export default function EventFeedback() {
   const { user, loading: authLoading } = useAuth();
   const [data, setData] = useState(null);
 
-  if (authLoading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="xl" /></div>;
+  if (authLoading) return <PageSpinner />;
   if (!user) return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
 
-  return (
-    <Layout>
-      <div className="bg-gradient-brand px-6 py-8">
-        <div className="max-w-2xl mx-auto">
-          <Link to="/my-attendance" className="inline-flex items-center gap-1 text-white/70 text-xs hover:text-white mb-2">
-            <ChevronLeft size={14} /> Lịch sử tham dự
-          </Link>
-          <h1 className="text-2xl font-bold text-white line-clamp-2">{data?.form.title || 'Đánh giá sự kiện'}</h1>
-          {data && <p className="text-white/60 text-sm mt-1">{data.event.name} · {data.event.location}</p>}
-        </div>
-      </div>
+  const title = data?.form.title || 'Đánh giá sự kiện';
+  // Tiêu đề form thường đã có tên sự kiện; khi đó dòng phụ chỉ còn địa điểm
+  const sub = data
+    ? [title.includes(data.event.name) ? null : data.event.name, data.event.location].filter(Boolean).join(' · ')
+    : '';
 
-      <div className="p-4 md:p-6 max-w-2xl mx-auto">
+  return (
+    <Layout parent={{ label: 'Lịch sử tham dự', to: '/my-attendance' }} activeNav="/my-attendance">
+      <header className="mb-6">
+        <h1 className="text-balance text-xl font-semibold text-foreground">{title}</h1>
+        {data ? (
+          sub && <p className="mt-2 max-w-[55ch] text-pretty text-sm/6 text-muted">{sub}</p>
+        ) : (
+          <Skeleton className="mt-3 h-3 w-48" />
+        )}
+      </header>
+      <div className="max-w-2xl">
         <FeedbackResponseForm eventId={eventId} onLoaded={setData} />
       </div>
     </Layout>

@@ -1,5 +1,5 @@
 import { Component } from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 // Catches render-time crashes anywhere in the tree so the user sees a
 // recoverable message instead of a silent blank white page.
@@ -26,21 +26,21 @@ export default class ErrorBoundary extends Component {
   render() {
     if (!this.state.hasError) return this.props.children;
 
+    // Trang lỗi đứng riêng: không dùng component nào có thể chính là chỗ vừa hỏng
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface px-6">
-        <div className="card max-w-md w-full p-8 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle size={28} className="text-red-500" />
-          </div>
-          <h1 className="text-lg font-bold text-gray-900">Đã xảy ra lỗi hiển thị</h1>
-          <p className="text-sm text-gray-500 mt-1.5">
+      <div className="min-h-screen bg-background px-4 pt-24 sm:pt-40">
+        <div className="mx-auto max-w-md text-center">
+          <h1 className="text-xl font-semibold text-foreground">Đã xảy ra lỗi hiển thị</h1>
+          <p className="mt-2 text-pretty text-sm/6 text-muted">
             Trang gặp sự cố không mong muốn. Vui lòng tải lại trang để tiếp tục.
           </p>
           <button
+            type="button"
             onClick={this.handleReload}
-            className="btn-primary btn-md mt-5 inline-flex items-center gap-2"
+            className="mt-6 inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground outline-none transition-colors hover:bg-primary-hover md:min-h-10"
           >
-            <RefreshCw size={15} /> Tải lại trang
+            <RefreshCw className="size-4" aria-hidden="true" />
+            Tải lại trang
           </button>
         </div>
       </div>

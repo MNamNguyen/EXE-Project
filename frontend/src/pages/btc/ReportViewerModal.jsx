@@ -1,8 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Download, Printer, RefreshCw, FileWarning, Share2, Copy, Link2Off, RotateCw } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useId } from 'react';
+import { Copy, Download, Link2Off, Printer, RefreshCw, RotateCw, Share2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { reportApi } from '../../services/api';
-import Spinner from '../../components/ui/Spinner';
+import { Dialog, useConfirm } from '../../components/ui/Modal';
+import Button, { IconButton } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { LoadError, Skeleton } from '../../components/ui/States';
+import { cx } from '../../utils/cx';
 
 // Xem báo cáo điểm danh ngay trên web thay vì phải tải file .html rồi mở tay.
 // Nội dung là CHÍNH bản HTML mà endpoint export trả về (?view=1), nên bản xem
@@ -16,6 +20,8 @@ import Spinner from '../../components/ui/Spinner';
 const SANDBOX = 'allow-same-origin allow-modals';
 
 export default function ReportViewerModal({ open, eventId, eventName, onClose }) {
+  const confirm = useConfirm();
+  const titleId = useId();
   const [html, setHtml] = useState('');
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -47,22 +53,6 @@ export default function ReportViewerModal({ open, eventId, eventName, onClose })
     }
   }, [open, eventId, load]);
 
-  // Khoá scroll trang nền giống components/ui/Modal.jsx
-  useEffect(() => {
-    if (open) document.body.style.overflow = 'hidden';
-    else document.body.style.overflow = '';
-    return () => { document.body.style.overflow = ''; };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   // Tải về từ HTML đã có sẵn trong state — không gọi lại server lần hai.
   const handleDownload = () => {
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
@@ -71,6 +61,15 @@ export default function ReportViewerModal({ open, eventId, eventName, onClose })
     a.download = `baocao-${eventName}.html`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const copyLink = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard bị chặn (http, hoặc người dùng từ chối) — link vẫn hiện ra
+      // trong ô bên dưới để copy tay, nên không báo lỗi ồn ào.
+    }
   };
 
   const runShare = (promise, successMsg) => {
@@ -85,17 +84,13 @@ export default function ReportViewerModal({ open, eventId, eventName, onClose })
       .finally(() => setShareBusy(false));
   };
 
-  const copyLink = async (url) => {
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      // Clipboard bị chặn (http, hoặc người dùng từ chối) — link vẫn hiện ra
-      // trong ô bên dưới để copy tay, nên không báo lỗi ồn ào.
-    }
-  };
-
-  const handleRevoke = () => {
-    if (!confirm('Thu hồi link? Người đã nhận link sẽ không xem được báo cáo nữa.')) return;
+  const handleRevoke = async () => {
+    if (!(await confirm({
+      title: 'Thu hồi link chia sẻ?',
+      body: 'Người đã nhận link sẽ không xem được báo cáo nữa.',
+      confirmLabel: 'Thu hồi link',
+      icon: Link2Off,
+    }))) return;
     setShareBusy(true);
     reportApi.revokeShare(eventId)
       .then(({ data }) => { setShare(data.data); toast.success('Đã thu hồi link chia sẻ'); })
@@ -112,100 +107,70 @@ export default function ReportViewerModal({ open, eventId, eventName, onClose })
     }
   };
 
+  const noReport = loading || failed || !html;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-5xl h-full sm:h-[92vh] bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl animate-slide-up flex flex-col overflow-hidden">
-        <div className="flex items-center gap-2 px-4 sm:px-6 py-3 border-b border-gray-100 flex-shrink-0">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-bold text-gray-900 truncate">Báo cáo điểm danh</h2>
-            <p className="text-xs text-gray-500 truncate">{eventName}</p>
-          </div>
-          <button onClick={load} disabled={loading} title="Làm mới số liệu"
-            className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50">
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <button onClick={() => setSharePanel((v) => !v)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-              share?.shared ? 'text-primary-700 bg-primary-50 hover:bg-primary-100' : 'text-gray-600 hover:bg-gray-100'
-            }`}>
-            <Share2 size={16} /> <span className="hidden sm:inline">{share?.shared ? 'Đang chia sẻ' : 'Chia sẻ'}</span>
-          </button>
-          <button onClick={handlePrint} disabled={loading || failed || !html}
-            className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50">
-            <Printer size={16} /> In / PDF
-          </button>
-          <button onClick={handleDownload} disabled={loading || failed || !html}
-            className="flex items-center gap-2 bg-primary-600 text-white font-medium px-3 py-2 rounded-xl text-sm hover:bg-primary-700 transition-colors disabled:opacity-50">
-            <Download size={16} /> <span className="hidden sm:inline">Tải file</span>
-          </button>
-          <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
-            <X size={20} />
-          </button>
+    <Dialog open={open} onClose={onClose} closeOnOverlay labelledBy={titleId} panelClassName="flex h-[calc(100dvh-2rem)] max-w-5xl flex-col overflow-hidden">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3 sm:px-6">
+        <div className="min-w-0 flex-1">
+          <h2 id={titleId} className="truncate text-lg font-semibold text-foreground">Báo cáo điểm danh</h2>
+          <p className="truncate text-xs text-muted">{eventName}</p>
         </div>
+        <IconButton icon={RefreshCw} label="Làm mới số liệu" size="size-9" disabled={loading} onClick={load}
+          iconClassName={cx('size-4 shrink-0', loading && 'animate-spin')} />
+        <Button size="hdr" icon={Share2} aria-expanded={sharePanel} aria-label="Chia sẻ" onClick={() => setSharePanel((v) => !v)}
+          className={cx(sharePanel && 'bg-button-hover')}>
+          <span className="hidden sm:inline">{share?.shared ? 'Đang chia sẻ' : 'Chia sẻ'}</span>
+        </Button>
+        <Button size="hdr" icon={Printer} disabled={noReport} onClick={handlePrint} className="hidden sm:inline-flex">In hoặc lưu PDF</Button>
+        <Button size="hdr" icon={Download} disabled={noReport} onClick={handleDownload} aria-label="Tải file">
+          <span className="hidden sm:inline">Tải file</span>
+        </Button>
+        <IconButton icon={X} label="Đóng" size="size-9" onClick={onClose} />
+      </header>
 
-        {sharePanel && (
-          <div className="px-4 sm:px-6 py-3 bg-primary-50/60 border-b border-primary-100 flex-shrink-0 space-y-2">
-            {share?.shared ? (
-              <>
-                <p className="text-xs text-gray-600">
-                  Ai có link này đều xem được báo cáo, không cần đăng nhập. Số liệu luôn là mới nhất.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input readOnly value={share.url} onFocus={(e) => e.target.select()}
-                    className="input flex-1 min-w-[220px] text-xs font-mono" />
-                  <button onClick={() => { copyLink(share.url); toast.success('Đã copy link'); }}
-                    className="flex items-center gap-1.5 bg-primary-600 text-white font-medium px-3 py-2 rounded-xl text-xs hover:bg-primary-700 transition-colors">
-                    <Copy size={14} /> Copy
-                  </button>
-                  <button onClick={() => runShare(reportApi.createShare(eventId, { rotate: true }), 'Đã cấp link mới')} disabled={shareBusy}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-gray-600 hover:bg-white transition-colors disabled:opacity-50">
-                    <RotateCw size={14} /> Link mới
-                  </button>
-                  <button onClick={handleRevoke} disabled={shareBusy}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
-                    <Link2Off size={14} /> Thu hồi
-                  </button>
+      {sharePanel && (
+        <div className="shrink-0 border-b border-border bg-background px-4 py-3 sm:px-6">
+          {share?.shared ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-pretty text-sm text-muted">
+                Ai có link này đều xem được báo cáo, không cần đăng nhập. Số liệu luôn là mới nhất.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input readOnly value={share.url} aria-label="Link chia sẻ" onFocus={(e) => e.target.select()} className="min-w-0 flex-1 font-mono md:text-xs" />
+                <div className="flex flex-wrap gap-2">
+                  <Button icon={Copy} onClick={() => { copyLink(share.url); toast.success('Đã copy link'); }}>Sao chép</Button>
+                  <Button icon={RotateCw} disabled={shareBusy} onClick={() => runShare(reportApi.createShare(eventId, { rotate: true }), 'Đã cấp link mới')}>Link mới</Button>
+                  <Button variant="danger" icon={Link2Off} disabled={shareBusy} onClick={handleRevoke}>Thu hồi</Button>
                 </div>
-              </>
-            ) : (
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-gray-600">
-                  Tạo link công khai để gửi báo cáo cho người không có tài khoản.
-                </p>
-                <button onClick={() => runShare(reportApi.createShare(eventId), 'Đã tạo link, đã copy vào clipboard')} disabled={shareBusy}
-                  className="flex items-center gap-1.5 bg-primary-600 text-white font-medium px-3 py-2 rounded-xl text-xs hover:bg-primary-700 transition-colors disabled:opacity-50">
-                  {shareBusy ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <Share2 size={14} />}
-                  Tạo link chia sẻ
-                </button>
               </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex-1 bg-[#F4F7FC] min-h-0">
-          {loading ? (
-            <div className="h-full flex flex-col items-center justify-center gap-3">
-              <Spinner size="lg" />
-              <p className="text-sm text-gray-500">Đang tạo báo cáo…</p>
-            </div>
-          ) : failed ? (
-            <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
-              <FileWarning size={40} className="text-gray-300" />
-              <p className="text-sm text-gray-500">Không tải được báo cáo.</p>
-              <button onClick={load} className="text-sm font-medium text-primary-600 hover:text-primary-700">Thử lại</button>
             </div>
           ) : (
-            <iframe
-              ref={frameRef}
-              title="Báo cáo điểm danh"
-              srcDoc={html}
-              sandbox={SANDBOX}
-              className="w-full h-full border-0"
-            />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-pretty text-sm text-muted">Tạo link công khai để gửi báo cáo cho người không có tài khoản.</p>
+              <Button variant="primary" icon={Share2} loading={shareBusy} onClick={() => runShare(reportApi.createShare(eventId), 'Đã tạo link, đã copy vào clipboard')} className="shrink-0">
+                Tạo link chia sẻ
+              </Button>
+            </div>
           )}
         </div>
+      )}
+
+      <div className="min-h-0 flex-1 bg-background">
+        {loading ? (
+          <div className="mx-auto max-w-3xl space-y-4 p-6">
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-3 w-1/3" />
+            <Skeleton className="h-24 w-full rounded-2xl" />
+            <Skeleton className="h-40 w-full rounded-2xl" />
+            <span className="sr-only" role="status">Đang tạo báo cáo</span>
+          </div>
+        ) : failed ? (
+          <LoadError title="Không tải được báo cáo." onRetry={load} className="h-full justify-center" />
+        ) : (
+          <iframe ref={frameRef} title="Báo cáo điểm danh" srcDoc={html} sandbox={SANDBOX} className="h-full w-full border-0" />
+        )}
       </div>
-    </div>
+    </Dialog>
   );
 }

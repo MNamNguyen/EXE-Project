@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { MessageSquareText, Lock, CheckCircle2, EyeOff } from 'lucide-react';
+import { CircleCheck, EyeOff } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { feedbackApi } from '../../services/api';
-import Spinner from '../../components/ui/Spinner';
-import StarRating, { RATING_LABELS } from '../../components/ui/StarRating';
+import Button from '../../components/ui/Button';
+import StarRating from '../../components/ui/StarRating';
+import { Textarea } from '../../components/ui/Input';
+import { Banner, Skeleton } from '../../components/ui/States';
+import { cx } from '../../utils/cx';
 
 // Form trả lời đánh giá, dùng ở 2 nơi: trang /feedback/:eventId và ngay dưới
 // thẻ "Check-out thành công" của trang quét mã (showTitle — trang đó không có
@@ -26,15 +29,18 @@ export default function FeedbackResponseForm({ eventId, showTitle = false, onLoa
       .catch((err) => setLoadError(err.response?.data?.message || 'Không tải được form đánh giá'));
   }, [eventId]); // eslint-disable-line
 
+  const box = cx('rounded-2xl bg-surface', showTitle ? 'p-5' : 'border border-border p-4 sm:p-5');
+
   if (loadError) {
+    return <div className={cx(box, 'text-center')}><p className="text-pretty py-4 text-sm text-muted">{loadError}</p></div>;
+  }
+  if (!data) {
     return (
-      <div className="card p-12 text-center">
-        <MessageSquareText size={44} className="text-gray-200 mx-auto mb-3" />
-        <p className="text-gray-500 text-sm">{loadError}</p>
+      <div className={cx(box, 'space-y-4')} aria-busy="true">
+        <Skeleton className="h-4 w-2/3" /><Skeleton className="h-10 w-1/2 rounded-xl" /><Skeleton className="h-4 w-1/2" />
       </div>
     );
   }
-  if (!data) return <div className="flex justify-center py-10"><Spinner size="lg" /></div>;
 
   const setAnswer = (id, value) => setAnswers((a) => ({ ...a, [id]: value }));
 
@@ -64,12 +70,12 @@ export default function FeedbackResponseForm({ eventId, showTitle = false, onLoa
   // Vừa gửi xong: thu gọn thành lời cảm ơn thay vì để nguyên form dài.
   if (justSent) {
     return (
-      <div className="card p-5 flex items-start gap-3 border-emerald-200 bg-emerald-50">
-        <CheckCircle2 size={22} className="text-emerald-600 flex-shrink-0 mt-0.5" />
-        <div className="text-left">
-          <p className="font-semibold text-emerald-800 text-sm">Cảm ơn bạn đã gửi đánh giá!</p>
-          <p className="text-xs text-emerald-700 mt-0.5">Bạn vẫn có thể sửa câu trả lời khi form còn mở.</p>
-          <button onClick={() => setJustSent(false)} className="text-xs font-semibold text-emerald-800 underline mt-2">
+      <div className="flex gap-3 rounded-2xl bg-success-bg p-4 text-left">
+        <CircleCheck className="mt-0.5 size-5 shrink-0 text-success" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-success">Cảm ơn bạn đã gửi đánh giá!</p>
+          <p className="mt-0.5 text-pretty text-sm text-foreground/80">Bạn vẫn có thể sửa câu trả lời khi form còn mở.</p>
+          <button type="button" onClick={() => setJustSent(false)} className="mt-2 text-sm font-medium text-foreground underline underline-offset-4 outline-none">
             Xem / sửa câu trả lời
           </button>
         </div>
@@ -77,83 +83,76 @@ export default function FeedbackResponseForm({ eventId, showTitle = false, onLoa
     );
   }
 
+  const questions = data.form.questions.map((q, i) => (
+    <fieldset key={q.id} id={`q-${q.id}`} className="flex flex-col gap-3 border-t border-border pt-5 first:border-0 first:pt-0">
+      <legend className="text-pretty text-sm font-medium text-foreground">
+        {i + 1}. {q.label}
+        {q.required && <span aria-hidden="true" className="text-error-text"> *</span>}
+      </legend>
+      {q.type === 'RATING' ? (
+        <StarRating
+          value={answers[q.id] || 0}
+          onChange={data.canSubmit ? (v) => setAnswer(q.id, v) : undefined}
+          size={28}
+        />
+      ) : (
+        <Textarea
+          rows={3}
+          maxLength={2000}
+          className="resize-y"
+          aria-label={q.label}
+          disabled={!data.canSubmit}
+          placeholder="Nhập câu trả lời của bạn..."
+          value={answers[q.id] || ''}
+          onChange={(e) => setAnswer(q.id, e.target.value)}
+        />
+      )}
+    </fieldset>
+  ));
+
   return (
-    <div className="space-y-3 text-left">
-      {showTitle && (
-        <div className="flex items-center gap-2.5 pt-2">
-          <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center flex-shrink-0">
-            <MessageSquareText size={18} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-gray-400">Đánh giá sự kiện</p>
-            <p className="text-sm font-bold text-gray-900">{data.form.title}</p>
-          </div>
-        </div>
-      )}
-
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-left">
       {data.myResponse && (
-        <div className="card p-4 flex items-start gap-3">
-          <CheckCircle2 size={20} className="text-emerald-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-gray-600">
-            Bạn đã gửi đánh giá lúc {format(new Date(data.myResponse.updatedAt), 'HH:mm dd/MM/yyyy')}.
-            {data.canSubmit && ' Bạn có thể sửa và gửi lại.'}
-          </p>
-        </div>
+        <Banner tone="info" compact>
+          Bạn đã gửi đánh giá lúc {format(new Date(data.myResponse.updatedAt), 'HH:mm dd/MM/yyyy')}.
+          {data.canSubmit && ' Bạn có thể sửa và gửi lại.'}
+        </Banner>
       )}
+      {!data.canSubmit && <Banner tone="warning" compact>{data.reasonMessage}</Banner>}
 
-      {!data.canSubmit && (
-        <div className="card p-4 flex items-start gap-3 border-amber-200 bg-amber-50">
-          <Lock size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-800">{data.reasonMessage}</p>
-        </div>
-      )}
-
-      {data.form.description && (
-        <p className="text-sm text-gray-600 whitespace-pre-line">{data.form.description}</p>
-      )}
-      {data.form.isAnonymous && (
-        <p className="flex items-center gap-1.5 text-xs text-violet-700">
-          <EyeOff size={13} /> Form ẩn danh — Ban tổ chức không biết ai đã trả lời gì.
-        </p>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-3">
-        {data.form.questions.map((q, i) => (
-          <div key={q.id} id={`q-${q.id}`} className="card p-4">
-            <p className="text-sm font-medium text-gray-900">
-              {i + 1}. {q.label}
-              {q.required && <span className="text-red-500 ml-0.5">*</span>}
-            </p>
-            {q.type === 'RATING' ? (
-              <div className="mt-3 flex items-center gap-3 flex-wrap">
-                <StarRating
-                  value={answers[q.id] || 0}
-                  onChange={data.canSubmit ? (v) => setAnswer(q.id, v) : undefined}
-                  size={30}
-                />
-                <span className="text-sm text-gray-500">{RATING_LABELS[answers[q.id]] || ''}</span>
-              </div>
-            ) : (
-              <textarea
-                className="input resize-y text-sm mt-3"
-                rows={3}
-                maxLength={2000}
-                disabled={!data.canSubmit}
-                placeholder="Nhập câu trả lời của bạn..."
-                value={answers[q.id] || ''}
-                onChange={(e) => setAnswer(q.id, e.target.value)}
-              />
-            )}
+      <section className={box}>
+        {showTitle && (
+          <div className="mb-5">
+            <h2 className="text-base font-semibold text-foreground">Đánh giá sự kiện</h2>
+            <p className="mt-1 text-pretty text-sm text-muted">{data.form.title}</p>
           </div>
-        ))}
-
-        {data.canSubmit && (
-          <button type="submit" disabled={submitting} className="btn-primary btn-lg btn-full">
-            {submitting ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-            {data.myResponse ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}
-          </button>
         )}
-      </form>
-    </div>
+        {data.form.description && (
+          <p className="mb-5 whitespace-pre-line text-pretty text-sm text-muted">{data.form.description}</p>
+        )}
+        {data.form.isAnonymous && (
+          <p className="mb-5 flex gap-2 text-pretty text-sm text-muted">
+            <EyeOff className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            Form ẩn danh: Ban tổ chức không biết ai đã trả lời gì.
+          </p>
+        )}
+        <div className="flex flex-col gap-5">{questions}</div>
+        {showTitle && data.canSubmit && (
+          <div className="mt-5">
+            <Button type="submit" variant="primary" size="auth" loading={submitting} className="w-full">
+              {data.myResponse ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {!showTitle && data.canSubmit && (
+        <div className="flex justify-end">
+          <Button type="submit" variant="primary" size="form" loading={submitting} className="w-full sm:w-auto">
+            {data.myResponse ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}
+          </Button>
+        </div>
+      )}
+    </form>
   );
 }

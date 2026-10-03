@@ -1,26 +1,41 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, Search, UserPlus, UserMinus, Check, X, ChevronLeft, ChevronRight,
-  CalendarPlus, QrCode, Users, Clock, MapPin, AlertCircle, GraduationCap,
-} from 'lucide-react';
+import { CalendarPlus, Ellipsis, Pencil, QrCode, Trash2, UserMinus, UserPlus } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { classApi } from '../../services/api';
 import Layout from '../../components/layout/Layout';
-import Spinner from '../../components/ui/Spinner';
+import Button, { OutlineIconButton } from '../../components/ui/Button';
+import { PhaseBadge } from '../../components/ui/Badge';
+import Modal, { useConfirm } from '../../components/ui/Modal';
+import Tabs from '../../components/ui/Tabs';
+import Pagination from '../../components/ui/Pagination';
+import Dropdown, { MenuGroup, MenuItem, MenuSeparator } from '../../components/ui/Dropdown';
+import { Card, TableCard, Th } from '../../components/ui/Card';
+import { SearchInput } from '../../components/ui/Input';
+import { Checkbox, CheckCell } from '../../components/ui/Choice';
+import { EmptyText, Skeleton, SkeletonRows } from '../../components/ui/States';
+import { isGateOpen } from '../../utils/eventStatus';
+import { cx } from '../../utils/cx';
 import SessionCreateModal from './SessionCreateModal';
+import { ClassFormModal } from './ClassManagement';
 
 const PAGE_SIZE = 20;
 
 export default function ClassDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
 
   const [cls, setCls] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [tab, setTab] = useState('members'); // 'members' | 'sessions'
+  const [sessionCount, setSessionCount] = useState(undefined);
+  const [createModal, setCreateModal] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [form, setForm] = useState({ name: '', description: '' });
+  const [saving, setSaving] = useState(false);
 
   const loadClass = useCallback(() => {
     classApi.get(id)
@@ -31,72 +46,132 @@ export default function ClassDetail() {
 
   useEffect(() => { loadClass(); }, [loadClass]);
 
-  if (loading) return <Layout><div className="flex justify-center py-20"><Spinner size="xl" /></div></Layout>;
+  const handleCreated = (event) => {
+    setCreateModal(false);
+    toast.success('Đã tạo buổi điểm danh, đang mở màn hình QR...');
+    navigate(`/events/${event.id}/qr`);
+  };
 
-  if (notFound || !cls) {
-    return (
-      <Layout>
-        <div className="p-8 max-w-lg mx-auto text-center">
-          <AlertCircle size={36} className="text-red-400 mx-auto mb-3" />
-          <p className="font-semibold text-gray-700">Không tìm thấy lớp</p>
-          <Link to="/classes" className="btn-secondary btn-sm mt-4 inline-flex">
-            <ArrowLeft size={14} /> Quay lại danh sách lớp
-          </Link>
-        </div>
-      </Layout>
+  const openEdit = () => { setForm({ name: cls.name, description: cls.description || '' }); setEditOpen(true); };
+
+  const handleEdit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) return toast.error('Vui lòng nhập tên lớp');
+    setSaving(true);
+    try {
+      await classApi.update(cls.id, form);
+      toast.success('Đã cập nhật lớp');
+      setEditOpen(false);
+      loadClass();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Thao tác thất bại');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!(await confirm({
+      title: 'Xoá lớp?',
+      body: <>Lớp <span className="font-medium text-foreground">{cls.name}</span> sẽ bị xoá.</>,
+      confirmLabel: 'Xoá lớp',
+    }))) return;
+    try {
+      await classApi.remove(cls.id);
+      toast.success('Đã xoá lớp');
+      navigate('/classes');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Xoá thất bại');
+    }
+  };
+
+  const shell = (content) => <Layout parent={{ label: 'Lớp học', to: '/classes' }} activeNav="/classes">{content}</Layout>;
+
+  if (loading) {
+    return shell(
+      <div aria-busy="true">
+        <div className="mb-6 space-y-3"><Skeleton className="h-6 w-40" /><Skeleton className="h-4 w-64" /></div>
+        <TableCard><SkeletonRows rows={6} /></TableCard>
+      </div>,
     );
   }
 
-  return (
-    <Layout>
-      <div className="bg-gradient-brand px-6 py-8">
-        <div className="max-w-5xl mx-auto">
-          <button onClick={() => navigate('/classes')} className="flex items-center gap-2 text-white/70 hover:text-white text-sm mb-4 transition-colors">
-            <ArrowLeft size={16} /> Quay lại
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center flex-shrink-0">
-              <GraduationCap size={22} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">{cls.name}</h1>
-              {cls.description && <p className="text-white/70 text-sm mt-0.5">{cls.description}</p>}
-            </div>
-          </div>
-          <p className="text-white/70 text-sm mt-3 flex items-center gap-1.5">
-            <Users size={13} /> {cls.memberCount} thành viên
+  if (notFound || !cls) {
+    return shell(
+      <div className="mx-auto max-w-md pb-16 pt-16 text-center sm:pt-24">
+        <p className="text-sm font-medium tabular-nums text-muted">404</p>
+        <h1 className="mt-1 text-xl font-semibold text-foreground">Không tìm thấy lớp</h1>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Button as={Link} to="/classes" variant="primary" size="form">Quay lại danh sách lớp</Button>
+        </div>
+      </div>,
+    );
+  }
+
+  return shell(
+    <>
+      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-balance text-lg font-semibold text-foreground">{cls.name}</h1>
+          <p className="mt-2 max-w-[55ch] text-pretty text-sm/6 text-muted">
+            {[cls.description, `${cls.memberCount} thành viên`].filter(Boolean).join(' · ')}
           </p>
         </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-4">
-        <div className="inline-flex rounded-xl bg-surface border border-border p-1 gap-1">
-          <TabButton active={tab === 'members'} onClick={() => setTab('members')} icon={Users}>Thành viên</TabButton>
-          <TabButton active={tab === 'sessions'} onClick={() => setTab('sessions')} icon={QrCode}>Buổi điểm danh</TabButton>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button variant="primary" icon={CalendarPlus} onClick={() => setCreateModal(true)}>Tạo buổi điểm danh</Button>
+          <Dropdown align="end" ariaLabel="Thêm thao tác" trigger={<OutlineIconButton icon={Ellipsis} label="Thêm thao tác" />}>
+            <MenuGroup><MenuItem icon={Pencil} onSelect={openEdit}>Sửa lớp</MenuItem></MenuGroup>
+            <MenuSeparator />
+            <MenuGroup><MenuItem icon={Trash2} danger onSelect={handleDelete}>Xoá lớp</MenuItem></MenuGroup>
+          </Dropdown>
         </div>
+      </header>
 
-        {tab === 'members'
-          ? <MembersTab classId={id} className={cls.name} onChanged={loadClass} />
-          : <SessionsTab classId={id} className={cls.name} />}
+      <div className="mb-4">
+        <Tabs
+          variant="underline"
+          ariaLabel="Nội dung lớp"
+          value={tab}
+          onChange={setTab}
+          items={[
+            { value: 'members', label: 'Thành viên', count: cls.memberCount },
+            { value: 'sessions', label: 'Buổi điểm danh', count: sessionCount },
+          ]}
+        />
       </div>
-    </Layout>
-  );
-}
 
-function TabButton({ active, onClick, icon: Icon, children }) {
-  return (
-    <button onClick={onClick} className={`
-      flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all
-      ${active ? 'bg-white shadow-sm text-primary-700' : 'text-gray-500 hover:text-gray-700'}
-    `}>
-      <Icon size={15} /> {children}
-    </button>
+      <div hidden={tab !== 'members'}>
+        <MembersTab classId={id} className={cls.name} onChanged={loadClass} />
+      </div>
+      <div hidden={tab !== 'sessions'}>
+        <SessionsTab classId={id} onCount={setSessionCount} />
+      </div>
+
+      <SessionCreateModal
+        open={createModal}
+        classId={id}
+        className={cls.name}
+        onClose={() => setCreateModal(false)}
+        onCreated={handleCreated}
+      />
+
+      <ClassFormModal
+        open={editOpen}
+        mode="edit"
+        form={form}
+        setForm={setForm}
+        saving={saving}
+        onClose={() => setEditOpen(false)}
+        onSubmit={handleEdit}
+      />
+    </>,
   );
 }
 
 /* ═══════════════════════════ Thành viên ═══════════════════════════ */
 
 function MembersTab({ classId, className, onChanged }) {
+  const confirm = useConfirm();
   const [members, setMembers] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -133,10 +208,25 @@ function MembersTab({ classId, className, onChanged }) {
     return next;
   });
 
+  // Chọn tất cả: chỉ các dòng của trang đang xem
+  const allOnPage = members.length > 0 && members.every((m) => selected[m.id]);
+  const someOnPage = members.some((m) => selected[m.id]);
+  const toggleAll = () => setSelected((prev) => {
+    const next = { ...prev };
+    if (allOnPage) members.forEach((m) => delete next[m.id]);
+    else members.forEach((m) => { next[m.id] = m; });
+    return next;
+  });
+
   const handleBulkRemove = async () => {
     const ids = Object.keys(selected);
     if (ids.length === 0) return;
-    if (!confirm(`Gỡ ${ids.length} người khỏi lớp ${className}?`)) return;
+    if (!(await confirm({
+      title: `Gỡ ${ids.length} người khỏi lớp?`,
+      body: <>{ids.length} người sẽ bị gỡ khỏi lớp <span className="font-medium text-foreground">{className}</span>.</>,
+      confirmLabel: `Gỡ ${ids.length} người`,
+      icon: UserMinus,
+    }))) return;
     setRemoving(true);
     try {
       const { data } = await classApi.removeMembers(classId, ids);
@@ -152,7 +242,7 @@ function MembersTab({ classId, className, onChanged }) {
     }
   };
 
-  // Panel thêm thành viên — chạy lại tìm kiếm mỗi khi đổi từ khoá hoặc bật/tắt lọc.
+  // Hộp thêm thành viên — chạy lại tìm kiếm mỗi khi đổi từ khoá hoặc bật/tắt lọc.
   const runSearch = useCallback((q, unassigned) => {
     if (!unassigned && !q.trim()) { setResults([]); return; }
     setSearching(true);
@@ -210,229 +300,162 @@ function MembersTab({ classId, className, onChanged }) {
   const selectedCount = Object.keys(selected).length;
   const resultSelectedCount = Object.keys(resultSelected).length;
 
-  if (adding) {
-    return (
-      <div className="card p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-gray-700">Thêm thành viên vào lớp {className}</p>
-          <button onClick={() => setAdding(false)} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
-            <X size={13} /> Đóng
-          </button>
-        </div>
-
-        <label className="flex items-center gap-2.5 cursor-pointer bg-primary-50 rounded-xl p-3">
-          <input type="checkbox" className="w-4 h-4 rounded accent-primary-600"
-            checked={unassignedOnly} onChange={toggleUnassignedOnly} />
-          <div>
-            <p className="text-sm font-medium text-gray-700">Chỉ hiện người chưa có lớp</p>
-            <p className="text-xs text-gray-400">Đúng nhóm hay bị thiếu thông tin lớp — không cần gõ tên, hiện luôn danh sách</p>
-          </div>
-        </label>
-
-        <div className="relative">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input className="input pl-10 text-sm" placeholder="Tìm theo tên, MSSV, email..."
-            value={query} onChange={(e) => handleQueryChange(e.target.value)} autoFocus />
-        </div>
-
-        <div className="border border-border rounded-xl max-h-80 overflow-y-auto">
-          {searching ? (
-            <div className="flex justify-center py-8"><Spinner size="md" /></div>
-          ) : results.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">
-              {unassignedOnly ? 'Không còn ai thiếu thông tin lớp' : query.trim() ? 'Không tìm thấy' : 'Nhập từ khoá hoặc bật lọc ở trên'}
-            </div>
-          ) : (
-            results.map((u) => {
-              const isSel = !!resultSelected[u.id];
-              return (
-                <button key={u.id} type="button" onClick={() => toggleResult(u)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left border-b border-border last:border-0 transition-colors ${isSel ? 'bg-primary-50' : 'hover:bg-gray-50'}`}>
-                  <CheckBox checked={isSel} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {u.mssv || u.email} {u.class ? <span className="text-amber-600">· đang ở lớp {u.class}</span> : <span className="text-gray-300">· chưa có lớp</span>}
-                    </p>
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        <div className="flex gap-3">
-          <button type="button" onClick={() => setAdding(false)} className="btn-secondary btn-md flex-1">Huỷ</button>
-          <button type="button" onClick={handleAddSelected} disabled={savingAdd || resultSelectedCount === 0} className="btn-primary btn-md flex-1">
-            {savingAdd ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-            Thêm {resultSelectedCount > 0 ? `(${resultSelectedCount})` : ''}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input className="input pl-10 text-sm" placeholder="Tìm trong lớp..."
-            value={search} onChange={(e) => handleSearch(e.target.value)} />
-        </div>
-        <div className="flex gap-2">
-          {selectedCount > 0 && (
-            <button onClick={handleBulkRemove} disabled={removing} className="btn-danger btn-md flex-1 sm:flex-none">
-              {removing ? <Spinner size="sm" className="border-white/30 border-t-white" /> : <UserMinus size={16} />}
-              Gỡ ({selectedCount})
-            </button>
-          )}
-          <button onClick={openAddPanel} className="btn-primary btn-md flex-1 sm:flex-none">
-            <UserPlus size={16} /> Thêm thành viên
-          </button>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-12"><Spinner size="lg" /></div>
-      ) : members.length === 0 ? (
-        <div className="card p-10 text-center text-gray-400 text-sm">
-          {search ? 'Không tìm thấy thành viên phù hợp' : 'Lớp chưa có thành viên nào — bấm "Thêm thành viên" để bắt đầu'}
+    <>
+      {selectedCount > 0 ? (
+        <div className="mb-4 flex min-h-10 flex-wrap items-center gap-2">
+          <p className="mr-2 text-sm font-medium text-foreground">{selectedCount} đã chọn</p>
+          <Button variant="ghost" size="sm" onClick={() => setSelected({})}>Bỏ chọn</Button>
+          <div className="ml-auto">
+            <Button variant="danger" icon={UserMinus} loading={removing} onClick={handleBulkRemove}>Gỡ khỏi lớp</Button>
+          </div>
         </div>
       ) : (
-        <div className="table-container">
-          <table className="table">
-            <thead>
-              <tr>
-                <th className="w-8"></th>
-                <th>Sinh viên</th>
-                <th>MSSV</th>
-                <th>Email</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((m) => {
-                const isSel = !!selected[m.id];
-                return (
-                  <tr key={m.id} onClick={() => toggleRow(m)} className="cursor-pointer">
-                    <td><CheckBox checked={isSel} /></td>
-                    <td className="font-medium text-gray-900">{m.name}</td>
-                    <td className="text-gray-600">{m.mssv || '—'}</td>
-                    <td className="text-gray-400">{m.email}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <SearchInput className="w-full sm:w-64" placeholder="Tìm trong lớp" value={search} onChange={(e) => handleSearch(e.target.value)} />
+          <Button icon={UserPlus} onClick={openAddPanel}>Thêm thành viên</Button>
         </div>
       )}
 
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-xs text-gray-400">{total} thành viên</p>
-        {totalPages > 1 && (
-          <div className="flex items-center gap-1">
-            <button onClick={() => goToPage(page - 1)} disabled={page <= 1}
-              className="p-1.5 rounded-lg border border-border text-gray-400 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-              <ChevronLeft size={15} />
-            </button>
-            <span className="text-xs text-gray-500 px-2">{page} / {totalPages}</span>
-            <button onClick={() => goToPage(page + 1)} disabled={page >= totalPages}
-              className="p-1.5 rounded-lg border border-border text-gray-400 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-              <ChevronRight size={15} />
-            </button>
-          </div>
+      <TableCard>
+        {loading ? (
+          <SkeletonRows rows={6} />
+        ) : members.length === 0 ? (
+          <EmptyText className="py-10">
+            {search ? 'Không tìm thấy thành viên phù hợp' : 'Lớp chưa có thành viên nào — bấm "Thêm thành viên" để bắt đầu'}
+          </EmptyText>
+        ) : (
+          <>
+            <table className="w-full text-sm">
+              <thead className="border-b border-border">
+                <tr>
+                  <CheckCell as="th" checked={allOnPage} indeterminate={!allOnPage && someOnPage} onChange={toggleAll} ariaLabel="Chọn tất cả" />
+                  <Th>Sinh viên</Th>
+                  <Th>MSSV</Th>
+                  <Th className="hidden w-full md:table-cell">Email</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((m) => {
+                  const isSel = !!selected[m.id];
+                  return (
+                    <tr key={m.id} className={cx('border-b border-border last:border-0 hover:bg-surface-hover', isSel && 'bg-surface-hover')}>
+                      <CheckCell checked={isSel} onChange={() => toggleRow(m)} ariaLabel={`Chọn ${m.name}`} />
+                      <td className="whitespace-nowrap px-4 py-3"><p className="font-medium text-foreground">{m.name}</p></td>
+                      <td className={cx('whitespace-nowrap px-4 py-3 tabular-nums', m.mssv ? 'text-foreground' : 'text-muted')}>{m.mssv || '—'}</td>
+                      <td className="hidden max-w-0 px-4 py-3 md:table-cell"><p className="truncate text-muted">{m.email}</p></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <Pagination page={page} pages={totalPages} total={total} pageSize={PAGE_SIZE} noun="thành viên" onPageChange={goToPage} />
+          </>
         )}
-      </div>
-    </div>
-  );
-}
+      </TableCard>
 
-function CheckBox({ checked }) {
-  return (
-    <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border ${checked ? 'bg-primary-600 border-primary-600' : 'border-gray-300'}`}>
-      {checked && <Check size={13} className="text-white" />}
-    </div>
+      <Modal
+        open={adding}
+        onClose={() => setAdding(false)}
+        title={`Thêm thành viên vào lớp ${className}`}
+        size="lg"
+        footer={(
+          <>
+            <Button variant="secondary" size="form" onClick={() => setAdding(false)}>Huỷ</Button>
+            <Button variant="primary" size="form" loading={savingAdd} disabled={resultSelectedCount === 0} onClick={handleAddSelected}>
+              Thêm{resultSelectedCount > 0 ? ` ${resultSelectedCount} người` : ''}
+            </Button>
+          </>
+        )}
+      >
+        <div className="flex flex-col gap-4">
+          <Checkbox
+            label="Chỉ hiện người chưa có lớp"
+            desc="Đúng nhóm hay bị thiếu thông tin lớp — không cần gõ tên, hiện luôn danh sách"
+            checked={unassignedOnly}
+            onChange={toggleUnassignedOnly}
+          />
+          <SearchInput autoFocus placeholder="Tìm theo tên, MSSV, email…" value={query} onChange={(e) => handleQueryChange(e.target.value)} />
+          <div className="max-h-80 overflow-y-auto">
+            {searching ? (
+              <SkeletonRows rows={3} avatar={false} right={false} />
+            ) : results.length === 0 ? (
+              <EmptyText>
+                {unassignedOnly ? 'Không còn ai thiếu thông tin lớp' : query.trim() ? 'Không tìm thấy' : 'Nhập từ khoá hoặc bật lọc ở trên'}
+              </EmptyText>
+            ) : (
+              <ul className="flex flex-col gap-0.5">
+                {results.map((u) => {
+                  const isSel = !!resultSelected[u.id];
+                  return (
+                    <li key={u.id}>
+                      <label className={cx('flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5', isSel ? 'bg-secondary' : 'hover:bg-item-hover')}>
+                        <Checkbox small checked={isSel} onChange={() => toggleResult(u)} ariaLabel={`Chọn ${u.name}`} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-foreground">{u.name}</span>
+                          <span className="block truncate text-xs text-muted">
+                            {u.mssv || u.email}
+                            {u.class ? <span className="font-medium text-warning"> · đang ở lớp {u.class}</span> : ' · chưa có lớp'}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }
 
 /* ═══════════════════════════ Buổi điểm danh ═══════════════════════════ */
 
-function SessionsTab({ classId, className }) {
+function SessionsTab({ classId, onCount }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [createModal, setCreateModal] = useState(false);
-  const navigate = useNavigate();
 
   const load = useCallback(() => {
     setLoading(true);
     classApi.listSessions(classId)
-      .then(({ data }) => setSessions(data.data || []))
+      .then(({ data }) => { setSessions(data.data || []); onCount?.((data.data || []).length); })
       .catch(() => toast.error('Tải danh sách buổi điểm danh thất bại'))
       .finally(() => setLoading(false));
-  }, [classId]);
+  }, [classId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
-  const handleCreated = (event) => {
-    setCreateModal(false);
-    toast.success('Đã tạo buổi điểm danh, đang mở màn hình QR...');
-    navigate(`/events/${event.id}/qr`);
-  };
-
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <button onClick={() => setCreateModal(true)} className="btn-primary btn-md">
-          <CalendarPlus size={16} /> Tạo buổi điểm danh mới
-        </button>
-      </div>
-
+    <Card flush>
       {loading ? (
-        <div className="flex justify-center py-12"><Spinner size="lg" /></div>
+        <SkeletonRows rows={4} />
       ) : sessions.length === 0 ? (
-        <div className="card p-10 text-center text-gray-400 text-sm">
-          Chưa có buổi điểm danh nào cho lớp này
-        </div>
+        <EmptyText>Chưa có buổi điểm danh nào cho lớp này</EmptyText>
       ) : (
-        <div className="space-y-2.5">
+        <ul className="flex flex-col gap-0.5">
           {sessions.map((s) => (
-            <Link key={s.id} to={`/events/${s.id}`}
-              className="card p-4 flex items-center gap-4 hover:shadow-card-hover transition-all group">
-              <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center flex-shrink-0">
-                <QrCode size={18} className="text-primary-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-gray-900 text-sm truncate">{s.name}</p>
-                  {s.gate?.checkin?.open && (
-                    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase">
-                      Đang mở
-                    </span>
-                  )}
+            <li key={s.id}>
+              <Link to={`/events/${s.id}`} className="group flex items-center gap-3 rounded-xl px-3 py-2.5 outline-none hover:bg-item-hover">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-background text-muted group-hover:bg-surface">
+                  <QrCode className="size-4" aria-hidden="true" />
                 </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                  <span className="text-xs text-gray-400 flex items-center gap-1"><MapPin size={11} /> {s.location}</span>
-                  <span className="text-xs text-gray-400 flex items-center gap-1">
-                    <Clock size={11} /> {s.checkinOpen ? format(new Date(s.checkinOpen), 'HH:mm dd/MM/yyyy') : 'Điểm danh thủ công'}
-                  </span>
-                  <span className="text-xs text-gray-400 flex items-center gap-1">
-                    <Users size={11} /> {s._count?.attendances ?? 0} / {s._count?.eventMembers ?? 0} đã điểm danh
-                  </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">{s.name}</p>
+                  <p className="mt-1 truncate text-xs text-muted">
+                    {s.checkinOpen ? format(new Date(s.checkinOpen), 'HH:mm dd/MM/yyyy') : 'Điểm danh thủ công'} · {s.location}
+                  </p>
                 </div>
-              </div>
-              <ChevronRight size={16} className="text-gray-300 group-hover:text-primary-500 transition-colors flex-shrink-0" />
-            </Link>
+                {isGateOpen(s) && <span className="hidden sm:inline-flex"><PhaseBadge phase="live" /></span>}
+                <span className="shrink-0 text-sm tabular-nums text-muted">
+                  {s._count?.attendances ?? 0} / {s._count?.eventMembers ?? 0}
+                </span>
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-
-      <SessionCreateModal
-        open={createModal}
-        classId={classId}
-        className={className}
-        onClose={() => setCreateModal(false)}
-        onCreated={handleCreated}
-      />
-    </div>
+    </Card>
   );
 }
