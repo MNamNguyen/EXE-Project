@@ -27,19 +27,19 @@ END $$;
 
 -- AUTO = theo khung giờ đã đặt (chưa đặt đủ giờ thì coi là ĐÓNG cho tới khi
 -- BTC bấm mở tay); OPEN/CLOSED = BTC chủ động mở/đóng, bỏ qua khung giờ.
-DO $ BEGIN
+DO $$ BEGIN
   CREATE TYPE "GateState" AS ENUM ('AUTO', 'OPEN', 'CLOSED');
 EXCEPTION
   WHEN duplicate_object THEN NULL;
-END $;
+END $$;
 
 -- STANDARD = QR màn chiếu, người tham dự tự quét; INVITATION = khách ngoài nhận
 -- thiệp mời có QR riêng, BTC/tình nguyện viên quét thiệp. Chọn lúc tạo, không đổi.
-DO $ BEGIN
+DO $$ BEGIN
   CREATE TYPE "EventKind" AS ENUM ('STANDARD', 'INVITATION');
 EXCEPTION
   WHEN duplicate_object THEN NULL;
-END $;
+END $$;
 
 -- ============================================================
 -- BƯỚC 3: Tạo các bảng
