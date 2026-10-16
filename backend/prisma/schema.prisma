@@ -67,9 +67,12 @@ enum GateState {
 // INVITATION — khách ngoài (không tài khoản) nhận thiệp mời có QR riêng, BTC/tình
 //              nguyện viên quét thiệp để check-in.
 //              Xem docs/superpowers/specs/2026-10-16-invitation-event-design.md
+// PUBLIC     — sự kiện mở: QR cố định trên màn chiếu, người ghé thăm tự quét và điền
+//              form BTC dựng. Xem docs/superpowers/specs/2026-10-16-public-checkin-design.md
 enum EventKind {
   STANDARD
   INVITATION
+  PUBLIC
 }
 
 model Event {
@@ -111,6 +114,8 @@ model Event {
   // Cột DB thay vì HMAC vì phải thu hồi được — giống reportShareToken.
   scannerToken      String?   @unique
   scannerSharedAt   DateTime?
+  // Form check-in của sự kiện PUBLIC: { fields: [...], thankYou } — xem lib/publicForm.js.
+  publicForm        Json?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -124,6 +129,7 @@ model Event {
   certificateTemplate EventCertificateTemplate?
   certificates        Certificate[]
   guests              EventGuest[]
+  guestKeys           EventGuestKey[]
   invitationTemplate  EventInvitationTemplate?
 
   @@index([createdById])
@@ -422,10 +428,13 @@ model EventGuest {
   checkedInAt  DateTime?
   // Tên hiển thị người quét ("Nguyễn A" hoặc "Link quét") — chỉ để tra lại, không phải khoá ngoại.
   checkedInBy  String?
+  // Sự kiện PUBLIC: câu trả lời form check-in { fieldId: string | string[] }.
+  answers      Json?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  keys  EventGuestKey[]
 
   // Email trùng trong cùng sự kiện là nhập trùng; Postgres cho nhiều NULL nên khách
   // không có email không vướng ràng buộc này.
@@ -433,6 +442,23 @@ model EventGuest {
   @@index([eventId])
   @@index([eventId, checkedInAt])
   @@map("attendance_event_guests")
+}
+
+// Khoá chống trùng của check-in công khai: key = "fieldId:giá trị đã chuẩn hoá" của
+// các trường BTC tick "chống trùng". Unique theo sự kiện nên hai người gửi cùng SĐT cùng
+// lúc thì một bên bị chặn ngay ở DB (P2002), không cần khoá ứng dụng.
+model EventGuestKey {
+  id      String @id @default(cuid())
+  eventId String
+  guestId String
+  key     String
+
+  event Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest EventGuest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, key])
+  @@index([guestId])
+  @@map("attendance_event_guest_keys")
 }
 
 // Mẫu thiệp mời của MỘT sự kiện — cùng cách lưu với EventCertificateTemplate (ảnh

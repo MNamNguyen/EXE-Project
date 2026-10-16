@@ -25,6 +25,7 @@ import MyCertificates from './pages/student/MyCertificates';
 import GuestScanPage from './pages/btc/GuestScanPage';
 import VolunteerScan from './pages/public/VolunteerScan';
 import InvitationView from './pages/public/InvitationView';
+import PublicCheckin from './pages/public/checkin/PublicCheckin';
 
 function RequireAuth({ children, roles }) {
   const { user, loading } = useAuth();
@@ -72,6 +73,8 @@ export default function App() {
       {/* Sự kiện thiệp mời — công khai: khách xem thiệp của mình, tình nguyện viên quét qua link BTC phát */}
       <Route path="/thiep/:code" element={<InvitationView />} />
       <Route path="/quet/:token" element={<VolunteerScan />} />
+      {/* Check-in công khai — người ghé thăm quét QR cố định trên màn chiếu, không cần tài khoản */}
+      <Route path="/check-in/:id" element={<PublicCheckin />} />
 
       {/* QR Scan — accessible but requires login (redirects to login if needed) */}
       <Route path="/scan" element={<ScanLanding />} />

@@ -8,6 +8,7 @@ const {
 const { issueScanTicket } = require('../controllers/checkin.controller');
 // Báo cáo được BTC chia sẻ bằng link công khai: người xem không có tài khoản.
 const { getSharedReport } = require('../controllers/report.controller');
+const { getPublicCheckinPage, submitPublicCheckin } = require('../controllers/publicCheckin.controller');
 // Sự kiện thiệp mời: khách xem thiệp của mình, tình nguyện viên quét qua link.
 const {
   publicScannerSummary, publicScan, publicSearchGuests, publicCheckInGuest, publicWalkIn,
@@ -62,5 +63,18 @@ router.post('/scanner/:token/walk-in', scannerLimiter, publicWalkIn);
 
 router.get('/invitations/:code', getPublicInvitation);
 router.get('/invitations/:code/pdf', getPublicInvitationPdf);
+
+// Check-in công khai (QR cố định). Cả gian hàng dùng chung wifi sự kiện nên khoá
+// theo deviceId (mỗi máy một UUID), chỉ lùi về IP khi client không gửi.
+const publicCheckinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.PUBLIC_CHECKIN_MAX) || 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.headers['x-device-id'] || req.ip,
+  message: { success: false, message: 'Bạn đã gửi quá nhiều lần. Vui lòng thử lại sau ít phút.' },
+});
+router.get('/checkin/:eventId', getPublicCheckinPage);
+router.post('/checkin/:eventId', publicCheckinLimiter, submitPublicCheckin);
 
 module.exports = router;

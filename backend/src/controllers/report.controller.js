@@ -3,7 +3,10 @@ const ExcelJS = require('exceljs');
 const prisma = require('../lib/prisma');
 const { loadEventForWrite } = require('../lib/eventAccess');
 const { attachmentHeader, inlineHeader } = require('../lib/contentDisposition');
-const { buildAttendanceHtmlReport, buildGuestHtmlReport } = require('../services/htmlReport.service');
+const {
+  buildAttendanceHtmlReport, buildGuestHtmlReport, buildPublicHtmlReport, answerText,
+} = require('../services/htmlReport.service');
+const { readPublicForm } = require('../lib/publicForm');
 const { fmtDateTime } = require('../lib/datetime');
 
 // Sự kiện thiệp mời có danh sách khách (EventGuest) thay cho bảng điểm danh của
@@ -13,9 +16,44 @@ function loadGuestRows(eventId) {
 }
 
 async function buildHtmlFor(event) {
+  if (event.kind === 'PUBLIC') return buildPublicHtmlReport(event, await loadGuestRows(event.id), readPublicForm(event));
   return event.kind === 'INVITATION'
     ? buildGuestHtmlReport(event, await loadGuestRows(event.id))
     : buildAttendanceHtmlReport(event, await loadAttendanceRows(event.id));
+}
+
+// Check-in công khai: cột theo đúng form BTC dựng (Họ tên + từng trường).
+function publicWorkbook(event, guests) {
+  const { fields } = readPublicForm(event);
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Check-in');
+  const headers = ['STT', 'Họ và tên', ...fields.map((f) => f.label), 'Giờ check-in', 'Ghi nhận bởi'];
+
+  sheet.mergeCells(1, 1, 1, headers.length);
+  const titleCell = sheet.getCell('A1');
+  titleCell.value = `Danh sách check-in: ${event.name}`;
+  titleCell.font = { bold: true, size: 14, color: { argb: 'FF1A6BFF' } };
+  titleCell.alignment = { horizontal: 'center' };
+
+  sheet.getRow(2).values = headers;
+  sheet.getRow(2).font = { bold: true };
+  sheet.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FF' } };
+  sheet.columns = headers.map((h, i) => ({ width: i === 0 ? 6 : Math.min(40, Math.max(14, h.length + 4)) }));
+
+  guests
+    .filter((g) => g.checkedInAt)
+    .sort((a, b) => new Date(a.checkedInAt) - new Date(b.checkedInAt))
+    .forEach((g, idx) => {
+      const row = sheet.addRow([
+        idx + 1,
+        g.name,
+        ...fields.map((f) => answerText(g.answers?.[f.id])),
+        fmtDateTime(g.checkedInAt),
+        g.checkedInBy || '',
+      ]);
+      if (idx % 2 === 1) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F8FF' } };
+    });
+  return workbook;
 }
 
 function guestWorkbook(event, guests) {
@@ -71,10 +109,11 @@ async function exportAttendance(req, res) {
     const event = await loadEventForWrite(req, res);
     if (!event) return;
 
-    if (event.kind === 'INVITATION') {
-      const workbook = guestWorkbook(event, await loadGuestRows(event.id));
+    if (event.kind === 'INVITATION' || event.kind === 'PUBLIC') {
+      const guests = await loadGuestRows(event.id);
+      const workbook = event.kind === 'PUBLIC' ? publicWorkbook(event, guests) : guestWorkbook(event, guests);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', attachmentHeader(`khachmoi-${event.name}`, 'xlsx'));
+      res.setHeader('Content-Disposition', attachmentHeader(`${event.kind === 'PUBLIC' ? 'checkin' : 'khachmoi'}-${event.name}`, 'xlsx'));
       await workbook.xlsx.write(res);
       return res.end();
     }

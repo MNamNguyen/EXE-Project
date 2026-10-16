@@ -4,6 +4,8 @@ const { loadEventForWrite } = require('../lib/eventAccess');
 const { addUsersToEvent, removeUserFromEvent } = require('../lib/eventMembership');
 const { parseEventDates, parseGateState, parseOptionalDate } = require('../lib/parseOptionalDate');
 const { gateSummary } = require('../lib/attendanceGate');
+const { defaultPublicForm } = require('../lib/publicForm');
+const { publicQrPayload } = require('./publicCheckin.controller');
 
 // Sự kiện thiệp mời (kind = INVITATION): khách ngoài được BTC quét thiệp, nên các
 // trường của kiểu điểm danh tự quét luôn bị khoá. isWhitelisted = true và
@@ -15,16 +17,35 @@ const INVITATION_LOCKED = {
   isWhitelisted: true, allowRegistration: false,
 };
 
-// Chức năng của kiểu tự quét (QR màn chiếu, danh sách sinh viên, check-in theo
-// MSSV) gọi trên sự kiện thiệp mời → 400. Trả true nếu đã gửi lỗi.
-function rejectInvitationEvent(event, res) {
-  if (event?.kind !== 'INVITATION') return false;
+// Chức năng của kiểu tự quét (QR màn chiếu động, danh sách sinh viên, check-in theo
+// MSSV) gọi trên sự kiện thiệp mời / check-in công khai → 400. Trả true nếu đã gửi lỗi.
+function rejectNonStandardEvent(event, res) {
+  if (!event?.kind || event.kind === 'STANDARD') return false;
+  const invitation = event.kind === 'INVITATION';
   res.status(400).json({
     success: false,
-    error: 'INVITATION_EVENT',
-    message: 'Sự kiện thiệp mời check-in bằng cách quét thiệp của khách, không dùng chức năng này.',
+    error: invitation ? 'INVITATION_EVENT' : 'PUBLIC_EVENT',
+    message: invitation
+      ? 'Sự kiện thiệp mời check-in bằng cách quét thiệp của khách, không dùng chức năng này.'
+      : 'Sự kiện check-in công khai: người tham gia tự quét QR cố định và điền form, không dùng chức năng này.',
   });
   return true;
+}
+
+// Check-in công khai (kind = PUBLIC): chỉ có cổng check-in, không check-out, không
+// danh sách đăng ký. isWhitelisted/allowRegistration khoá như thiệp mời để mọi danh
+// sách dành cho sinh viên / đăng ký công khai tự loại nó ra.
+const PUBLIC_LOCKED = { checkoutOpen: null, checkoutClose: null, checkoutState: 'AUTO', isWhitelisted: true, allowRegistration: false };
+
+// Công tắc "giới hạn khung giờ": đủ hai mốc = cổng chạy theo lịch (AUTO); không mốc
+// nào = nhận mọi lúc (OPEN) — BTC vẫn đóng tay được ở trang sự kiện.
+function parsePublicWindow(body) {
+  const open = parseOptionalDate(body.checkinOpen);
+  const close = parseOptionalDate(body.checkinClose);
+  if (open.error || close.error) return { error: 'Thời gian không hợp lệ' };
+  if (!open.value !== !close.value) return { error: 'Giới hạn khung giờ cần đủ giờ mở và giờ đóng check-in' };
+  if (open.value && open.value >= close.value) return { error: 'Giờ đóng check-in phải sau giờ mở' };
+  return { value: { checkinOpen: open.value, checkinClose: close.value } };
 }
 
 function parseStartsAt(value) {
@@ -143,12 +164,22 @@ async function createEvent(req, res) {
   try {
     if (req.body?.kind === 'INVITATION') return await createInvitationEvent(req, res);
 
+    // Check-in công khai dùng chung đường tạo với sự kiện thường (GPS, bán kính, cổng),
+    // chỉ ép các trường bị khoá và chọn trạng thái cổng theo công tắc khung giờ.
+    const isPublic = req.body?.kind === 'PUBLIC';
+    let body = req.body;
+    if (isPublic) {
+      const w = parsePublicWindow(req.body);
+      if (w.error) return res.status(400).json({ success: false, message: w.error });
+      body = { ...req.body, ...PUBLIC_LOCKED, ...w.value, checkinState: w.value.checkinOpen ? 'AUTO' : 'OPEN', memberIds: undefined };
+    }
+
     const {
       name, description, location, lat, lng, radius,
       gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose,
       checkinState, checkoutState,
       isWhitelisted, allowRegistration, memberIds,
-    } = req.body;
+    } = body;
 
     // Khung giờ là TUỲ CHỌN — BTC có thể bỏ trống và chủ động mở/đóng điểm danh
     // bằng checkinState/checkoutState (nút "Mở điểm danh"/"Đóng điểm danh")
@@ -191,6 +222,7 @@ async function createEvent(req, res) {
         isWhitelisted: isWhitelisted || false,
         allowRegistration: allowRegistration !== false,
         createdById: req.user.id,
+        ...(isPublic && { kind: 'PUBLIC', publicForm: defaultPublicForm() }),
         ...(memberIds?.length && {
           eventMembers: {
             create: memberIds.map((uid) => ({ userId: uid })),
@@ -263,12 +295,29 @@ async function updateEvent(req, res) {
       return res.json({ success: true, data: { ...updated, gate: gateSummary(updated) } });
     }
 
+    // Check-in công khai: gửi checkinOpen/checkinClose (kể cả null) là bật/tắt công tắc
+    // khung giờ — khác sự kiện thường, ở đây xoá được lịch. Các trường khoá bị bỏ qua.
+    let body = req.body;
+    let publicData = {};
+    if (event.kind === 'PUBLIC') {
+      if (req.body.checkinOpen !== undefined || req.body.checkinClose !== undefined) {
+        const w = parsePublicWindow(req.body);
+        if (w.error) return res.status(400).json({ success: false, message: w.error });
+        publicData = w.value;
+      }
+      body = {
+        ...req.body,
+        checkinOpen: undefined, checkinClose: undefined, checkoutOpen: undefined, checkoutClose: undefined,
+        checkoutState: undefined, isWhitelisted: undefined, allowRegistration: undefined,
+      };
+    }
+
     const {
       name, description, location, lat, lng, radius,
       gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose,
       checkinState, checkoutState,
       isWhitelisted, allowRegistration,
-    } = req.body;
+    } = body;
 
     const dateVals = {};
     for (const [key, value] of Object.entries({ checkinOpen, checkinClose, checkoutOpen, checkoutClose })) {
@@ -319,6 +368,7 @@ async function updateEvent(req, res) {
         // không cần đụng tới các trường khác.
         ...(checkinState !== undefined && { checkinState: parseGateState(checkinState) }),
         ...(checkoutState !== undefined && { checkoutState: parseGateState(checkoutState) }),
+        ...publicData,
       },
     });
 
@@ -348,7 +398,10 @@ async function getQRToken(req, res) {
   try {
     const event = await prisma.event.findUnique({
       where: { id: req.params.id, isActive: true },
-      select: { id: true, name: true, kind: true, createdById: true, checkinOpen: true, checkinClose: true, checkoutOpen: true, checkoutClose: true },
+      select: {
+        id: true, name: true, kind: true, createdById: true,
+        checkinOpen: true, checkinClose: true, checkoutOpen: true, checkoutClose: true, checkinState: true, checkoutState: true,
+      },
     });
 
     if (!event) return res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
@@ -356,7 +409,9 @@ async function getQRToken(req, res) {
     if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Không có quyền lấy mã QR cho sự kiện này' });
     }
-    if (rejectInvitationEvent(event, res)) return;
+    // Check-in công khai: QR cố định (link trang điền form), không có token xoay vòng.
+    if (event.kind === 'PUBLIC') return res.json({ success: true, data: publicQrPayload(event) });
+    if (rejectNonStandardEvent(event, res)) return;
 
     const checkinToken = generateToken(event.id, 'checkin');
     const checkoutToken = generateToken(event.id, 'checkout');
@@ -388,11 +443,29 @@ async function getLiveCheckins(req, res) {
   try {
     const event = await prisma.event.findUnique({
       where: { id: req.params.id, isActive: true },
-      select: { id: true, createdById: true },
+      select: { id: true, kind: true, createdById: true },
     });
     if (!event) return res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
     if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Không có quyền xem sự kiện này' });
+    }
+
+    // Check-in công khai: người check-in nằm ở bảng khách, không có số "đăng ký" để chia.
+    if (event.kind === 'PUBLIC') {
+      const [recent, checkedIn] = await Promise.all([
+        prisma.eventGuest.findMany({
+          where: { eventId: event.id, checkedInAt: { not: null } },
+          orderBy: { checkedInAt: 'desc' },
+          take: LIVE_RECENT_LIMIT,
+          select: { id: true, name: true, checkedInAt: true },
+        }),
+        prisma.eventGuest.count({ where: { eventId: event.id, checkedInAt: { not: null } } }),
+      ]);
+      res.set('Cache-Control', 'no-store');
+      return res.json({
+        success: true,
+        data: { checkedIn, registered: 0, recent: recent.map((g) => ({ id: g.id, name: g.name, checkinTime: g.checkedInAt })) },
+      });
     }
 
     const [recent, checkedIn, registered] = await Promise.all([
@@ -492,7 +565,7 @@ async function manualCheckin(req, res) {
     if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Không có quyền thao tác sự kiện này' });
     }
-    if (rejectInvitationEvent(event, res)) return;
+    if (rejectNonStandardEvent(event, res)) return;
 
     // Resolve identifier → userId (supports MSSV, email, or raw cuid)
     const userRecord = await prisma.user.findFirst({
@@ -580,7 +653,7 @@ async function addMembers(req, res) {
   try {
     const event = await loadEventForWrite(req, res);
     if (!event) return;
-    if (rejectInvitationEvent(event, res)) return;
+    if (rejectNonStandardEvent(event, res)) return;
 
     const { userIds } = req.body;
     if (!Array.isArray(userIds) || userIds.length === 0) {
@@ -655,7 +728,7 @@ async function addMembersByClass(req, res) {
   try {
     const event = await loadEventForWrite(req, res);
     if (!event) return;
-    if (rejectInvitationEvent(event, res)) return;
+    if (rejectNonStandardEvent(event, res)) return;
 
     const raw = req.body?.classes ?? req.body?.class;
     const classes = [...new Set(

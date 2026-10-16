@@ -9,6 +9,7 @@ const {
 const { registerSelf } = require('../controllers/registration.controller');
 const { getReminders, sendReminderNow } = require('../controllers/reminder.controller');
 const multer = require('multer');
+const { getPublicFormSetup, savePublicForm, addCheckinByStaff } = require('../controllers/publicCheckin.controller');
 const {
   getCertificateSetup, getTemplateImage, uploadTemplateImage, saveTemplateFields, deleteTemplate,
   previewPdf, issueCertificates, listEventCertificates, revokeCertificate,
@@ -103,5 +104,10 @@ router.get('/:id/invitation-template/preview', guestManager, previewInvitation);
 router.get('/:id/scanner-link', guestManager, getScannerLink);
 router.post('/:id/scanner-link', guestManager, createScannerLink);
 router.delete('/:id/scanner-link', guestManager, revokeScannerLink);
+
+// Check-in công khai: form BTC dựng + BTC thêm tay. Danh sách/xoá dùng lại /guests.
+router.get('/:id/public-form', guestManager, getPublicFormSetup);
+router.put('/:id/public-form', guestManager, savePublicForm);
+router.post('/:id/public-checkins', guestManager, addCheckinByStaff);
 
 module.exports = router;

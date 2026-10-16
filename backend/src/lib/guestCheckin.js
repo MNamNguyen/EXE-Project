@@ -63,6 +63,7 @@ function guestView(g) {
     checkedInBy: g.checkedInBy,
     createdAt: g.createdAt,
     inviteUrl: invitationUrl(g.code),
+    ...(g.answers && { answers: g.answers }),
   };
 }
 

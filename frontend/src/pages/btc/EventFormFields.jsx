@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { LocateFixed, Mail, QrCode } from 'lucide-react';
+import { Globe, LocateFixed, Mail, QrCode } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Button from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -55,12 +55,18 @@ const KINDS = [
     title: 'Thiệp mời',
     desc: 'Gửi thiệp có mã QR riêng cho khách ngoài (không cần tài khoản). BTC quét thiệp khi khách tới.',
   },
+  {
+    value: 'PUBLIC',
+    icon: Globe,
+    title: 'Check-in công khai',
+    desc: 'QR cố định chiếu tại sự kiện. Người ghé thăm tự quét và điền form BTC dựng, không cần tài khoản.',
+  },
 ];
 
 // Chọn kiểu sự kiện — chỉ có ở trang tạo; kiểu không đổi được sau khi tạo.
 function KindPicker({ value, onChange }) {
   return (
-    <div role="radiogroup" aria-label="Kiểu sự kiện" className="grid gap-3 sm:grid-cols-2">
+    <div role="radiogroup" aria-label="Kiểu sự kiện" className="grid gap-3 sm:grid-cols-3">
       {KINDS.map(({ value: v, icon: Icon, title, desc }) => {
         const selected = value === v;
         return (
@@ -99,6 +105,10 @@ export default function EventFormFields({ form, setForm, inModal = false, canPic
   const [scheduleOn, setScheduleOn] = useState(() => TIME_FIELDS.some(({ key }) => form[key]));
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Check-in công khai không có check-out: chỉ hai mốc check-in.
+  const isPublic = form.kind === 'PUBLIC';
+  const timeFields = isPublic ? TIME_FIELDS.slice(0, 2) : TIME_FIELDS;
 
   const toggleSchedule = (on) => {
     setScheduleOn(on);
@@ -158,17 +168,19 @@ export default function EventFormFields({ form, setForm, inModal = false, canPic
 
       {!isInvitation && (
         <>
-          <Section inModal={inModal} title="Thời gian điểm danh">
+          <Section inModal={inModal} title={isPublic ? 'Thời gian check-in' : 'Thời gian điểm danh'}>
             <SettingRow
               id={`${uid}-lich`}
-              title="Đặt lịch tự động"
-              desc="Cổng điểm danh tự mở, tự đóng theo bốn mốc dưới. Tắt thì BTC tự mở, đóng ở trang sự kiện."
+              title={isPublic ? 'Giới hạn khung giờ' : 'Đặt lịch tự động'}
+              desc={isPublic
+                ? 'Chỉ nhận check-in trong khoảng giờ dưới. Tắt thì nhận mọi lúc — BTC vẫn đóng tay được ở trang sự kiện.'
+                : 'Cổng điểm danh tự mở, tự đóng theo bốn mốc dưới. Tắt thì BTC tự mở, đóng ở trang sự kiện.'}
               checked={scheduleOn}
               onChange={toggleSchedule}
             />
             {scheduleOn && (
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                {TIME_FIELDS.map(({ key, label }) => (
+                {timeFields.map(({ key, label }) => (
                   <Field key={key} label={label}>
                     {(id) => <DateTimePicker id={id} label={label} value={form[key]} onChange={(v) => set(key, v)} />}
                   </Field>
@@ -181,7 +193,9 @@ export default function EventFormFields({ form, setForm, inModal = false, canPic
             <SettingRow
               id={`${uid}-gps`}
               title="Bắt buộc ở gần địa điểm"
-              desc="Sinh viên phải đứng trong bán kính cho phép mới check-in được."
+              desc={isPublic
+                ? 'Người ghé thăm phải đứng trong bán kính cho phép mới check-in được — chặn việc chụp QR gửi người ở nơi khác.'
+                : 'Sinh viên phải đứng trong bán kính cho phép mới check-in được.'}
               checked={form.gpsEnabled}
               onChange={(on) => set('gpsEnabled', on)}
             />
@@ -230,26 +244,32 @@ export default function EventFormFields({ form, setForm, inModal = false, canPic
                 </div>
               </div>
             ) : (
-              <p className="mt-4 text-pretty text-sm text-muted">GPS tắt — chỉ chống gian lận bằng Dynamic QR + Device Binding.</p>
+              <p className="mt-4 text-pretty text-sm text-muted">
+                {isPublic
+                  ? 'GPS tắt — ai có QR (kể cả ảnh chụp) đều check-in được trong giờ mở cổng.'
+                  : 'GPS tắt — chỉ chống gian lận bằng Dynamic QR + Device Binding.'}
+              </p>
             )}
           </Section>
 
-          <Section inModal={inModal} title="Người tham dự">
-            <div className="flex flex-col gap-4">
-              <Checkbox
-                label="Cho phép tự đăng ký tham gia"
-                desc="Sinh viên tự đăng ký qua link công khai."
-                checked={form.allowRegistration}
-                onChange={(e) => set('allowRegistration', e.target.checked)}
-              />
-              <Checkbox
-                label="Chỉ cho phép danh sách đã đăng ký"
-                desc="Bật thì chỉ người trong danh sách tham gia mới check-in được."
-                checked={form.isWhitelisted}
-                onChange={(e) => set('isWhitelisted', e.target.checked)}
-              />
-            </div>
-          </Section>
+          {!isPublic && (
+            <Section inModal={inModal} title="Người tham dự">
+              <div className="flex flex-col gap-4">
+                <Checkbox
+                  label="Cho phép tự đăng ký tham gia"
+                  desc="Sinh viên tự đăng ký qua link công khai."
+                  checked={form.allowRegistration}
+                  onChange={(e) => set('allowRegistration', e.target.checked)}
+                />
+                <Checkbox
+                  label="Chỉ cho phép danh sách đã đăng ký"
+                  desc="Bật thì chỉ người trong danh sách tham gia mới check-in được."
+                  checked={form.isWhitelisted}
+                  onChange={(e) => set('isWhitelisted', e.target.checked)}
+                />
+              </div>
+            </Section>
+          )}
         </>
       )}
     </div>

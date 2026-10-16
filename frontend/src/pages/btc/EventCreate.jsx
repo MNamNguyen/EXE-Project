@@ -50,12 +50,44 @@ export default function EventCreate() {
     }
   };
 
+  // Check-in công khai: chỉ hai mốc check-in (hoặc không giới hạn giờ) + GPS tuỳ chọn.
+  const submitPublic = async () => {
+    if (Boolean(form.checkinOpen) !== Boolean(form.checkinClose)) {
+      return toast.error('Giới hạn khung giờ cần đủ giờ mở và giờ đóng check-in, hoặc tắt giới hạn');
+    }
+    if (form.gpsEnabled && (!form.lat || !form.lng)) {
+      return toast.error('Vui lòng lấy vị trí GPS hoặc tắt tính năng GPS');
+    }
+    setLoading(true);
+    try {
+      const { data } = await eventApi.create({
+        kind: 'PUBLIC',
+        name: form.name,
+        description: form.description,
+        location: form.location,
+        gpsEnabled: form.gpsEnabled,
+        lat: form.lat,
+        lng: form.lng,
+        radius: form.radius,
+        checkinOpen: form.checkinOpen ? localInputToISO(form.checkinOpen) : null,
+        checkinClose: form.checkinClose ? localInputToISO(form.checkinClose) : null,
+      });
+      toast.success('Tạo sự kiện thành công!');
+      navigate(`/events/${data.data.id}`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Tạo sự kiện thất bại');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name || !form.location) {
       return toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
     }
     if (form.kind === 'INVITATION') return submitInvitation();
+    if (form.kind === 'PUBLIC') return submitPublic();
     const timeFields = [form.checkinOpen, form.checkinClose, form.checkoutOpen, form.checkoutClose];
     const filledCount = timeFields.filter(Boolean).length;
     if (filledCount > 0 && filledCount < 4) {
@@ -90,9 +122,10 @@ export default function EventCreate() {
         <div className="min-w-0 flex-1">
           <h1 className="text-balance text-xl font-semibold text-foreground">Tạo sự kiện mới</h1>
           <p className="mt-2 max-w-[55ch] text-pretty text-sm/6 text-muted">
-            {form.kind === 'INVITATION'
-              ? 'Sau khi tạo, bạn được đưa thẳng tới trang sự kiện để nhập danh sách khách mời và gửi thiệp.'
-              : 'Sau khi tạo, bạn được đưa thẳng tới trang sự kiện để mở màn QR.'}
+            {{
+              INVITATION: 'Sau khi tạo, bạn được đưa thẳng tới trang sự kiện để nhập danh sách khách mời và gửi thiệp.',
+              PUBLIC: 'Sau khi tạo, bạn được đưa thẳng tới trang sự kiện để soạn form check-in và mở màn chiếu QR.',
+            }[form.kind] || 'Sau khi tạo, bạn được đưa thẳng tới trang sự kiện để mở màn QR.'}
           </p>
         </div>
       </header>

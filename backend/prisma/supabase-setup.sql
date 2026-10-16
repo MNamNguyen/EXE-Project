@@ -41,6 +41,10 @@ EXCEPTION
   WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 
+-- PUBLIC = check-in công khai: QR cố định, người ghé thăm tự điền form. DB đã có
+-- EventKind từ trước thì phải thêm giá trị (PG 12+ chạy được trong transaction).
+ALTER TYPE "EventKind" ADD VALUE IF NOT EXISTS 'PUBLIC';
+
 -- ============================================================
 -- BƯỚC 3: Tạo các bảng
 -- ============================================================
@@ -185,6 +189,10 @@ ALTER TABLE "attendance_events"
   ADD COLUMN IF NOT EXISTS "startsAt" TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS "scannerToken" TEXT,
   ADD COLUMN IF NOT EXISTS "scannerSharedAt" TIMESTAMPTZ;
+
+-- Check-in công khai: form BTC dựng ({ fields, thankYou }).
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "publicForm" JSONB;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "attendance_events_scannerToken_key"
   ON "attendance_events"("scannerToken");
@@ -450,6 +458,29 @@ CREATE TABLE IF NOT EXISTS "attendance_event_guests" (
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- Câu trả lời form check-in công khai của từng người.
+ALTER TABLE "attendance_event_guests"
+  ADD COLUMN IF NOT EXISTS "answers" JSONB;
+
+-- Khoá chống trùng của check-in công khai ("fieldId:giá trị chuẩn hoá"), unique theo
+-- sự kiện để hai người gửi cùng SĐT cùng lúc bị chặn ngay ở DB.
+CREATE TABLE IF NOT EXISTS "attendance_event_guest_keys" (
+  "id"      TEXT NOT NULL,
+  "eventId" TEXT NOT NULL,
+  "guestId" TEXT NOT NULL,
+  "key"     TEXT NOT NULL,
+  CONSTRAINT "attendance_event_guest_keys_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_event_guest_keys_eventId_key_key" UNIQUE ("eventId", "key"),
+  CONSTRAINT "attendance_event_guest_keys_eventId_fkey"
+    FOREIGN KEY ("eventId")
+    REFERENCES "attendance_events"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "attendance_event_guest_keys_guestId_fkey"
+    FOREIGN KEY ("guestId")
+    REFERENCES "attendance_event_guests"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- Mẫu thiệp mời (cùng cách lưu với mẫu chứng nhận)
 CREATE TABLE IF NOT EXISTS "attendance_invitation_templates" (
   "id"          TEXT        NOT NULL,
@@ -482,6 +513,7 @@ ALTER TABLE "attendance_certificate_templates"  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_certificates"           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_event_guests"           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_invitation_templates"   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_event_guest_keys"       ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- BƯỚC 4: UNIQUE constraints bổ sung
@@ -660,6 +692,9 @@ CREATE INDEX IF NOT EXISTS "attendance_event_guests_eventId_idx"
 
 CREATE INDEX IF NOT EXISTS "attendance_event_guests_eventId_checkedInAt_idx"
   ON "attendance_event_guests"("eventId", "checkedInAt");
+
+CREATE INDEX IF NOT EXISTS "attendance_event_guest_keys_guestId_idx"
+  ON "attendance_event_guest_keys"("guestId");
 
 -- ============================================================
 -- BƯỚC 6: Trigger tự động cập nhật updatedAt

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Ellipsis, Link2, Mail, Pencil, Plus, QrCode, ScanLine, Trash2 } from 'lucide-react';
+import { Ellipsis, Globe, Link2, Mail, Pencil, Plus, QrCode, ScanLine, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { eventApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,13 +26,18 @@ const STATUS_TABS = [
   { value: 'ended', label: 'Đã kết thúc' },
 ];
 
-// Sự kiện thiệp mời đếm khách trong danh sách mời, sự kiện thường đếm người đăng ký.
-const registeredCount = (e) => (isInvitationEvent(e)
+// Thiệp mời đếm khách trong danh sách mời, check-in công khai đếm người đã check-in
+// (cùng nằm ở bảng khách), sự kiện thường đếm người đăng ký.
+const usesGuests = (e) => isInvitationEvent(e) || e.kind === 'PUBLIC';
+const registeredCount = (e) => (usesGuests(e)
   ? e._count?.guests ?? 0
   : e._count?.eventMembers ?? e._count?.attendances ?? 0);
+const countNoun = (e) => ({ INVITATION: 'khách mời', PUBLIC: 'check-in' }[e.kind] || 'đăng ký');
 
-function InvitationTag() {
-  return <Badge tone="violet" icon={Mail} className="ml-2 align-middle">Thiệp mời</Badge>;
+function KindTag({ event }) {
+  if (isInvitationEvent(event)) return <Badge tone="violet" icon={Mail} className="ml-2 align-middle">Thiệp mời</Badge>;
+  if (event.kind === 'PUBLIC') return <Badge tone="teal" icon={Globe} className="ml-2 align-middle">Công khai</Badge>;
+  return null;
 }
 
 // Nút nhanh trên mỗi dòng: màn QR (sự kiện thường) hoặc trang quét thiệp (thiệp mời).
@@ -164,7 +169,7 @@ export default function EventList() {
                     <Link to={`/events/${event.id}`} title={event.name} className="block truncate font-medium text-foreground outline-none hover:underline">
                       {event.name}
                     </Link>
-                    {isInvitationEvent(event) && <InvitationTag />}
+                    <KindTag event={event} />
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted">{event.location}</p>
                 </td>
@@ -203,7 +208,7 @@ export default function EventList() {
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <PhaseBadge phase={eventPhase(event)} />
                   <span className="text-sm tabular-nums text-muted">
-                    {formatNumber(registeredCount(event))} {isInvitationEvent(event) ? 'khách mời' : 'đăng ký'}
+                    {formatNumber(registeredCount(event))} {countNoun(event)}
                   </span>
                 </div>
               </div>

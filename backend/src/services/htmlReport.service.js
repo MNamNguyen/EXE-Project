@@ -4,7 +4,7 @@
 // Biểu đồ donut vẽ bằng SVG thuần (kỹ thuật stroke-dasharray giống vòng đếm
 // ngược trên màn hình QR — QRDisplay.jsx — để nhất quán phong cách trong app).
 
-const { fmtDateTime, fmtTime } = require('../lib/datetime');
+const { fmtDateTime, fmtTime, TIME_ZONE } = require('../lib/datetime');
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({
@@ -330,4 +330,102 @@ ${REPORT_STYLE}
 </html>`;
 }
 
-module.exports = { buildAttendanceHtmlReport, buildGuestHtmlReport };
+// Giá trị một câu trả lời để in ra (chọn nhiều → nối bằng dấu phẩy).
+function answerText(value) {
+  return Array.isArray(value) ? value.join(', ') : (value ?? '');
+}
+
+// Lượt check-in theo từng giờ (giờ VN) — sự kiện mở cần biết lúc nào đông khách.
+function hourlyChart(guests) {
+  const buckets = new Map();
+  for (const g of guests) {
+    if (!g.checkedInAt) continue;
+    // "20/10 14:00" theo giờ VN. Dùng en-GB vì vi-VN ghép lệch ("20-10", "14 giờ").
+    const at = new Date(g.checkedInAt);
+    const day = at.toLocaleDateString('en-GB', { timeZone: TIME_ZONE, day: '2-digit', month: '2-digit' });
+    const hour = at.toLocaleTimeString('en-GB', { timeZone: TIME_ZONE, hour: '2-digit', hourCycle: 'h23' });
+    const label = `${day} ${hour}:00`;
+    buckets.set(label, (buckets.get(label) || 0) + 1);
+  }
+  const rows = [...buckets.entries()];
+  if (!rows.length) return '';
+  const max = Math.max(...rows.map(([, n]) => n));
+  const barH = 26;
+  const height = rows.length * barH + 8;
+  const bars = rows.map(([label, n], i) => {
+    const w = Math.max(2, Math.round((n / max) * 520));
+    const y = i * barH + 4;
+    return `<text x="0" y="${y + 17}" font-size="12" fill="#6B7B9A">${escapeHtml(label)}</text>
+      <rect x="90" y="${y + 4}" width="${w}" height="18" rx="4" fill="${COLORS.checkedInOnly}" />
+      <text x="${96 + w}" y="${y + 17}" font-size="12" font-weight="700" fill="#0D1B5E">${n}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 660 ${height}" width="100%" role="img" aria-label="Lượt check-in theo giờ">${bars}</svg>`;
+}
+
+// Báo cáo sự kiện check-in công khai: không có danh sách mời nên không có "vắng" —
+// chỉ ai đã tới, khi nào, và câu trả lời form (cột theo đúng form BTC dựng).
+function buildPublicHtmlReport(event, guests, form) {
+  const present = guests.filter((g) => g.checkedInAt).sort((a, b) => new Date(a.checkedInAt) - new Date(b.checkedInAt));
+  const fields = form.fields;
+  const head = ['STT', 'Họ và tên', ...fields.map((f) => f.label), 'Check-in'].map((h) => `<th>${escapeHtml(h)}</th>`).join('');
+  const rows = present.map((g, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(g.name)}</td>
+        ${fields.map((f) => `<td>${escapeHtml(answerText(g.answers?.[f.id]))}</td>`).join('')}
+        <td>${timeOrDash(g.checkedInAt)}</td>
+      </tr>`).join('') || `<tr><td colspan="${fields.length + 3}" class="empty">Chưa có ai check-in</td></tr>`;
+
+  const first = present[0]?.checkedInAt;
+  const last = present[present.length - 1]?.checkedInAt;
+  const chart = hourlyChart(present);
+
+  return `<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Báo cáo check-in - ${escapeHtml(event.name)}</title>
+<style>
+${REPORT_STYLE}
+  .stats.three { grid-template-columns: repeat(3, 1fr); }
+  .table-wrap { overflow-x: auto; }
+  @media (max-width: 620px) { .stats.three { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="banner">
+      <p class="eyebrow">Báo cáo check-in công khai · FPT Event</p>
+      <h1>${escapeHtml(event.name)}</h1>
+      <div class="meta">
+        <span>📍 <b>${escapeHtml(event.location)}</b></span>
+        <span>📄 Xuất lúc <b>${dateTimeOrDash(new Date())}</b></span>
+      </div>
+    </div>
+
+    <div class="stats three">
+      <div class="stat total"><div class="n">${present.length}</div><div class="l">Lượt check-in</div></div>
+      <div class="stat checkedin"><div class="n">${first ? timeOrDash(first) : '—'}</div><div class="l">Người đầu tiên</div></div>
+      <div class="stat checkedout"><div class="n">${last ? timeOrDash(last) : '—'}</div><div class="l">Người gần nhất</div></div>
+    </div>
+
+    ${chart ? `<div class="section"><h2>📈 Lượt check-in theo giờ</h2><div style="padding: 4px 24px 16px">${chart}</div></div>` : ''}
+
+    <div class="section">
+      <h2>✅ Người đã check-in <span class="badge green">${present.length} người</span></h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>${head}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer>Xuất tự động bởi Hệ thống Điểm danh FPT Event · ${dateTimeOrDash(new Date())}</footer>
+  </div>
+</body>
+</html>`;
+}
+
+module.exports = { buildAttendanceHtmlReport, buildGuestHtmlReport, buildPublicHtmlReport, answerText };

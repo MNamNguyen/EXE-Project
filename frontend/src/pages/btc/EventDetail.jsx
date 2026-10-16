@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import {
-  Ellipsis, FileCode2, FileSpreadsheet, FileText, Link2, Lock, Pencil, QrCode, UserCheck, Users,
+  Ellipsis, FileCode2, FileSpreadsheet, FileText, Link2, Pencil, QrCode, UserCheck, Users,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -9,7 +9,7 @@ import { eventApi, reportApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import Layout from '../../components/layout/Layout';
 import Button, { OutlineIconButton } from '../../components/ui/Button';
-import Badge, { AttendanceBadge, PhaseBadge } from '../../components/ui/Badge';
+import { AttendanceBadge, PhaseBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import Tabs from '../../components/ui/Tabs';
 import Select from '../../components/ui/Select';
@@ -27,6 +27,8 @@ import EventFeedbackPanel from './EventFeedbackPanel';
 import EventReminderPanel from './EventReminderPanel';
 import EventCertificatePanel from './EventCertificatePanel';
 import InvitationEventDetail from './invitation/InvitationEventDetail';
+import PublicEventDetail from './public/PublicEventDetail';
+import GateRow from './GateRow';
 
 const PAGE_SIZE = 20;
 
@@ -95,7 +97,7 @@ export default function EventDetail() {
 
   // Auto-refresh every 15s (sự kiện thiệp mời có trang riêng, không có bảng điểm danh)
   useEffect(() => {
-    if (event?.kind === 'INVITATION') return undefined;
+    if (event?.kind === 'INVITATION' || event?.kind === 'PUBLIC') return undefined;
     const timer = setInterval(() => loadAttendance(page), 15000);
     return () => clearInterval(timer);
   }, [loadAttendance, page, event?.kind]);
@@ -224,6 +226,16 @@ export default function EventDetail() {
           <Button as={Link} to="/events" variant="primary" size="form">Về danh sách sự kiện</Button>
         </div>
       </div>,
+    );
+  }
+
+  // Check-in công khai: QR cố định + form tự điền — trang quản lý riêng.
+  if (event.kind === 'PUBLIC') {
+    return shell(
+      <>
+        <PublicEventDetail event={event} onEdit={() => setEditModal(true)} onGateChange={handleSetGate} gateLoading={gateLoading} />
+        <EventEditModal open={editModal} event={event} onClose={() => setEditModal(false)} onSaved={reloadEvent} />
+      </>,
     );
   }
 
@@ -465,51 +477,5 @@ export default function EventDetail() {
       {/* Xem báo cáo HTML ngay trên web (kèm nút tải file / in PDF bên trong) */}
       <ReportViewerModal open={reportModal} eventId={id} eventName={event.name} onClose={() => setReportModal(false)} />
     </>,
-  );
-}
-
-// Một hàng điều khiển cổng: trạng thái hiện tại (máy chủ tính sẵn, xem attendanceGate.js) và ba
-// nấc Theo lịch / Mở / Đóng. Mở, Đóng ghi đè hoàn toàn khung giờ đã đặt.
-function GateRow({ label, gate, state, openAt, closeAt, loading, onChange }) {
-  const isOpen = Boolean(gate?.open);
-  const hhmm = (d) => format(new Date(d), 'HH:mm');
-  const sameDay = openAt && closeAt && new Date(openAt).toDateString() === new Date(closeAt).toDateString();
-  const isToday = openAt && new Date(openAt).toDateString() === new Date().toDateString();
-  const windowText = openAt && closeAt
-    ? `${isToday ? '' : `${format(new Date(openAt), 'dd/MM')} `}${hhmm(openAt)} – ${sameDay ? '' : `${format(new Date(closeAt), 'dd/MM')} `}${hhmm(closeAt)}`
-    : null;
-  const detail = {
-    SCHEDULED: closeAt && `tự đóng lúc ${hhmm(closeAt)}`,
-    NOT_STARTED: openAt && `tự mở lúc ${hhmm(openAt)}`,
-    ENDED: 'đã hết giờ',
-    MANUALLY_OPEN: 'đang mở thủ công',
-    MANUALLY_CLOSED: 'đang đóng thủ công',
-  }[gate?.reason];
-  const line = windowText ? [windowText, detail].filter(Boolean).join(' · ') : 'Không đặt lịch, BTC tự mở và đóng';
-
-  return (
-    <div className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium text-foreground">{label}</p>
-          {isOpen ? <Badge tone="success">Đang mở</Badge> : <Badge icon={Lock}>Đang đóng</Badge>}
-        </div>
-        <p className="mt-1 text-sm text-muted">{line}</p>
-      </div>
-      <div aria-busy={loading || undefined} className={cx(loading && 'pointer-events-none opacity-60')}>
-        <Tabs
-          variant="segmented"
-          layout="fullMobile"
-          ariaLabel={`Chế độ cổng ${label}`}
-          value={state || 'AUTO'}
-          onChange={(v) => { if (v !== (state || 'AUTO')) onChange(v); }}
-          items={[
-            { value: 'AUTO', label: 'Theo lịch', grow: true },
-            { value: 'OPEN', label: 'Mở', grow: true },
-            { value: 'CLOSED', label: 'Đóng', grow: true },
-          ]}
-        />
-      </div>
-    </div>
   );
 }

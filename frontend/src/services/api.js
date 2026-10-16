@@ -259,4 +259,18 @@ export const publicInvitationApi = {
   invitationPdf: (code) => api.get(`/api/public/invitations/${code}/pdf`, { responseType: 'blob' }),
 };
 
+// Check-in công khai (QR cố định + form tự điền).
+// BTC: form của sự kiện + thêm người thủ công (danh sách/xoá dùng guestApi).
+export const publicCheckinAdminApi = {
+  getForm: (eventId) => api.get(`/api/events/${eventId}/public-form`),
+  saveForm: (eventId, data) => api.put(`/api/events/${eventId}/public-form`, data),
+  addCheckin: (eventId, data) => api.post(`/api/events/${eventId}/public-checkins`, data),
+};
+
+// Người ghé thăm — không đăng nhập. deviceId để server giới hạn số lần gửi theo máy.
+export const publicCheckinApi = {
+  getPage: (eventId) => api.get(`/api/public/checkin/${eventId}`),
+  submit: (eventId, data) => api.post(`/api/public/checkin/${eventId}`, data),
+};
+
 export default api;

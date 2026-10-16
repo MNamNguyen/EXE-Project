@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  Columns2, FileAudio, LogIn, LogOut, Maximize, Minimize, Music, PartyPopper, QrCode, ScanLine, Sparkles, VolumeX,
+  Columns2, FileAudio, Lock, LogIn, LogOut, Maximize, Minimize, Music, PartyPopper, QrCode, ScanLine, Sparkles, VolumeX,
 } from 'lucide-react';
 import { eventApi } from '../../services/api';
 import { RangeInput } from '../../components/ui/Input';
@@ -65,9 +65,9 @@ export default function QRDisplay() {
     return () => clearInterval(refetchTimer);
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Countdown timer
+  // Countdown timer — check-in công khai dùng QR cố định nên không đếm ngược.
   useEffect(() => {
-    if (!data) return undefined;
+    if (!data || data.kind === 'PUBLIC') return undefined;
     timerRef.current = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) {
@@ -126,9 +126,15 @@ export default function QRDisplay() {
     else document.documentElement.requestFullscreen?.().catch(() => {});
   };
 
-  const isCheckin = activeType === 'checkin';
+  // Check-in công khai (kind PUBLIC): QR cố định trỏ tới form, chỉ có check-in; 30 giây
+  // hỏi lại một lần chỉ để cập nhật trạng thái cổng (đóng thì phủ lớp báo lên QR).
+  const isPublic = data?.kind === 'PUBLIC';
+  const publicClosed = isPublic && !data?.gate?.open;
+  const isCheckin = isPublic || activeType === 'checkin';
   const token = isCheckin ? data?.checkinToken : data?.checkoutToken;
-  const qrUrl = token ? `${data?.frontendUrl}/scan?e=${data?.eventId}&t=${token}&type=${activeType}` : '';
+  const qrUrl = isPublic
+    ? data.publicUrl
+    : token ? `${data?.frontendUrl}/scan?e=${data?.eventId}&t=${token}&type=${activeType}` : '';
 
   // Vòng đếm ngược 44px: phần sáng là thời gian còn lại của mã đang chiếu
   const circumference = 2 * Math.PI * 18;
@@ -153,27 +159,36 @@ export default function QRDisplay() {
 
   const qrPanel = (
     <section className="flex flex-col items-center justify-center gap-6 text-center">
-      <div className="inline-flex gap-1 rounded-2xl bg-white/10 p-1">
-        {[['checkin', 'CHECK-IN', LogIn], ['checkout', 'CHECK-OUT', LogOut]].map(([type, label, Icon]) => (
-          <button
-            key={type}
-            type="button"
-            aria-pressed={activeType === type}
-            onClick={() => setActiveType(type)}
-            className={cx(
-              'inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl px-6 text-sm font-semibold outline-none transition-colors',
-              activeType === type ? 'bg-white text-[#0D1B5E]' : 'text-white hover:bg-white/10',
-            )}
-          >
-            <Icon className="size-4" aria-hidden="true" />
-            {label}
-          </button>
-        ))}
-      </div>
+      {!isPublic && (
+        <div className="inline-flex gap-1 rounded-2xl bg-white/10 p-1">
+          {[['checkin', 'CHECK-IN', LogIn], ['checkout', 'CHECK-OUT', LogOut]].map(([type, label, Icon]) => (
+            <button
+              key={type}
+              type="button"
+              aria-pressed={activeType === type}
+              onClick={() => setActiveType(type)}
+              className={cx(
+                'inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl px-6 text-sm font-semibold outline-none transition-colors',
+                activeType === type ? 'bg-white text-[#0D1B5E]' : 'text-white hover:bg-white/10',
+              )}
+            >
+              <Icon className="size-4" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <h1 className="max-w-xl text-balance text-2xl font-bold sm:text-3xl">{data?.eventName}</h1>
 
-      <div className="rounded-3xl bg-white p-5 shadow-[0_20px_60px_rgb(0_0_0/0.35)]">
+      <div className="relative rounded-3xl bg-white p-5 shadow-[0_20px_60px_rgb(0_0_0/0.35)]">
+        {publicClosed && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-3xl bg-white/90 p-6 text-[#0D1B5E]">
+            <Lock className="size-10" aria-hidden="true" />
+            <p className="text-xl font-bold">Check-in đang đóng</p>
+            <p className="max-w-64 text-pretty text-sm">Mở cổng check-in ở trang sự kiện để người ghé thăm quét được.</p>
+          </div>
+        )}
         {qrUrl ? (
           <QRCodeSVG value={qrUrl} size={qrSize} level="M" includeMargin={false} bgColor="#FFFFFF" fgColor="#0D1B5E" />
         ) : (
@@ -192,24 +207,28 @@ export default function QRDisplay() {
         </p>
       </div>
 
-      <div className="flex items-center gap-3">
-        <svg width="44" height="44" viewBox="0 0 44 44" className="-rotate-90" aria-hidden="true">
-          <circle cx="22" cy="22" r="18" fill="none" stroke="rgb(255 255 255 / .2)" strokeWidth="4" />
-          <circle
-            cx="22" cy="22" r="18" fill="none"
-            stroke={countdown <= 5 ? '#FCD34D' : '#fff'}
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeDasharray={`${strokeDash} ${circumference}`}
-            className="transition-all duration-1000"
-          />
-        </svg>
-        <p className="text-left text-sm text-white">
-          Mã tự đổi sau <span className="font-semibold tabular-nums">{countdown}</span> giây
-          <br />
-          Dùng camera điện thoại hoặc Zalo để quét
-        </p>
-      </div>
+      {isPublic ? (
+        <p className="text-sm text-white">Quét bằng camera điện thoại hoặc Zalo, điền vài thông tin là xong</p>
+      ) : (
+        <div className="flex items-center gap-3">
+          <svg width="44" height="44" viewBox="0 0 44 44" className="-rotate-90" aria-hidden="true">
+            <circle cx="22" cy="22" r="18" fill="none" stroke="rgb(255 255 255 / .2)" strokeWidth="4" />
+            <circle
+              cx="22" cy="22" r="18" fill="none"
+              stroke={countdown <= 5 ? '#FCD34D' : '#fff'}
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={`${strokeDash} ${circumference}`}
+              className="transition-all duration-1000"
+            />
+          </svg>
+          <p className="text-left text-sm text-white">
+            Mã tự đổi sau <span className="font-semibold tabular-nums">{countdown}</span> giây
+            <br />
+            Dùng camera điện thoại hoặc Zalo để quét
+          </p>
+        </div>
+      )}
     </section>
   );
 

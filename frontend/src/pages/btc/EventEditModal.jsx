@@ -39,6 +39,39 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
     if (!form.name || !form.location) {
       return toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
     }
+    // Check-in công khai: gửi cả hai mốc (null = tắt giới hạn giờ). Chỉ đổi trạng thái cổng
+    // khi BTC vừa bật/tắt công tắc, để không ghi đè lần mở/đóng tay đang có.
+    if (form.kind === 'PUBLIC') {
+      if (Boolean(form.checkinOpen) !== Boolean(form.checkinClose)) {
+        return toast.error('Giới hạn khung giờ cần đủ giờ mở và giờ đóng check-in, hoặc tắt giới hạn');
+      }
+      if (form.gpsEnabled && (!form.lat || !form.lng)) return toast.error('Vui lòng nhập toạ độ GPS hoặc tắt tính năng GPS');
+      const hadWindow = Boolean(event.checkinOpen);
+      const hasWindow = Boolean(form.checkinOpen);
+      setSaving(true);
+      try {
+        await eventApi.update(event.id, {
+          name: form.name,
+          description: form.description,
+          location: form.location,
+          gpsEnabled: form.gpsEnabled,
+          lat: form.lat,
+          lng: form.lng,
+          radius: form.radius,
+          checkinOpen: hasWindow ? localInputToISO(form.checkinOpen) : null,
+          checkinClose: hasWindow ? localInputToISO(form.checkinClose) : null,
+          ...(hadWindow !== hasWindow && { checkinState: hasWindow ? 'AUTO' : 'OPEN' }),
+        });
+        toast.success('Cập nhật sự kiện thành công');
+        onSaved?.();
+        onClose();
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Cập nhật thất bại');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     // Sự kiện thiệp mời chỉ sửa thông tin in trên thiệp (server cũng khoá phần còn lại).
     if (form.kind === 'INVITATION') {
       if (!form.startsAt) return toast.error('Vui lòng chọn thời gian bắt đầu');

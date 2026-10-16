@@ -10,6 +10,7 @@ const {
   generateGuestCode, invitationValues, invitationTime, invitationUrl,
 } = require('../lib/invitationLayout');
 const { renderInvitationsPdf } = require('../services/invitationPdf');
+const { TIME_ZONE } = require('../lib/datetime');
 const emailService = require('../services/email.service');
 
 // Khách mời của sự kiện thiệp mời — phía BTC (ADMIN hoặc người tạo sự kiện).
@@ -25,15 +26,16 @@ function serverError(res, label, err) {
 }
 
 // loadEventForWrite + phải là sự kiện thiệp mời còn hoạt động. Trả null sau khi đã
-// gửi response lỗi.
-async function loadInvitationEvent(req, res) {
+// gửi response lỗi. kinds: các kiểu được phép — danh sách/xoá khách dùng chung với
+// check-in công khai (người check-in cũng nằm ở bảng khách).
+async function loadInvitationEvent(req, res, kinds = ['INVITATION']) {
   const event = await loadEventForWrite(req, res);
   if (!event) return null;
   if (!event.isActive) {
     res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
     return null;
   }
-  if (event.kind !== 'INVITATION') {
+  if (!kinds.includes(event.kind)) {
     res.status(400).json({ success: false, error: 'NOT_INVITATION_EVENT', message: 'Sự kiện này không dùng thiệp mời' });
     return null;
   }
@@ -61,9 +63,17 @@ const STATUS_FILTERS = {
   'invite-failed': { inviteStatus: 'FAILED', isWalkIn: false },
 };
 
+const GUEST_KINDS = ['INVITATION', 'PUBLIC'];
+
+// 0 giờ hôm nay theo giờ VN (server chạy UTC — xem lib/datetime.js).
+function startOfTodayVN(now = new Date()) {
+  const ymd = now.toLocaleDateString('en-CA', { timeZone: TIME_ZONE });
+  return new Date(`${ymd}T00:00:00+07:00`);
+}
+
 async function listGuests(req, res) {
   try {
-    const event = await loadInvitationEvent(req, res);
+    const event = await loadInvitationEvent(req, res, GUEST_KINDS);
     if (!event) return;
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -83,7 +93,7 @@ async function listGuests(req, res) {
       }),
     };
 
-    const [guests, total, stats, withEmail, sent, failed] = await Promise.all([
+    const [guests, total, stats, withEmail, sent, failed, today, last] = await Promise.all([
       prisma.eventGuest.findMany({
         where,
         orderBy: [{ checkedInAt: { sort: 'desc', nulls: 'last' } }, { name: 'asc' }],
@@ -95,6 +105,12 @@ async function listGuests(req, res) {
       prisma.eventGuest.count({ where: { eventId: event.id, isWalkIn: false, email: { not: null } } }),
       prisma.eventGuest.count({ where: { eventId: event.id, isWalkIn: false, inviteStatus: 'SENT' } }),
       prisma.eventGuest.count({ where: { eventId: event.id, isWalkIn: false, inviteStatus: 'FAILED' } }),
+      prisma.eventGuest.count({ where: { eventId: event.id, checkedInAt: { gte: startOfTodayVN() } } }),
+      prisma.eventGuest.findFirst({
+        where: { eventId: event.id, checkedInAt: { not: null } },
+        orderBy: { checkedInAt: 'desc' },
+        select: { checkedInAt: true },
+      }),
     ]);
 
     return res.json({
@@ -103,7 +119,7 @@ async function listGuests(req, res) {
       total,
       page,
       limit,
-      stats: { ...stats, withEmail, sent, failed },
+      stats: { ...stats, withEmail, sent, failed, today, lastCheckedInAt: last?.checkedInAt || null },
     });
   } catch (err) {
     return serverError(res, 'List guests', err);
@@ -268,7 +284,7 @@ async function updateGuest(req, res) {
 
 async function deleteGuest(req, res) {
   try {
-    const event = await loadInvitationEvent(req, res);
+    const event = await loadInvitationEvent(req, res, GUEST_KINDS);
     if (!event) return;
     const { count } = await prisma.eventGuest.deleteMany({ where: { id: req.params.guestId, eventId: event.id } });
     if (!count) return res.status(404).json({ success: false, error: 'GUEST_NOT_FOUND', message: 'Không tìm thấy khách' });

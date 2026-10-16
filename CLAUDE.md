@@ -97,6 +97,15 @@ where the whole router shares a role. `/api/public/*` is the only unauthenticate
   self-scan APIs with `INVITATION_EVENT`. Invitation PDF layout is `lib/invitationLayout.js` ↔
   `frontend/src/pages/certificates/invitationRender.js` (same rule as the certificate pair; both use
   the `qrcode` package). Reports branch on `kind`. Spec: `docs/superpowers/specs/2026-10-16-invitation-event-design.md`.
+- Public check-in events (`Event.kind = 'PUBLIC'`): a **fixed** QR on the projector (`QRDisplay` with
+  `kind PUBLIC`) points to `/check-in/:eventId`, where visitors with no account fill a BTC-built form
+  (`Event.publicForm`; name is always present and not in `fields`). Every form write and submission goes
+  through `lib/publicForm.js`. Check-ins are `EventGuest` rows with `answers` JSON. Dedupe uses
+  `EventGuestKey (eventId, key)` unique, created in the same transaction as the guest, so concurrent
+  duplicates hit P2002. Fields lock once anyone has checked in. The time limit reuses the check-in gate
+  (off = `checkinState OPEN`); GPS goes through `lib/geo.js#gpsRejection`. `lib/geo.js` and
+  `attendanceGate.gateRejection` are shared with the self-scan flow — keep error codes identical.
+  Spec: `docs/superpowers/specs/2026-10-16-public-checkin-design.md`.
 - `lib/datetime.js` — **every** user-facing timestamp on the backend (reports, Excel, emails,
   check-in messages) must be formatted here. `toLocaleString('vi-VN')` without an explicit
   `timeZone` follows the *server's* TZ, and Render runs Node in UTC, so times printed 7 hours off
