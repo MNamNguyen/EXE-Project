@@ -16,13 +16,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 DO $$ BEGIN
   CREATE TYPE "Role" AS ENUM ('ADMIN', 'BTC', 'LECTURER', 'STUDENT');
 EXCEPTION
-  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 
 DO $$ BEGIN
   CREATE TYPE "AttendanceStatus" AS ENUM ('REGISTERED', 'CHECKED_IN', 'CHECKED_OUT', 'ABSENT');
 EXCEPTION
-  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 
 -- AUTO = theo khung giờ đã đặt (chưa đặt đủ giờ thì coi là ĐÓNG cho tới khi
@@ -30,7 +30,7 @@ END $$;
 DO $$ BEGIN
   CREATE TYPE "GateState" AS ENUM ('AUTO', 'OPEN', 'CLOSED');
 EXCEPTION
-  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 
 -- STANDARD = QR màn chiếu, người tham dự tự quét; INVITATION = khách ngoài nhận
@@ -38,7 +38,7 @@ END $$;
 DO $$ BEGIN
   CREATE TYPE "EventKind" AS ENUM ('STANDARD', 'INVITATION');
 EXCEPTION
-  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 
 -- ============================================================
@@ -80,11 +80,14 @@ CREATE TABLE IF NOT EXISTS "attendance_classes" (
     ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
+-- Bắt CẢ HAI lỗi trùng ở mọi khối ADD CONSTRAINT: UNIQUE tạo kèm một index cùng tên,
+-- nên khi DB đã có index đó (vd. do `prisma db push` tạo) Postgres báo duplicate_table
+-- (42P07) chứ không phải duplicate_object — chỉ bắt một loại thì chạy lại file sẽ lỗi.
 DO $$ BEGIN
   ALTER TABLE "attendance_classes"
     ADD CONSTRAINT "attendance_classes_name_key" UNIQUE ("name");
 EXCEPTION
-  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 
 -- Bảng sự kiện
@@ -149,7 +152,7 @@ DO $$ BEGIN
   ALTER TABLE "attendance_events"
     ADD CONSTRAINT "attendance_events_reportShareToken_key" UNIQUE ("reportShareToken");
 EXCEPTION
-  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 
 DO $$ BEGIN
@@ -158,7 +161,7 @@ DO $$ BEGIN
     FOREIGN KEY ("classId") REFERENCES "attendance_classes"("id")
     ON DELETE SET NULL ON UPDATE CASCADE;
 EXCEPTION
-  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 
 -- Nút "Mở điểm danh" / "Đóng điểm danh": khung giờ hết bắt buộc + cờ mở/đóng
@@ -489,7 +492,7 @@ DO $$ BEGIN
   ALTER TABLE "attendance_users"
     ADD CONSTRAINT "attendance_users_email_key" UNIQUE ("email");
 EXCEPTION
-  WHEN duplicate_table THEN NULL;
+  WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 
 -- attendance_users: mssv unique (chỉ khi không NULL)
