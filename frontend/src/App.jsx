@@ -22,6 +22,9 @@ import ClassDetail from './pages/classes/ClassDetail';
 import FeedbackTemplates from './pages/feedback/FeedbackTemplates';
 import EventFeedback from './pages/student/EventFeedback';
 import MyCertificates from './pages/student/MyCertificates';
+import GuestScanPage from './pages/btc/GuestScanPage';
+import VolunteerScan from './pages/public/VolunteerScan';
+import InvitationView from './pages/public/InvitationView';
 
 function RequireAuth({ children, roles }) {
   const { user, loading } = useAuth();
@@ -66,6 +69,10 @@ export default function App() {
       {/* Báo cáo BTC chia sẻ — xem được không cần đăng nhập */}
       <Route path="/bao-cao/:token" element={<SharedReport />} />
 
+      {/* Sự kiện thiệp mời — công khai: khách xem thiệp của mình, tình nguyện viên quét qua link BTC phát */}
+      <Route path="/thiep/:code" element={<InvitationView />} />
+      <Route path="/quet/:token" element={<VolunteerScan />} />
+
       {/* QR Scan — accessible but requires login (redirects to login if needed) */}
       <Route path="/scan" element={<ScanLanding />} />
 
@@ -73,6 +80,13 @@ export default function App() {
       <Route path="/events/:id/qr" element={
         <RequireAuth roles={['ADMIN', 'BTC']}>
           <QRDisplay />
+        </RequireAuth>
+      } />
+
+      {/* Quét thiệp mời ở cửa — BTC/ADMIN trên điện thoại */}
+      <Route path="/events/:id/quet-thiep" element={
+        <RequireAuth roles={['ADMIN', 'BTC']}>
+          <GuestScanPage />
         </RequireAuth>
       } />
 

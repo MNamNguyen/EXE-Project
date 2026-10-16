@@ -88,6 +88,15 @@ where the whole router shares a role. `/api/public/*` is the only unauthenticate
   and the first load only marks everyone as seen so reopening mid-event doesn't greet 100 people.
   Music is generated with Web Audio in `partyAudio.js` (no bundled files/licensing) or a local file
   via object URL (never uploaded); browsers block audio until a click, hence the "Bật nhạc" button.
+- Invitation events (`Event.kind = 'INVITATION'`, fixed at creation): external guests with **no account**
+  live in `EventGuest` (not `User`/`EventMember`/`Attendance`), each with a random `code` that the
+  printed/emailed invitation's QR carries as `FRONTEND_URL/thiep/<code>`; BTC (or a volunteer via the
+  revocable `Event.scannerToken` link `/quet/:token`) scans it. Check-in only, no gate/GPS.
+  `lib/guestCheckin.js` holds the rules both scanners share (volunteers get `maskedGuestView`);
+  `controllers/event.controller` locks the self-scan fields (`INVITATION_LOCKED`) and rejects the
+  self-scan APIs with `INVITATION_EVENT`. Invitation PDF layout is `lib/invitationLayout.js` ↔
+  `frontend/src/pages/certificates/invitationRender.js` (same rule as the certificate pair; both use
+  the `qrcode` package). Reports branch on `kind`. Spec: `docs/superpowers/specs/2026-10-16-invitation-event-design.md`.
 - `lib/datetime.js` — **every** user-facing timestamp on the backend (reports, Excel, emails,
   check-in messages) must be formatted here. `toLocaleString('vi-VN')` without an explicit
   `timeZone` follows the *server's* TZ, and Render runs Node in UTC, so times printed 7 hours off

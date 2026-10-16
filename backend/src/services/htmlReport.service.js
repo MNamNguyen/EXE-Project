@@ -52,6 +52,67 @@ function donutChart(segments, { size = 220, stroke = 34, centerTitle, centerSub 
 
 const COLORS = { checkedOut: '#0D9488', checkedInOnly: '#059669', absent: '#EF4444' };
 
+// CSS chung của mọi báo cáo HTML (điểm danh thường + khách mời) — một giao diện.
+const REPORT_STYLE = `  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: #F4F7FC;
+    font-family: 'Segoe UI', Arial, 'Helvetica Neue', sans-serif;
+    color: #0D1B5E;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 60px; }
+  .banner {
+    background: linear-gradient(135deg, #0052D4, #1A6BFF, #00A3FF);
+    border-radius: 20px; padding: 36px 32px; color: white;
+  }
+  .banner .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.75); font-weight: 700; margin: 0 0 8px; }
+  .banner h1 { font-size: 26px; margin: 0 0 14px; line-height: 1.3; }
+  .banner .meta { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 13px; color: rgba(255,255,255,0.85); }
+  .banner .meta b { color: white; font-weight: 600; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 24px 0; }
+  .stat { background: white; border-radius: 16px; padding: 18px; box-shadow: 0 1px 3px rgba(13,27,94,0.08); text-align: center; }
+  .stat .n { font-size: 26px; font-weight: 800; line-height: 1; }
+  .stat .l { font-size: 12px; color: #6B7B9A; margin-top: 6px; }
+  .stat.total .n { color: #1A6BFF; }
+  .stat.checkedout .n { color: ${COLORS.checkedOut}; }
+  .stat.checkedin .n { color: ${COLORS.checkedInOnly}; }
+  .stat.absent .n { color: ${COLORS.absent}; }
+
+  .chart-card {
+    background: white; border-radius: 20px; padding: 28px; margin: 24px 0;
+    display: flex; align-items: center; gap: 32px; flex-wrap: wrap;
+    box-shadow: 0 1px 3px rgba(13,27,94,0.08);
+  }
+  .legend { display: flex; flex-direction: column; gap: 12px; flex: 1; min-width: 200px; }
+  .legend-item { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .legend-item .dot { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
+  .legend-item .val { margin-left: auto; font-weight: 700; }
+
+  .section { background: white; border-radius: 20px; padding: 4px 0 8px; margin: 24px 0; box-shadow: 0 1px 3px rgba(13,27,94,0.08); overflow: hidden; }
+  .section h2 { font-size: 15px; padding: 20px 24px 12px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .section h2 .badge { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+  .badge.green { background: #ECFDF5; color: #059669; }
+  .badge.red { background: #FEF2F2; color: #EF4444; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; padding: 10px 24px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #6B7B9A; border-bottom: 1px solid #EEF1F8; }
+  tbody td { padding: 10px 24px; border-bottom: 1px solid #F5F7FB; }
+  tbody tr:last-child td { border-bottom: none; }
+  .muted { color: #C7CEDD; }
+  .empty { text-align: center; color: #9CA6BF; padding: 24px !important; font-style: italic; }
+
+  footer { text-align: center; font-size: 11px; color: #9CA6BF; margin-top: 32px; }
+
+  @media (max-width: 620px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .chart-card { flex-direction: column; }
+  }
+  @media print {
+    body { background: white; }
+    .section, .chart-card, .stat { box-shadow: none; border: 1px solid #EEF1F8; }
+  }
+`;
+
 function buildAttendanceHtmlReport(event, attendances) {
   const rows = attendances.map((a) => ({
     mssv: a.user.mssv || '',
@@ -112,64 +173,7 @@ function buildAttendanceHtmlReport(event, attendances) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Báo cáo điểm danh - ${escapeHtml(event.name)}</title>
 <style>
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 0; background: #F4F7FC;
-    font-family: 'Segoe UI', Arial, 'Helvetica Neue', sans-serif;
-    color: #0D1B5E;
-  }
-  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 60px; }
-  .banner {
-    background: linear-gradient(135deg, #0052D4, #1A6BFF, #00A3FF);
-    border-radius: 20px; padding: 36px 32px; color: white;
-  }
-  .banner .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.75); font-weight: 700; margin: 0 0 8px; }
-  .banner h1 { font-size: 26px; margin: 0 0 14px; line-height: 1.3; }
-  .banner .meta { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 13px; color: rgba(255,255,255,0.85); }
-  .banner .meta b { color: white; font-weight: 600; }
-
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 24px 0; }
-  .stat { background: white; border-radius: 16px; padding: 18px; box-shadow: 0 1px 3px rgba(13,27,94,0.08); text-align: center; }
-  .stat .n { font-size: 26px; font-weight: 800; line-height: 1; }
-  .stat .l { font-size: 12px; color: #6B7B9A; margin-top: 6px; }
-  .stat.total .n { color: #1A6BFF; }
-  .stat.checkedout .n { color: ${COLORS.checkedOut}; }
-  .stat.checkedin .n { color: ${COLORS.checkedInOnly}; }
-  .stat.absent .n { color: ${COLORS.absent}; }
-
-  .chart-card {
-    background: white; border-radius: 20px; padding: 28px; margin: 24px 0;
-    display: flex; align-items: center; gap: 32px; flex-wrap: wrap;
-    box-shadow: 0 1px 3px rgba(13,27,94,0.08);
-  }
-  .legend { display: flex; flex-direction: column; gap: 12px; flex: 1; min-width: 200px; }
-  .legend-item { display: flex; align-items: center; gap: 10px; font-size: 14px; }
-  .legend-item .dot { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
-  .legend-item .val { margin-left: auto; font-weight: 700; }
-
-  .section { background: white; border-radius: 20px; padding: 4px 0 8px; margin: 24px 0; box-shadow: 0 1px 3px rgba(13,27,94,0.08); overflow: hidden; }
-  .section h2 { font-size: 15px; padding: 20px 24px 12px; margin: 0; display: flex; align-items: center; gap: 8px; }
-  .section h2 .badge { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
-  .badge.green { background: #ECFDF5; color: #059669; }
-  .badge.red { background: #FEF2F2; color: #EF4444; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th { text-align: left; padding: 10px 24px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #6B7B9A; border-bottom: 1px solid #EEF1F8; }
-  tbody td { padding: 10px 24px; border-bottom: 1px solid #F5F7FB; }
-  tbody tr:last-child td { border-bottom: none; }
-  .muted { color: #C7CEDD; }
-  .empty { text-align: center; color: #9CA6BF; padding: 24px !important; font-style: italic; }
-
-  footer { text-align: center; font-size: 11px; color: #9CA6BF; margin-top: 32px; }
-
-  @media (max-width: 620px) {
-    .stats { grid-template-columns: repeat(2, 1fr); }
-    .chart-card { flex-direction: column; }
-  }
-  @media print {
-    body { background: white; }
-    .section, .chart-card, .stat { box-shadow: none; border: 1px solid #EEF1F8; }
-  }
+${REPORT_STYLE}
 </style>
 </head>
 <body>
@@ -222,4 +226,108 @@ function buildAttendanceHtmlReport(event, attendances) {
 </html>`;
 }
 
-module.exports = { buildAttendanceHtmlReport };
+// Báo cáo sự kiện thiệp mời: khách ngoài, chỉ có check-in. "Có mặt" gồm cả khách
+// được mời lẫn khách thêm tại chỗ; "vắng" chỉ tính khách được mời.
+function buildGuestHtmlReport(event, guests) {
+  const invited = guests.filter((g) => !g.isWalkIn);
+  const attendedInvited = invited.filter((g) => g.checkedInAt);
+  const walkIns = guests.filter((g) => g.isWalkIn);
+  const absent = invited.filter((g) => !g.checkedInAt);
+  const present = guests.filter((g) => g.checkedInAt);
+  const rate = invited.length ? Math.round((attendedInvited.length / invited.length) * 100) : 0;
+
+  const chart = donutChart(
+    [
+      { label: 'Khách mời đã tới', value: attendedInvited.length, color: COLORS.checkedInOnly },
+      { label: 'Khách tại chỗ', value: walkIns.length, color: COLORS.checkedOut },
+      { label: 'Chưa tới', value: absent.length, color: COLORS.absent },
+    ],
+    { centerTitle: `${rate}%`, centerSub: 'khách mời tới dự' },
+  );
+
+  const contact = (g) => [g.phone, g.email].filter(Boolean).map(escapeHtml).join('<br>') || '<span class="muted">—</span>';
+
+  const presentRows = present
+    .sort((a, b) => new Date(a.checkedInAt) - new Date(b.checkedInAt))
+    .map((g, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(g.name)}${g.isWalkIn ? ' <span class="badge teal">Tại chỗ</span>' : ''}</td>
+        <td>${contact(g)}</td>
+        <td>${timeOrDash(g.checkedInAt)}</td>
+        <td>${escapeHtml(g.checkedInBy || '')}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="empty">Chưa có khách nào check-in</td></tr>`;
+
+  const absentRows = absent
+    .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+    .map((g, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(g.name)}</td>
+        <td>${contact(g)}</td>
+      </tr>`).join('') || `<tr><td colspan="3" class="empty">Mọi khách mời đều đã tới 🎉</td></tr>`;
+
+  const schedule = event.startsAt ? dateTimeOrDash(event.startsAt) : '—';
+
+  return `<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Báo cáo khách mời - ${escapeHtml(event.name)}</title>
+<style>
+${REPORT_STYLE}
+  .badge.teal { background: #F0FDFA; color: #0D9488; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="banner">
+      <p class="eyebrow">Báo cáo khách mời · FPT Event</p>
+      <h1>${escapeHtml(event.name)}</h1>
+      <div class="meta">
+        <span>📍 <b>${escapeHtml(event.location)}</b></span>
+        <span>🕐 <b>${escapeHtml(schedule)}</b></span>
+        <span>📄 Xuất lúc <b>${dateTimeOrDash(new Date())}</b></span>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat total"><div class="n">${invited.length}</div><div class="l">Khách được mời</div></div>
+      <div class="stat checkedin"><div class="n">${attendedInvited.length}</div><div class="l">Khách mời đã tới</div></div>
+      <div class="stat checkedout"><div class="n">${walkIns.length}</div><div class="l">Khách tại chỗ</div></div>
+      <div class="stat absent"><div class="n">${absent.length}</div><div class="l">Chưa tới</div></div>
+    </div>
+
+    <div class="chart-card">
+      ${chart}
+      <div class="legend">
+        <div class="legend-item"><span class="dot" style="background:${COLORS.checkedInOnly}"></span> Khách mời đã tới <span class="val">${attendedInvited.length}</span></div>
+        <div class="legend-item"><span class="dot" style="background:${COLORS.checkedOut}"></span> Khách thêm tại chỗ <span class="val">${walkIns.length}</span></div>
+        <div class="legend-item"><span class="dot" style="background:${COLORS.absent}"></span> Khách mời chưa tới <span class="val">${absent.length}</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>✅ Đã có mặt <span class="badge green">${present.length} người</span></h2>
+      <table>
+        <thead><tr><th>STT</th><th>Họ và tên</th><th>Liên hệ</th><th>Check-in</th><th>Người check-in</th></tr></thead>
+        <tbody>${presentRows}</tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>❌ Khách mời chưa tới <span class="badge red">${absent.length} người</span></h2>
+      <table>
+        <thead><tr><th>STT</th><th>Họ và tên</th><th>Liên hệ</th></tr></thead>
+        <tbody>${absentRows}</tbody>
+      </table>
+    </div>
+
+    <footer>Xuất tự động bởi Hệ thống Điểm danh FPT Event · ${dateTimeOrDash(new Date())}</footer>
+  </div>
+</body>
+</html>`;
+}
+
+module.exports = { buildAttendanceHtmlReport, buildGuestHtmlReport };

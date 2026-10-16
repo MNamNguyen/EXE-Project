@@ -8,6 +8,7 @@ import { vi } from 'date-fns/locale';
 //   upcoming — chưa tới giờ mở check-in
 //   ended    — đã qua mốc đóng cuối cùng
 export function eventPhase(event, now = new Date()) {
+  if (isInvitationEvent(event)) return invitationPhase(event, now);
   if (isGateOpen(event)) return 'live';
   const open = event?.checkinOpen ? new Date(event.checkinOpen) : null;
   if (!open) return 'manual';
@@ -17,10 +18,25 @@ export function eventPhase(event, now = new Date()) {
   return 'ended';
 }
 
+// Sự kiện thiệp mời: không có cổng điểm danh, chỉ có giờ bắt đầu (startsAt). Từ giờ
+// bắt đầu tới hết ngày đó coi là đang diễn ra.
+export const isInvitationEvent = (event) => event?.kind === 'INVITATION';
+
+function invitationPhase(event, now) {
+  if (!event.startsAt) return 'manual';
+  const start = new Date(event.startsAt);
+  if (now < start) return 'upcoming';
+  return now.toDateString() === start.toDateString() ? 'live' : 'ended';
+}
+
+// Mốc ngày để hiện ở danh sách: giờ bắt đầu (thiệp mời) hoặc giờ mở check-in.
+export const eventDate = (event) => (isInvitationEvent(event) ? event?.startsAt : event?.checkinOpen) || null;
+
 export const isGateOpen = (event) => Boolean(event?.gate?.checkin?.open || event?.gate?.checkout?.open);
 
 // "08:00 – 10:00" từ mốc mở và đóng check-in; không đặt lịch thì rỗng
 export function timeRange(event) {
+  if (isInvitationEvent(event)) return event.startsAt ? format(new Date(event.startsAt), 'HH:mm') : '';
   if (!event?.checkinOpen) return '';
   const start = format(new Date(event.checkinOpen), 'HH:mm');
   const end = event.checkoutClose || event.checkinClose;

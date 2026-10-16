@@ -310,7 +310,53 @@ async function sendCertificateEmail(email, name, event, { viewUrl } = {}) {
   });
 }
 
+// Brevo giới hạn tổng dung lượng file đính kèm; thiệp dùng ảnh nền nặng thì bỏ
+// file, khách vẫn mở/tải thiệp qua link.
+const MAX_INVITATION_ATTACHMENT = 3 * 1024 * 1024;
+
+// Thiệp mời gửi khách ngoài (không có tài khoản). Khác chứng nhận, ở đây KHÔNG thể
+// bảo người nhận "đăng nhập để tải" — nên kèm luôn PDF, cùng link trang xem thiệp
+// (có QR to để đưa ra ở cửa, dùng được cả khi lạc mất file).
+async function sendInvitationEmail(email, name, event, { whenText, viewUrl, pdf, filename } = {}) {
+  assertConfigured();
+  const button = viewUrl
+    ? `<p style="text-align: center; margin: 28px 0 8px;">
+            <a href="${escapeHtml(viewUrl)}" style="background: #1A6BFF; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; display: inline-block;">Xem thiệp mời và mã QR</a>
+          </p>`
+    : '';
+  const attach = pdf && pdf.length <= MAX_INVITATION_ATTACHMENT;
+
+  await brevoRequest({
+    sender,
+    to: [{ email }],
+    subject: `[Thư mời] ${event.name}`,
+    htmlContent: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #1A6BFF, #00A3FF); padding: 32px; border-radius: 12px 12px 0 0; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">Thư mời tham dự</h1>
+        </div>
+        <div style="background: #fff; padding: 32px; border-radius: 0 0 12px 12px; border: 1px solid #e2eaff;">
+          <p style="color: #0d1b2e; font-size: 16px;">Kính gửi <strong>${escapeHtml(name)}</strong>,</p>
+          <p style="color: #6b7b9a;">Ban tổ chức trân trọng kính mời Quý khách tới dự:</p>
+          <div style="background: #f0f7ff; border-radius: 8px; padding: 20px; margin: 24px 0;">
+            <p style="margin: 0 0 6px; font-size: 17px;"><strong>${escapeHtml(event.name)}</strong></p>
+            ${whenText ? `<p style="margin: 0 0 4px; color: #6b7b9a;"><strong>Thời gian:</strong> ${escapeHtml(whenText)}</p>` : ''}
+            <p style="margin: 0; color: #6b7b9a;"><strong>Địa điểm:</strong> ${escapeHtml(event.location)}</p>
+          </div>
+          <p style="color: #6b7b9a; font-size: 14px;">
+            ${attach ? 'Thiệp mời đính kèm email này. ' : ''}Khi tới nơi, vui lòng xuất trình <strong>mã QR trên thiệp</strong>
+            (in ra hoặc mở trên điện thoại) để Ban tổ chức check-in cho Quý khách.
+          </p>
+          ${button}
+        </div>
+      </div>
+    `,
+    ...(attach && { attachment: [{ name: filename || 'thiep-moi.pdf', content: Buffer.from(pdf).toString('base64') }] }),
+  });
+}
+
 module.exports = {
+  sendInvitationEmail,
   sendCertificateEmail,
   sendEventReminderEmail,
   sendOtpEmail,

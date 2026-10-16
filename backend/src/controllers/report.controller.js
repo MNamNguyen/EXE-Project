@@ -3,8 +3,60 @@ const ExcelJS = require('exceljs');
 const prisma = require('../lib/prisma');
 const { loadEventForWrite } = require('../lib/eventAccess');
 const { attachmentHeader, inlineHeader } = require('../lib/contentDisposition');
-const { buildAttendanceHtmlReport } = require('../services/htmlReport.service');
+const { buildAttendanceHtmlReport, buildGuestHtmlReport } = require('../services/htmlReport.service');
 const { fmtDateTime } = require('../lib/datetime');
+
+// Sự kiện thiệp mời có danh sách khách (EventGuest) thay cho bảng điểm danh của
+// tài khoản — mọi đường xuất báo cáo (Excel, HTML, link chia sẻ) rẽ ở đây.
+function loadGuestRows(eventId) {
+  return prisma.eventGuest.findMany({ where: { eventId }, orderBy: { name: 'asc' } });
+}
+
+async function buildHtmlFor(event) {
+  return event.kind === 'INVITATION'
+    ? buildGuestHtmlReport(event, await loadGuestRows(event.id))
+    : buildAttendanceHtmlReport(event, await loadAttendanceRows(event.id));
+}
+
+function guestWorkbook(event, guests) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Khách mời');
+
+  sheet.mergeCells('A1:H1');
+  const titleCell = sheet.getCell('A1');
+  titleCell.value = `Danh sách khách mời: ${event.name}`;
+  titleCell.font = { bold: true, size: 14, color: { argb: 'FF1A6BFF' } };
+  titleCell.alignment = { horizontal: 'center' };
+
+  sheet.getRow(2).values = ['STT', 'Họ và tên', 'SĐT', 'Email', 'Loại', 'Trạng thái', 'Giờ check-in', 'Người check-in'];
+  sheet.getRow(2).font = { bold: true };
+  sheet.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FF' } };
+  sheet.columns = [
+    { key: 'stt', width: 6 },
+    { key: 'name', width: 28 },
+    { key: 'phone', width: 16 },
+    { key: 'email', width: 28 },
+    { key: 'kind', width: 14 },
+    { key: 'status', width: 14 },
+    { key: 'checkin', width: 20 },
+    { key: 'by', width: 24 },
+  ];
+
+  guests.forEach((g, idx) => {
+    const row = sheet.addRow({
+      stt: idx + 1,
+      name: g.name,
+      phone: g.phone || '',
+      email: g.email || '',
+      kind: g.isWalkIn ? 'Khách tại chỗ' : 'Khách mời',
+      status: g.checkedInAt ? 'Đã tới' : 'Chưa tới',
+      checkin: g.checkedInAt ? fmtDateTime(g.checkedInAt) : '',
+      by: g.checkedInBy || '',
+    });
+    if (idx % 2 === 1) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F8FF' } };
+  });
+  return workbook;
+}
 
 async function loadAttendanceRows(eventId) {
   return prisma.attendance.findMany({
@@ -18,6 +70,14 @@ async function exportAttendance(req, res) {
   try {
     const event = await loadEventForWrite(req, res);
     if (!event) return;
+
+    if (event.kind === 'INVITATION') {
+      const workbook = guestWorkbook(event, await loadGuestRows(event.id));
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', attachmentHeader(`khachmoi-${event.name}`, 'xlsx'));
+      await workbook.xlsx.write(res);
+      return res.end();
+    }
 
     const attendances = await loadAttendanceRows(req.params.id);
 
@@ -91,8 +151,7 @@ async function exportAttendanceHtml(req, res) {
     const event = await loadEventForWrite(req, res);
     if (!event) return;
 
-    const attendances = await loadAttendanceRows(req.params.id);
-    const html = buildAttendanceHtmlReport(event, attendances);
+    const html = await buildHtmlFor(event);
     const inline = req.query.view === '1' || req.query.view === 'true';
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -200,8 +259,7 @@ async function getSharedReport(req, res) {
       });
     }
 
-    const attendances = await loadAttendanceRows(event.id);
-    const html = buildAttendanceHtmlReport(event, attendances);
+    const html = await buildHtmlFor(event);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', inlineHeader(`baocao-${event.name}`, 'html'));

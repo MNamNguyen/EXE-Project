@@ -2,8 +2,35 @@ const prisma = require('../lib/prisma');
 const { generateToken, getExpiresIn } = require('../services/qr.service');
 const { loadEventForWrite } = require('../lib/eventAccess');
 const { addUsersToEvent, removeUserFromEvent } = require('../lib/eventMembership');
-const { parseEventDates, parseGateState } = require('../lib/parseOptionalDate');
+const { parseEventDates, parseGateState, parseOptionalDate } = require('../lib/parseOptionalDate');
 const { gateSummary } = require('../lib/attendanceGate');
+
+// Sự kiện thiệp mời (kind = INVITATION): khách ngoài được BTC quét thiệp, nên các
+// trường của kiểu điểm danh tự quét luôn bị khoá. isWhitelisted = true và
+// allowRegistration = false để mọi danh sách dành cho sinh viên / đăng ký công
+// khai tự loại nó ra mà không phải sửa từng chỗ.
+const INVITATION_LOCKED = {
+  gpsEnabled: false, lat: null, lng: null,
+  checkinOpen: null, checkinClose: null, checkoutOpen: null, checkoutClose: null,
+  isWhitelisted: true, allowRegistration: false,
+};
+
+// Chức năng của kiểu tự quét (QR màn chiếu, danh sách sinh viên, check-in theo
+// MSSV) gọi trên sự kiện thiệp mời → 400. Trả true nếu đã gửi lỗi.
+function rejectInvitationEvent(event, res) {
+  if (event?.kind !== 'INVITATION') return false;
+  res.status(400).json({
+    success: false,
+    error: 'INVITATION_EVENT',
+    message: 'Sự kiện thiệp mời check-in bằng cách quét thiệp của khách, không dùng chức năng này.',
+  });
+  return true;
+}
+
+function parseStartsAt(value) {
+  const parsed = parseOptionalDate(value);
+  return parsed.error || !parsed.value ? null : parsed.value;
+}
 
 async function listEvents(req, res) {
   try {
@@ -14,6 +41,8 @@ async function listEvents(req, res) {
     const where = {
       isActive: true,
       ...(search && { name: { contains: search, mode: 'insensitive' } }),
+      // Sự kiện thiệp mời dành cho khách ngoài — sinh viên không tham gia qua app.
+      ...(role === 'STUDENT' && { kind: 'STANDARD' }),
       ...(role === 'STUDENT' && {
         OR: [
           { isWhitelisted: false },
@@ -33,7 +62,7 @@ async function listEvents(req, res) {
         orderBy: { checkinOpen: { sort: 'desc', nulls: 'last' } },
         include: {
           createdBy: { select: { name: true, email: true } },
-          _count: { select: { attendances: true, eventMembers: true } },
+          _count: { select: { attendances: true, eventMembers: true, guests: true } },
           // STUDENT: kèm record điểm danh của chính mình để trang "Lịch sử tham dự"
           // (MyAttendance) hiển thị đúng trạng thái + giờ vào/ra, và kèm suất
           // đăng ký để dashboard biết có cần hiện nút "Đăng ký tham gia" không.
@@ -86,8 +115,34 @@ async function listEvents(req, res) {
   }
 }
 
+async function createInvitationEvent(req, res) {
+  const { name, description, location, startsAt } = req.body;
+  if (!name?.trim() || !location?.trim()) {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập tên và địa điểm sự kiện' });
+  }
+  const starts = parseStartsAt(startsAt);
+  if (!starts) {
+    return res.status(400).json({ success: false, message: 'Vui lòng chọn thời gian bắt đầu — thời gian này được in lên thiệp mời' });
+  }
+  const event = await prisma.event.create({
+    data: {
+      ...INVITATION_LOCKED,
+      kind: 'INVITATION',
+      name: name.trim(),
+      description,
+      location: location.trim(),
+      startsAt: starts,
+      createdById: req.user.id,
+    },
+    include: { createdBy: { select: { name: true } } },
+  });
+  return res.status(201).json({ success: true, data: event });
+}
+
 async function createEvent(req, res) {
   try {
+    if (req.body?.kind === 'INVITATION') return await createInvitationEvent(req, res);
+
     const {
       name, description, location, lat, lng, radius,
       gpsEnabled, checkinOpen, checkinClose, checkoutOpen, checkoutClose,
@@ -158,7 +213,7 @@ async function getEvent(req, res) {
       where: { id: req.params.id },
       include: {
         createdBy: { select: { name: true, email: true } },
-        _count: { select: { attendances: true, eventMembers: true } },
+        _count: { select: { attendances: true, eventMembers: true, guests: true } },
       },
     });
 
@@ -184,6 +239,28 @@ async function updateEvent(req, res) {
 
     if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Không có quyền chỉnh sửa' });
+    }
+
+    // Kiểu sự kiện cố định từ lúc tạo; sự kiện thiệp mời chỉ sửa được thông tin
+    // in trên thiệp, các trường của kiểu tự quét luôn giữ giá trị khoá.
+    if (event.kind === 'INVITATION') {
+      const { name, description, location, startsAt } = req.body;
+      let starts;
+      if (startsAt !== undefined) {
+        starts = parseStartsAt(startsAt);
+        if (!starts) return res.status(400).json({ success: false, message: 'Thời gian bắt đầu không hợp lệ' });
+      }
+      const updated = await prisma.event.update({
+        where: { id: event.id },
+        data: {
+          ...INVITATION_LOCKED,
+          ...(name?.trim() && { name: name.trim() }),
+          ...(description !== undefined && { description }),
+          ...(location?.trim() && { location: location.trim() }),
+          ...(starts && { startsAt: starts }),
+        },
+      });
+      return res.json({ success: true, data: { ...updated, gate: gateSummary(updated) } });
     }
 
     const {
@@ -271,7 +348,7 @@ async function getQRToken(req, res) {
   try {
     const event = await prisma.event.findUnique({
       where: { id: req.params.id, isActive: true },
-      select: { id: true, name: true, createdById: true, checkinOpen: true, checkinClose: true, checkoutOpen: true, checkoutClose: true },
+      select: { id: true, name: true, kind: true, createdById: true, checkinOpen: true, checkinClose: true, checkoutOpen: true, checkoutClose: true },
     });
 
     if (!event) return res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
@@ -279,6 +356,7 @@ async function getQRToken(req, res) {
     if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Không có quyền lấy mã QR cho sự kiện này' });
     }
+    if (rejectInvitationEvent(event, res)) return;
 
     const checkinToken = generateToken(event.id, 'checkin');
     const checkoutToken = generateToken(event.id, 'checkout');
@@ -406,7 +484,7 @@ async function manualCheckin(req, res) {
 
     const event = await prisma.event.findUnique({
       where: { id: eventId, isActive: true },
-      select: { id: true, createdById: true },
+      select: { id: true, kind: true, createdById: true },
     });
     if (!event) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy sự kiện' });
@@ -414,6 +492,7 @@ async function manualCheckin(req, res) {
     if (req.user.role !== 'ADMIN' && event.createdById !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Không có quyền thao tác sự kiện này' });
     }
+    if (rejectInvitationEvent(event, res)) return;
 
     // Resolve identifier → userId (supports MSSV, email, or raw cuid)
     const userRecord = await prisma.user.findFirst({
@@ -501,6 +580,7 @@ async function addMembers(req, res) {
   try {
     const event = await loadEventForWrite(req, res);
     if (!event) return;
+    if (rejectInvitationEvent(event, res)) return;
 
     const { userIds } = req.body;
     if (!Array.isArray(userIds) || userIds.length === 0) {
@@ -575,6 +655,7 @@ async function addMembersByClass(req, res) {
   try {
     const event = await loadEventForWrite(req, res);
     if (!event) return;
+    if (rejectInvitationEvent(event, res)) return;
 
     const raw = req.body?.classes ?? req.body?.class;
     const classes = [...new Set(

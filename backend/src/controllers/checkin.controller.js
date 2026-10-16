@@ -97,6 +97,14 @@ async function processCheckin(req, res) {
     if (!event) {
       return res.status(404).json({ success: false, error: 'EVENT_NOT_FOUND', message: 'Không tìm thấy sự kiện' });
     }
+    // Sự kiện thiệp mời không có QR tự quét — chặn cả khi ai đó tự ghép request.
+    if (event.kind === 'INVITATION') {
+      return res.status(400).json({
+        success: false,
+        error: 'INVITATION_EVENT',
+        message: 'Sự kiện này check-in bằng thiệp mời. Vui lòng đưa thiệp cho Ban tổ chức quét.',
+      });
+    }
 
     // 3. Whitelist: chỉ thành viên trong danh sách mới được điểm danh (design 2026-07-14).
     if (event.isWhitelisted) {

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Ellipsis, Link2, Pencil, Plus, QrCode, Trash2 } from 'lucide-react';
+import { Ellipsis, Link2, Mail, Pencil, Plus, QrCode, ScanLine, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { eventApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import Layout from '../../components/layout/Layout';
 import Button, { IconButton } from '../../components/ui/Button';
-import { PhaseBadge } from '../../components/ui/Badge';
+import Badge, { PhaseBadge } from '../../components/ui/Badge';
 import Tabs from '../../components/ui/Tabs';
 import Pagination from '../../components/ui/Pagination';
 import Dropdown, { MenuGroup, MenuItem, MenuSeparator } from '../../components/ui/Dropdown';
@@ -14,7 +14,7 @@ import { useConfirm } from '../../components/ui/Modal';
 import { TableCard, Th } from '../../components/ui/Card';
 import { SearchInput } from '../../components/ui/Input';
 import { EmptyText, LoadError, SkeletonRows } from '../../components/ui/States';
-import { eventPhase, formatNumber, fullDate, timeRange } from '../../utils/eventStatus';
+import { eventDate, eventPhase, formatNumber, fullDate, isInvitationEvent, timeRange } from '../../utils/eventStatus';
 
 const PAGE_SIZE = 12;
 
@@ -26,7 +26,21 @@ const STATUS_TABS = [
   { value: 'ended', label: 'Đã kết thúc' },
 ];
 
-const registeredCount = (e) => e._count?.eventMembers ?? e._count?.attendances ?? 0;
+// Sự kiện thiệp mời đếm khách trong danh sách mời, sự kiện thường đếm người đăng ký.
+const registeredCount = (e) => (isInvitationEvent(e)
+  ? e._count?.guests ?? 0
+  : e._count?.eventMembers ?? e._count?.attendances ?? 0);
+
+function InvitationTag() {
+  return <Badge tone="violet" icon={Mail} className="ml-2 align-middle">Thiệp mời</Badge>;
+}
+
+// Nút nhanh trên mỗi dòng: màn QR (sự kiện thường) hoặc trang quét thiệp (thiệp mời).
+function QuickAction({ event }) {
+  return isInvitationEvent(event)
+    ? <IconButton as={Link} to={`/events/${event.id}/quet-thiep`} icon={ScanLine} label="Quét thiệp" row />
+    : <IconButton as="a" href={`/events/${event.id}/qr`} target="_blank" rel="noopener noreferrer" icon={QrCode} label="Mở màn QR" row />;
+}
 
 export default function EventList() {
   const navigate = useNavigate();
@@ -146,15 +160,18 @@ export default function EventList() {
             {events.map((event) => (
               <tr key={event.id} className="border-b border-border last:border-0 hover:bg-surface-hover">
                 <td className="max-w-0 px-4 py-3">
-                  <Link to={`/events/${event.id}`} title={event.name} className="block truncate font-medium text-foreground outline-none hover:underline">
-                    {event.name}
-                  </Link>
+                  <div className="flex min-w-0 items-center">
+                    <Link to={`/events/${event.id}`} title={event.name} className="block truncate font-medium text-foreground outline-none hover:underline">
+                      {event.name}
+                    </Link>
+                    {isInvitationEvent(event) && <InvitationTag />}
+                  </div>
                   <p className="mt-0.5 truncate text-xs text-muted">{event.location}</p>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 tabular-nums">
-                  {event.checkinOpen ? (
+                  {eventDate(event) ? (
                     <>
-                      <p className="text-foreground">{fullDate(event.checkinOpen)}</p>
+                      <p className="text-foreground">{fullDate(eventDate(event))}</p>
                       <p className="mt-0.5 text-xs text-muted">{timeRange(event)}</p>
                     </>
                   ) : <p className="text-muted">—</p>}
@@ -164,7 +181,7 @@ export default function EventList() {
                 {canManage && (
                   <td className="px-2 py-3">
                     <div className="flex justify-end gap-1">
-                      <IconButton as="a" href={`/events/${event.id}/qr`} target="_blank" rel="noopener noreferrer" icon={QrCode} label="Mở màn QR" row />
+                      <QuickAction event={event} />
                       {eventMenu(event)}
                     </div>
                   </td>
@@ -181,11 +198,13 @@ export default function EventList() {
                   {event.name}
                 </Link>
                 <p className="mt-1 text-xs tabular-nums text-muted">
-                  {event.checkinOpen ? `${fullDate(event.checkinOpen)} · ${timeRange(event)}` : 'Chưa đặt lịch'}
+                  {eventDate(event) ? `${fullDate(eventDate(event))} · ${timeRange(event)}` : 'Chưa đặt lịch'}
                 </p>
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <PhaseBadge phase={eventPhase(event)} />
-                  <span className="text-sm tabular-nums text-muted">{formatNumber(registeredCount(event))} đăng ký</span>
+                  <span className="text-sm tabular-nums text-muted">
+                    {formatNumber(registeredCount(event))} {isInvitationEvent(event) ? 'khách mời' : 'đăng ký'}
+                  </span>
                 </div>
               </div>
               {canManage && <div className="relative">{eventMenu(event)}</div>}

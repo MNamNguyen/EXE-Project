@@ -9,8 +9,9 @@ const MAX_CANVAS_WIDTH = 2000;
 
 // Canvas hiển thị chứng nhận. imageUrl: object URL của ảnh mẫu (tải bằng blob có
 // token). onLayout(boxes) nhận khung bao từng ô sau mỗi lần vẽ (dùng cho editor).
+// draw: hàm vẽ — mặc định chứng nhận; thiệp mời truyền drawInvitation kèm qrText.
 const CertificateCanvas = forwardRef(function CertificateCanvas(
-  { imageUrl, template, fields, values, onLayout, className = '' }, ref,
+  { imageUrl, template, fields, values, onLayout, draw = drawCertificate, qrText, className = '' }, ref,
 ) {
   const canvasRef = useRef(null);
   const [img, setImg] = useState(null);
@@ -39,9 +40,9 @@ const CertificateCanvas = forwardRef(function CertificateCanvas(
     const h = Math.round(template.height * scale);
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
-    const boxes = drawCertificate(canvas.getContext('2d'), img, fields || template.fields, values);
+    const boxes = draw(canvas.getContext('2d'), img, fields || template.fields, values, qrText);
     onLayout?.(boxes);
-  }, [img, template, fields, values]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [img, template, fields, values, draw, qrText]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={cx('relative', className)} style={{ aspectRatio: `${template.width} / ${template.height}` }}>

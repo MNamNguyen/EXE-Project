@@ -26,6 +26,7 @@ import ReportViewerModal from './ReportViewerModal';
 import EventFeedbackPanel from './EventFeedbackPanel';
 import EventReminderPanel from './EventReminderPanel';
 import EventCertificatePanel from './EventCertificatePanel';
+import InvitationEventDetail from './invitation/InvitationEventDetail';
 
 const PAGE_SIZE = 20;
 
@@ -92,11 +93,12 @@ export default function EventDetail() {
     loadAttendance(1);
   }, [search, statusFilter]); // eslint-disable-line
 
-  // Auto-refresh every 15s
+  // Auto-refresh every 15s (sự kiện thiệp mời có trang riêng, không có bảng điểm danh)
   useEffect(() => {
+    if (event?.kind === 'INVITATION') return undefined;
     const timer = setInterval(() => loadAttendance(page), 15000);
     return () => clearInterval(timer);
-  }, [loadAttendance, page]);
+  }, [loadAttendance, page, event?.kind]);
 
   // Mở thẳng modal sửa khi tới từ menu "Sửa sự kiện" ở danh sách (?edit=1)
   useEffect(() => {
@@ -222,6 +224,17 @@ export default function EventDetail() {
           <Button as={Link} to="/events" variant="primary" size="form">Về danh sách sự kiện</Button>
         </div>
       </div>,
+    );
+  }
+
+  // Sự kiện thiệp mời: khách ngoài + quét thiệp — trang quản lý riêng.
+  if (event.kind === 'INVITATION') {
+    return shell(
+      <>
+        <InvitationEventDetail event={event} onEventChanged={reloadEvent} />
+        {/* Mở thẳng từ menu "Sửa sự kiện" ở danh sách (?edit=1) */}
+        <EventEditModal open={editModal} event={event} onClose={() => setEditModal(false)} onSaved={reloadEvent} />
+      </>,
     );
   }
 

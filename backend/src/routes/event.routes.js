@@ -14,15 +14,28 @@ const {
   previewPdf, issueCertificates, listEventCertificates, revokeCertificate,
 } = require('../controllers/certificate.controller');
 
-// Ảnh mẫu chứng nhận: giữ trong RAM rồi ghi thẳng vào DB (Render không có ổ đĩa bền).
-const certificateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }).single('file');
-function uploadCertificateImage(req, res, next) {
-  certificateUpload(req, res, (err) => {
+const {
+  listGuests, addGuest, importGuests, updateGuest, deleteGuest, rotateGuestCode,
+  scanGuest, checkInGuestManually, undoGuestCheckIn, addWalkInGuest, getScannerSummary,
+  downloadGuestInvitation, downloadAllInvitations, sendInvitations,
+} = require('../controllers/guest.controller');
+const {
+  getInvitationTemplate, getInvitationTemplateImage, uploadInvitationTemplateImage,
+  saveInvitationTemplateFields, deleteInvitationTemplate, previewInvitation,
+  getScannerLink, createScannerLink, revokeScannerLink,
+} = require('../controllers/invitation.controller');
+
+// File upload giữ trong RAM rồi ghi thẳng vào DB / đọc ngay (Render không có ổ đĩa bền).
+function memoryUpload(tooLargeMessage, failMessage) {
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }).single('file');
+  return (req, res, next) => upload(req, res, (err) => {
     if (!err) return next();
-    const message = err.code === 'LIMIT_FILE_SIZE' ? 'Ảnh mẫu tối đa 5MB' : 'Upload ảnh thất bại';
+    const message = err.code === 'LIMIT_FILE_SIZE' ? tooLargeMessage : failMessage;
     return res.status(400).json({ success: false, message });
   });
 }
+const uploadCertificateImage = memoryUpload('Ảnh mẫu tối đa 5MB', 'Upload ảnh thất bại');
+const uploadGuestFile = memoryUpload('File danh sách tối đa 5MB', 'Upload file thất bại');
 
 router.use(authenticate);
 
@@ -62,5 +75,33 @@ router.get('/:id/certificate/preview', certManager, previewPdf);
 router.post('/:id/certificates/issue', certManager, issueCertificates);
 router.get('/:id/certificates', certManager, listEventCertificates);
 router.delete('/:id/certificates/:certId', certManager, revokeCertificate);
+
+// Sự kiện thiệp mời: khách ngoài + thiệp QR, BTC quét thiệp để check-in.
+// Mọi handler tự kiểm ADMIN-hoặc-người-tạo và kind = INVITATION (loadInvitationEvent).
+// Các đường /guests/<chữ> phải đăng ký TRƯỚC /guests/:guestId.
+const guestManager = authorize('ADMIN', 'BTC');
+router.get('/:id/guests', guestManager, listGuests);
+router.post('/:id/guests', guestManager, addGuest);
+router.post('/:id/guests/import', guestManager, uploadGuestFile, importGuests);
+router.post('/:id/guests/scan', guestManager, scanGuest);
+router.post('/:id/guests/walk-in', guestManager, addWalkInGuest);
+router.put('/:id/guests/:guestId', guestManager, updateGuest);
+router.delete('/:id/guests/:guestId', guestManager, deleteGuest);
+router.post('/:id/guests/:guestId/rotate-code', guestManager, rotateGuestCode);
+router.post('/:id/guests/:guestId/checkin', guestManager, checkInGuestManually);
+router.delete('/:id/guests/:guestId/checkin', guestManager, undoGuestCheckIn);
+router.get('/:id/guests/:guestId/invitation.pdf', guestManager, downloadGuestInvitation);
+router.get('/:id/scanner-summary', guestManager, getScannerSummary);
+router.get('/:id/invitations/pdf', guestManager, downloadAllInvitations);
+router.post('/:id/invitations/send', guestManager, sendInvitations);
+router.get('/:id/invitation-template', guestManager, getInvitationTemplate);
+router.get('/:id/invitation-template/image', guestManager, getInvitationTemplateImage);
+router.put('/:id/invitation-template/image', guestManager, uploadCertificateImage, uploadInvitationTemplateImage);
+router.put('/:id/invitation-template/fields', guestManager, saveInvitationTemplateFields);
+router.delete('/:id/invitation-template', guestManager, deleteInvitationTemplate);
+router.get('/:id/invitation-template/preview', guestManager, previewInvitation);
+router.get('/:id/scanner-link', guestManager, getScannerLink);
+router.post('/:id/scanner-link', guestManager, createScannerLink);
+router.delete('/:id/scanner-link', guestManager, revokeScannerLink);
 
 module.exports = router;

@@ -27,11 +27,19 @@ END $$;
 
 -- AUTO = theo khung giờ đã đặt (chưa đặt đủ giờ thì coi là ĐÓNG cho tới khi
 -- BTC bấm mở tay); OPEN/CLOSED = BTC chủ động mở/đóng, bỏ qua khung giờ.
-DO $$ BEGIN
+DO $ BEGIN
   CREATE TYPE "GateState" AS ENUM ('AUTO', 'OPEN', 'CLOSED');
 EXCEPTION
   WHEN duplicate_object THEN NULL;
-END $$;
+END $;
+
+-- STANDARD = QR màn chiếu, người tham dự tự quét; INVITATION = khách ngoài nhận
+-- thiệp mời có QR riêng, BTC/tình nguyện viên quét thiệp. Chọn lúc tạo, không đổi.
+DO $ BEGIN
+  CREATE TYPE "EventKind" AS ENUM ('STANDARD', 'INVITATION');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $;
 
 -- ============================================================
 -- BƯỚC 3: Tạo các bảng
@@ -166,6 +174,17 @@ ALTER TABLE "attendance_events"
 
 ALTER TABLE "attendance_events"
   ADD COLUMN IF NOT EXISTS "checkoutState" "GateState" NOT NULL DEFAULT 'AUTO';
+
+-- Sự kiện thiệp mời: kiểu sự kiện, giờ bắt đầu in trên thiệp, link quét cho tình
+-- nguyện viên (cột thay vì HMAC vì phải thu hồi được — giống reportShareToken).
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "kind" "EventKind" NOT NULL DEFAULT 'STANDARD',
+  ADD COLUMN IF NOT EXISTS "startsAt" TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS "scannerToken" TEXT,
+  ADD COLUMN IF NOT EXISTS "scannerSharedAt" TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "attendance_events_scannerToken_key"
+  ON "attendance_events"("scannerToken");
 
 -- Bảng whitelist thành viên sự kiện
 CREATE TABLE IF NOT EXISTS "attendance_event_members" (
@@ -403,6 +422,51 @@ CREATE TABLE IF NOT EXISTS "attendance_certificates" (
     ON DELETE SET NULL ON UPDATE CASCADE
 );
 
+-- Khách mời của sự kiện thiệp mời — không gắn với tài khoản. "code" là bí mật in
+-- trong QR; email trùng trong cùng sự kiện bị chặn (NULL thì không tính trùng).
+CREATE TABLE IF NOT EXISTS "attendance_event_guests" (
+  "id"           TEXT        NOT NULL,
+  "eventId"      TEXT        NOT NULL,
+  "name"         TEXT        NOT NULL,
+  "phone"        TEXT,
+  "email"        TEXT,
+  "code"         TEXT        NOT NULL,
+  "isWalkIn"     BOOLEAN     NOT NULL DEFAULT FALSE,
+  "inviteStatus" TEXT        NOT NULL DEFAULT 'PENDING',
+  "inviteSentAt" TIMESTAMPTZ,
+  "checkedInAt"  TIMESTAMPTZ,
+  "checkedInBy"  TEXT,
+  "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "attendance_event_guests_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_event_guests_code_key" UNIQUE ("code"),
+  CONSTRAINT "attendance_event_guests_eventId_email_key" UNIQUE ("eventId", "email"),
+  CONSTRAINT "attendance_event_guests_eventId_fkey"
+    FOREIGN KEY ("eventId")
+    REFERENCES "attendance_events"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- Mẫu thiệp mời (cùng cách lưu với mẫu chứng nhận)
+CREATE TABLE IF NOT EXISTS "attendance_invitation_templates" (
+  "id"          TEXT        NOT NULL,
+  "eventId"     TEXT        NOT NULL,
+  "image"       BYTEA       NOT NULL,
+  "mimeType"    TEXT        NOT NULL,
+  "width"       INTEGER     NOT NULL,
+  "height"      INTEGER     NOT NULL,
+  "fields"      JSONB       NOT NULL,
+  "updatedById" TEXT,
+  "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "attendance_invitation_templates_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_invitation_templates_eventId_key" UNIQUE ("eventId"),
+  CONSTRAINT "attendance_invitation_templates_eventId_fkey"
+    FOREIGN KEY ("eventId")
+    REFERENCES "attendance_events"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- Bật RLS cho các bảng mới: KHÔNG tạo policy nào, nên anon/authenticated key
 -- (REST API của Supabase — project này dùng chung với ứng dụng khác) không đọc
 -- ghi được gì. Backend kết nối bằng role postgres (chủ bảng, có BYPASSRLS) nên
@@ -413,6 +477,8 @@ ALTER TABLE "attendance_feedback_responses"     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_event_reminders"        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_certificate_templates"  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_certificates"           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_event_guests"           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_invitation_templates"   ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- BƯỚC 4: UNIQUE constraints bổ sung
@@ -585,6 +651,13 @@ CREATE INDEX IF NOT EXISTS "attendance_certificates_userId_idx"
 CREATE INDEX IF NOT EXISTS "attendance_certificates_issuedById_idx"
   ON "attendance_certificates"("issuedById");
 
+-- ----- attendance_event_guests -----
+CREATE INDEX IF NOT EXISTS "attendance_event_guests_eventId_idx"
+  ON "attendance_event_guests"("eventId");
+
+CREATE INDEX IF NOT EXISTS "attendance_event_guests_eventId_checkedInAt_idx"
+  ON "attendance_event_guests"("eventId", "checkedInAt");
+
 -- ============================================================
 -- BƯỚC 6: Trigger tự động cập nhật updatedAt
 -- ============================================================
@@ -624,6 +697,16 @@ CREATE TRIGGER "attendance_feedback_forms_updated_at"
 DROP TRIGGER IF EXISTS "attendance_certificate_templates_updated_at" ON "attendance_certificate_templates";
 CREATE TRIGGER "attendance_certificate_templates_updated_at"
   BEFORE UPDATE ON "attendance_certificate_templates"
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS "attendance_event_guests_updated_at" ON "attendance_event_guests";
+CREATE TRIGGER "attendance_event_guests_updated_at"
+  BEFORE UPDATE ON "attendance_event_guests"
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS "attendance_invitation_templates_updated_at" ON "attendance_invitation_templates";
+CREATE TRIGGER "attendance_invitation_templates_updated_at"
+  BEFORE UPDATE ON "attendance_invitation_templates"
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 DROP TRIGGER IF EXISTS "attendance_feedback_responses_updated_at" ON "attendance_feedback_responses";

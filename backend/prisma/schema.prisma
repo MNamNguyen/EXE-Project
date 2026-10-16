@@ -62,6 +62,16 @@ enum GateState {
   CLOSED
 }
 
+// Kiểu sự kiện — chọn lúc tạo, KHÔNG đổi được về sau.
+// STANDARD   — màn chiếu QR động, người tham dự tự quét (đăng nhập + GPS + thiết bị).
+// INVITATION — khách ngoài (không tài khoản) nhận thiệp mời có QR riêng, BTC/tình
+//              nguyện viên quét thiệp để check-in.
+//              Xem docs/superpowers/specs/2026-10-16-invitation-event-design.md
+enum EventKind {
+  STANDARD
+  INVITATION
+}
+
 model Event {
   id                String    @id @default(cuid())
   name              String
@@ -94,6 +104,13 @@ model Event {
   // /api/classes/:id/sessions) — null với sự kiện thường. Xoá lớp không xoá
   // theo lịch sử buổi học nên dùng SetNull thay vì Cascade/Restrict.
   classId           String?
+  kind              EventKind @default(STANDARD)
+  // Giờ bắt đầu in trên thiệp mời — bắt buộc với INVITATION, sự kiện thường không dùng.
+  startsAt          DateTime?
+  // Link quét thiệp cho tình nguyện viên không có tài khoản (/quet/:scannerToken).
+  // Cột DB thay vì HMAC vì phải thu hồi được — giống reportShareToken.
+  scannerToken      String?   @unique
+  scannerSharedAt   DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -106,6 +123,8 @@ model Event {
   reminders           EventReminder[]
   certificateTemplate EventCertificateTemplate?
   certificates        Certificate[]
+  guests              EventGuest[]
+  invitationTemplate  EventInvitationTemplate?
 
   @@index([createdById])
   @@index([isActive])
@@ -380,4 +399,58 @@ model Certificate {
   @@index([userId])
   @@index([issuedById])
   @@map("attendance_certificates")
+}
+
+// ───────────────────────────────────────────────────────────────
+// Sự kiện thiệp mời — khách ngoài, không có tài khoản
+// ───────────────────────────────────────────────────────────────
+
+// Một khách trong danh sách mời. Không gắn với User: khách không có tài khoản, nên
+// đánh giá/chứng nhận/nhắc lịch (đều theo tài khoản) không áp dụng cho kiểu này.
+// code là bí mật in trong QR của thiệp — cấp lại mã là thiệp cũ hết dùng được.
+model EventGuest {
+  id           String    @id @default(cuid())
+  eventId      String
+  name         String
+  phone        String?
+  email        String?
+  code         String    @unique
+  // Khách tới cửa mà không có trong danh sách, BTC/tình nguyện viên thêm tại chỗ.
+  isWalkIn     Boolean   @default(false)
+  inviteStatus String    @default("PENDING") // PENDING | SENDING | SENT | FAILED
+  inviteSentAt DateTime?
+  checkedInAt  DateTime?
+  // Tên hiển thị người quét ("Nguyễn A" hoặc "Link quét") — chỉ để tra lại, không phải khoá ngoại.
+  checkedInBy  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // Email trùng trong cùng sự kiện là nhập trùng; Postgres cho nhiều NULL nên khách
+  // không có email không vướng ràng buộc này.
+  @@unique([eventId, email])
+  @@index([eventId])
+  @@index([eventId, checkedInAt])
+  @@map("attendance_event_guests")
+}
+
+// Mẫu thiệp mời của MỘT sự kiện — cùng cách lưu với EventCertificateTemplate (ảnh
+// trong DB vì ổ đĩa Render bị xoá mỗi lần deploy). Không có mẫu thì dùng thiệp mặc
+// định. fields: xem lib/invitationLayout.js.
+model EventInvitationTemplate {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  image       Bytes
+  mimeType    String
+  width       Int
+  height      Int
+  fields      Json
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("attendance_invitation_templates")
 }

@@ -26,13 +26,36 @@ export default function EventCreate() {
     checkoutClose: '',
     isWhitelisted: false,
     allowRegistration: true,
+    kind: 'STANDARD',
+    startsAt: '',
   });
+
+  const submitInvitation = async () => {
+    if (!form.startsAt) return toast.error('Vui lòng chọn thời gian bắt đầu — thời gian này được in lên thiệp mời');
+    setLoading(true);
+    try {
+      const { data } = await eventApi.create({
+        kind: 'INVITATION',
+        name: form.name,
+        description: form.description,
+        location: form.location,
+        startsAt: localInputToISO(form.startsAt),
+      });
+      toast.success('Tạo sự kiện thành công!');
+      navigate(`/events/${data.data.id}`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Tạo sự kiện thất bại');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name || !form.location) {
       return toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
     }
+    if (form.kind === 'INVITATION') return submitInvitation();
     const timeFields = [form.checkinOpen, form.checkinClose, form.checkoutOpen, form.checkoutClose];
     const filledCount = timeFields.filter(Boolean).length;
     if (filledCount > 0 && filledCount < 4) {
@@ -43,8 +66,9 @@ export default function EventCreate() {
     }
     setLoading(true);
     try {
+      const { kind, startsAt, ...rest } = form; // eslint-disable-line no-unused-vars
       const payload = {
-        ...form,
+        ...rest,
         checkinOpen: form.checkinOpen ? localInputToISO(form.checkinOpen) : null,
         checkinClose: form.checkinClose ? localInputToISO(form.checkinClose) : null,
         checkoutOpen: form.checkoutOpen ? localInputToISO(form.checkoutOpen) : null,
@@ -66,12 +90,14 @@ export default function EventCreate() {
         <div className="min-w-0 flex-1">
           <h1 className="text-balance text-xl font-semibold text-foreground">Tạo sự kiện mới</h1>
           <p className="mt-2 max-w-[55ch] text-pretty text-sm/6 text-muted">
-            Sau khi tạo, bạn được đưa thẳng tới trang sự kiện để mở màn QR.
+            {form.kind === 'INVITATION'
+              ? 'Sau khi tạo, bạn được đưa thẳng tới trang sự kiện để nhập danh sách khách mời và gửi thiệp.'
+              : 'Sau khi tạo, bạn được đưa thẳng tới trang sự kiện để mở màn QR.'}
           </p>
         </div>
       </header>
       <form onSubmit={handleSubmit} className="flex max-w-3xl flex-col gap-4">
-        <EventFormFields form={form} setForm={setForm} />
+        <EventFormFields form={form} setForm={setForm} canPickKind />
         <div className="flex flex-col-reverse gap-2 border-t border-border-strong pt-5 sm:flex-row sm:justify-end">
           <Button size="form" onClick={() => navigate('/events')}>Huỷ</Button>
           <Button type="submit" variant="primary" size="form" loading={loading}>Tạo sự kiện</Button>

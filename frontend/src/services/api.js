@@ -205,4 +205,58 @@ export const certificateApi = {
   pdf: (id) => api.get(`/api/certificates/${id}/pdf`, { responseType: 'blob' }),
 };
 
+// Sự kiện thiệp mời — BTC (ADMIN hoặc người tạo sự kiện). Khách mời là khách ngoài,
+// không có tài khoản; BTC quét thiệp của khách để check-in.
+export const guestApi = {
+  list: (eventId, params) => api.get(`/api/events/${eventId}/guests`, { params }),
+  add: (eventId, data) => api.post(`/api/events/${eventId}/guests`, data),
+  update: (eventId, guestId, data) => api.put(`/api/events/${eventId}/guests/${guestId}`, data),
+  remove: (eventId, guestId) => api.delete(`/api/events/${eventId}/guests/${guestId}`),
+  importFile: (eventId, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/api/events/${eventId}/guests/import`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  rotateCode: (eventId, guestId) => api.post(`/api/events/${eventId}/guests/${guestId}/rotate-code`),
+  checkIn: (eventId, guestId) => api.post(`/api/events/${eventId}/guests/${guestId}/checkin`),
+  undoCheckIn: (eventId, guestId) => api.delete(`/api/events/${eventId}/guests/${guestId}/checkin`),
+  scan: (eventId, code) => api.post(`/api/events/${eventId}/guests/scan`, { code }),
+  walkIn: (eventId, data) => api.post(`/api/events/${eventId}/guests/walk-in`, data),
+  scannerSummary: (eventId) => api.get(`/api/events/${eventId}/scanner-summary`),
+  guestPdf: (eventId, guestId) => api.get(`/api/events/${eventId}/guests/${guestId}/invitation.pdf`, { responseType: 'blob' }),
+  // Gộp mọi thiệp thành một PDF để in — danh sách dài cần lâu hơn timeout mặc định.
+  allPdf: (eventId) => api.get(`/api/events/${eventId}/invitations/pdf`, { responseType: 'blob', timeout: 120000 }),
+  // Không truyền guestIds = gửi cho mọi khách có email chưa nhận thiệp.
+  send: (eventId, guestIds) => api.post(`/api/events/${eventId}/invitations/send`, guestIds ? { guestIds } : {}),
+
+  getTemplate: (eventId) => api.get(`/api/events/${eventId}/invitation-template`),
+  getTemplateImage: (eventId) => api.get(`/api/events/${eventId}/invitation-template/image`, { responseType: 'blob' }),
+  uploadTemplateImage: (eventId, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.put(`/api/events/${eventId}/invitation-template/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  saveTemplateFields: (eventId, fields) => api.put(`/api/events/${eventId}/invitation-template/fields`, { fields }),
+  removeTemplate: (eventId) => api.delete(`/api/events/${eventId}/invitation-template`),
+  previewPdf: (eventId, name) => api.get(`/api/events/${eventId}/invitation-template/preview`, { params: { name }, responseType: 'blob' }),
+
+  // Link quét cho tình nguyện viên: POST tạo-hoặc-trả-lại link đang có, rotate = cấp mới.
+  getScannerLink: (eventId) => api.get(`/api/events/${eventId}/scanner-link`),
+  createScannerLink: (eventId, { rotate } = {}) =>
+    api.post(`/api/events/${eventId}/scanner-link`, null, { params: rotate ? { rotate: 1 } : {} }),
+  revokeScannerLink: (eventId) => api.delete(`/api/events/${eventId}/scanner-link`),
+};
+
+// Công khai, không đăng nhập: tình nguyện viên quét qua link, khách xem thiệp của mình.
+export const publicInvitationApi = {
+  scannerSummary: (token) => api.get(`/api/public/scanner/${token}`),
+  scan: (token, code, scannerName) => api.post(`/api/public/scanner/${token}/scan`, { code, scannerName }),
+  search: (token, q) => api.get(`/api/public/scanner/${token}/guests`, { params: { q } }),
+  checkIn: (token, guestId, scannerName) => api.post(`/api/public/scanner/${token}/guests/${guestId}/checkin`, { scannerName }),
+  walkIn: (token, data, scannerName) => api.post(`/api/public/scanner/${token}/walk-in`, { ...data, scannerName }),
+
+  getInvitation: (code) => api.get(`/api/public/invitations/${code}`),
+  invitationPdf: (code) => api.get(`/api/public/invitations/${code}/pdf`, { responseType: 'blob' }),
+};
+
 export default api;

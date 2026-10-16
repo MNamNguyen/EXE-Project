@@ -27,6 +27,8 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
         checkoutClose: toLocalInput(event.checkoutClose),
         isWhitelisted: event.isWhitelisted ?? false,
         allowRegistration: event.allowRegistration ?? true,
+        kind: event.kind || 'STANDARD',
+        startsAt: toLocalInput(event.startsAt),
       });
     }
     if (!open) setForm(null);
@@ -36,6 +38,24 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
     e.preventDefault();
     if (!form.name || !form.location) {
       return toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
+    }
+    // Sự kiện thiệp mời chỉ sửa thông tin in trên thiệp (server cũng khoá phần còn lại).
+    if (form.kind === 'INVITATION') {
+      if (!form.startsAt) return toast.error('Vui lòng chọn thời gian bắt đầu');
+      setSaving(true);
+      try {
+        await eventApi.update(event.id, {
+          name: form.name, description: form.description, location: form.location, startsAt: localInputToISO(form.startsAt),
+        });
+        toast.success('Cập nhật sự kiện thành công');
+        onSaved?.();
+        onClose();
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Cập nhật thất bại');
+      } finally {
+        setSaving(false);
+      }
+      return;
     }
     const timeFields = [form.checkinOpen, form.checkinClose, form.checkoutOpen, form.checkoutClose];
     const filledCount = timeFields.filter(Boolean).length;
@@ -47,8 +67,9 @@ export default function EventEditModal({ open, event, onClose, onSaved }) {
     }
     setSaving(true);
     try {
+      const { kind, startsAt, ...rest } = form; // eslint-disable-line no-unused-vars
       const payload = {
-        ...form,
+        ...rest,
         checkinOpen: form.checkinOpen ? localInputToISO(form.checkinOpen) : null,
         checkinClose: form.checkinClose ? localInputToISO(form.checkinClose) : null,
         checkoutOpen: form.checkoutOpen ? localInputToISO(form.checkoutOpen) : null,

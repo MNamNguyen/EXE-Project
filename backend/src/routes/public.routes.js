@@ -8,6 +8,11 @@ const {
 const { issueScanTicket } = require('../controllers/checkin.controller');
 // Báo cáo được BTC chia sẻ bằng link công khai: người xem không có tài khoản.
 const { getSharedReport } = require('../controllers/report.controller');
+// Sự kiện thiệp mời: khách xem thiệp của mình, tình nguyện viên quét qua link.
+const {
+  publicScannerSummary, publicScan, publicSearchGuests, publicCheckInGuest, publicWalkIn,
+  getPublicInvitation, getPublicInvitationPdf,
+} = require('../controllers/invitation.controller');
 
 // Endpoint đăng ký công khai có thể tạo tài khoản mới → siết chặt hơn rate limit
 // chung của /api để chặn spam tạo user hàng loạt từ một IP.
@@ -38,5 +43,24 @@ router.get('/events/:id', getPublicEvent);
 router.post('/events/:id/register', registerLimiter, registerPublic);
 
 router.get('/reports/:token', getSharedReport);
+
+// Link quét là công khai (ai có link đều quét được) — trần theo token+IP đủ rộng
+// cho một cửa đón vài trăm khách, nhưng chặn việc dò danh sách bằng tìm kiếm.
+const scannerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.PUBLIC_SCANNER_MAX) || 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${req.params.token}:${req.ip}`,
+  message: { success: false, message: 'Thao tác quá nhanh. Vui lòng thử lại sau ít phút.' },
+});
+router.get('/scanner/:token', scannerLimiter, publicScannerSummary);
+router.post('/scanner/:token/scan', scannerLimiter, publicScan);
+router.get('/scanner/:token/guests', scannerLimiter, publicSearchGuests);
+router.post('/scanner/:token/guests/:guestId/checkin', scannerLimiter, publicCheckInGuest);
+router.post('/scanner/:token/walk-in', scannerLimiter, publicWalkIn);
+
+router.get('/invitations/:code', getPublicInvitation);
+router.get('/invitations/:code/pdf', getPublicInvitationPdf);
 
 module.exports = router;
