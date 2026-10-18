@@ -1,13 +1,17 @@
 const XLSX = require('xlsx');
+const { Prisma } = require('@prisma/client');
 const prisma = require('../lib/prisma');
 const { loadEventForWrite } = require('../lib/eventAccess');
 const { attachmentHeader, inlineHeader, toAsciiFilename } = require('../lib/contentDisposition');
 const {
-  normalizeGuestInput, findDuplicate, guestView, checkInByCode, checkInById, addWalkIn,
-  guestStats, recentCheckins,
+  GUEST_INCLUDE, normalizeGuestInput, findDuplicate, guestView, checkInByCode, checkInById, addWalkIn,
+  guestStats, recentCheckins, validateSeats, seatCreates, seatWrites, seatTaken, isUniqueViolation, replaceGuestSeats,
+  guestSearchWhere,
 } = require('../lib/guestCheckin');
+const { normalizeSeatMap, usableSeats, sortSeats, seatLabel } = require('../lib/seatMap');
+const crypto = require('crypto');
 const {
-  generateGuestCode, invitationValues, invitationTime, invitationUrl,
+  generateGuestCode, withAllFields, invitationValues, invitationTime, invitationUrl,
 } = require('../lib/invitationLayout');
 const { renderInvitationsPdf } = require('../services/invitationPdf');
 const { TIME_ZONE } = require('../lib/datetime');
@@ -78,19 +82,10 @@ async function listGuests(req, res) {
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const search = String(req.query.search || '').trim().slice(0, 100);
-    const digits = search.replace(/[\s.\-()]/g, '');
-
     const where = {
       eventId: event.id,
       ...(STATUS_FILTERS[req.query.status] || {}),
-      ...(search && {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search.toLowerCase() } },
-          ...(/^\+?\d{3,}$/.test(digits) ? [{ phone: { contains: digits } }] : []),
-        ],
-      }),
+      ...guestSearchWhere(req.query.search),
     };
 
     const [guests, total, stats, withEmail, sent, failed, today, last] = await Promise.all([
@@ -99,6 +94,7 @@ async function listGuests(req, res) {
         orderBy: [{ checkedInAt: { sort: 'desc', nulls: 'last' } }, { name: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
+        include: GUEST_INCLUDE,
       }),
       prisma.eventGuest.count({ where }),
       guestStats(event.id),
@@ -142,9 +138,23 @@ async function addGuest(req, res) {
       });
     }
 
-    const guest = await prisma.eventGuest.create({
-      data: { ...input.value, eventId: event.id, code: generateGuestCode() },
-    });
+    const seats = input.seats || [];
+    const invalid = validateSeats(event, seats);
+    if (invalid) return sendResult(res, invalid);
+
+    // id sinh trước để tạo khách + ghế trong MỘT transaction — ghế trùng (P2002) thì
+    // khách cũng không được tạo.
+    const id = crypto.randomUUID();
+    try {
+      await prisma.$transaction([
+        prisma.eventGuest.create({ data: { ...input.value, id, eventId: event.id, code: generateGuestCode() } }),
+        ...seatCreates(event.id, id, seats),
+      ]);
+    } catch (err) {
+      if (!isUniqueViolation(err, 'seat')) throw err;
+      return sendResult(res, await seatTaken(event.id, seats));
+    }
+    const guest = await prisma.eventGuest.findUnique({ where: { id }, include: GUEST_INCLUDE });
     return res.status(201).json({ success: true, data: guestView(guest), message: `Đã thêm ${guest.name}` });
   } catch (err) {
     return serverError(res, 'Add guest', err);
@@ -152,17 +162,21 @@ async function addGuest(req, res) {
 }
 
 // Tên cột trong file Excel → trường. So khớp sau khi bỏ dấu, viết thường, bỏ ký tự
-// lạ, nên "Họ và tên", "HỌ TÊN", "ho_ten" đều nhận.
+// lạ, nên "Họ và tên", "HỌ TÊN", "ho_ten" đều nhận. Cột lạ (STT, ghi chú...) bỏ qua.
 const HEADER_ALIASES = {
   name: ['hoten', 'hovaten', 'ten', 'name', 'fullname', 'tenkhach', 'khachmoi'],
   phone: ['sdt', 'sodienthoai', 'dienthoai', 'phone', 'mobile', 'sodt', 'dt'],
   email: ['email', 'mail', 'diachiemail', 'thudientu'],
+  ticketCount: ['soluongve', 'sove', 'soluong', 'sl', 've', 'tickets', 'quantity'],
+  seats: ['ghe', 'vitrighe', 'seat', 'seats', 'chongoi'],
 };
 
 function headerKey(header) {
   const k = toAsciiFilename(header).toLowerCase().replace(/[^a-z0-9]/g, '');
   return Object.keys(HEADER_ALIASES).find((field) => HEADER_ALIASES[field].includes(k)) || null;
 }
+
+const cellText = (row, column) => (column ? String(row[column] ?? '').trim() : '');
 
 async function importGuests(req, res) {
   try {
@@ -199,47 +213,88 @@ async function importGuests(req, res) {
       });
     }
 
-    const existing = await prisma.eventGuest.findMany({
-      where: { eventId: event.id },
-      select: { email: true, phone: true },
-    });
+    const [existing, takenSeats] = await Promise.all([
+      prisma.eventGuest.findMany({ where: { eventId: event.id }, select: { email: true, phone: true } }),
+      prisma.eventGuestSeat.findMany({
+        where: { eventId: event.id },
+        select: { seat: true, guest: { select: { name: true } } },
+      }),
+    ]);
     const seenEmail = new Set(existing.map((g) => g.email).filter(Boolean));
     const seenPhone = new Set(existing.map((g) => g.phone).filter(Boolean));
+    // Ghế → tên người giữ: gồm ghế đã gán trong DB và ghế của các dòng phía trên.
+    const seatOwner = new Map(takenSeats.map((s) => [s.seat, s.guest.name]));
 
     const toCreate = [];
+    const seatRows = [];
     const skipped = [];
     rows.forEach((row, i) => {
       const line = i + 2; // dòng 1 là tiêu đề
       const raw = {
-        name: row[columns.name],
-        phone: columns.phone ? row[columns.phone] : '',
-        email: columns.email ? row[columns.email] : '',
+        name: cellText(row, columns.name),
+        phone: cellText(row, columns.phone),
+        email: cellText(row, columns.email),
+        ...(columns.ticketCount && { ticketCount: cellText(row, columns.ticketCount) }),
+        ...(columns.seats && { seats: cellText(row, columns.seats) }),
       };
-      if (!String(raw.name).trim() && !String(raw.phone).trim() && !String(raw.email).trim()) return; // dòng trống
+      // Dòng trống — kể cả dòng tổng cuối bảng (chỉ có số ở cột "Số lượng vé").
+      if (!raw.name && !raw.phone && !raw.email && !raw.seats) return;
       const input = normalizeGuestInput(raw);
       if (input.error) {
-        skipped.push({ row: line, name: String(raw.name || '').trim(), reason: input.error });
+        skipped.push({ row: line, name: raw.name, reason: input.error });
         return;
       }
-      const { email, phone } = input.value;
+      const { email, phone, name } = input.value;
       if ((email && seenEmail.has(email)) || (phone && seenPhone.has(phone))) {
-        skipped.push({ row: line, name: input.value.name, reason: 'Trùng email hoặc SĐT với khách đã có' });
+        skipped.push({ row: line, name, reason: 'Trùng email hoặc SĐT với khách đã có' });
+        return;
+      }
+      const seats = input.seats || [];
+      const invalid = validateSeats(event, seats);
+      if (invalid) {
+        skipped.push({ row: line, name, reason: invalid.message });
+        return;
+      }
+      const clash = seats.find((s) => seatOwner.has(s));
+      if (clash) {
+        skipped.push({ row: line, name, reason: `Ghế ${clash} trùng với ${seatOwner.get(clash)}` });
         return;
       }
       if (email) seenEmail.add(email);
       if (phone) seenPhone.add(phone);
-      toCreate.push({ ...input.value, eventId: event.id, code: generateGuestCode() });
+      const id = crypto.randomUUID();
+      seats.forEach((seat) => {
+        seatOwner.set(seat, name);
+        seatRows.push({ eventId: event.id, guestId: id, seat });
+      });
+      toCreate.push({ ...input.value, id, eventId: event.id, code: generateGuestCode() });
     });
 
-    // skipDuplicates: hai lượt import chạy chồng nhau cũng không tạo trùng email.
-    const { count } = toCreate.length
-      ? await prisma.eventGuest.createMany({ data: toCreate, skipDuplicates: true })
-      : { count: 0 };
+    // Khách + ghế trong MỘT transaction. Có người gán đúng ghế đó trên sơ đồ ngay lúc
+    // import (P2002) thì không thêm gì — BTC import lại sẽ thấy dòng nào trùng ghế.
+    let count = 0;
+    if (toCreate.length) {
+      try {
+        const [created] = await prisma.$transaction([
+          prisma.eventGuest.createMany({ data: toCreate }),
+          ...(seatRows.length ? [prisma.eventGuestSeat.createMany({ data: seatRows })] : []),
+        ]);
+        count = created.count;
+      } catch (err) {
+        if (!isUniqueViolation(err)) throw err;
+        return res.status(409).json({
+          success: false,
+          error: 'IMPORT_CONFLICT',
+          message: 'Có ghế hoặc email vừa được thêm cùng lúc ở nơi khác — chưa nhập dòng nào, hãy import lại.',
+        });
+      }
+    }
 
+    const tickets = toCreate.reduce((n, g) => n + (g.ticketCount || 1), 0);
     return res.json({
       success: true,
-      data: { added: count, skipped },
-      message: `Đã thêm ${count} khách${skipped.length ? `, bỏ qua ${skipped.length} dòng` : ''}`,
+      data: { added: count, tickets, seats: seatRows.length, skipped },
+      message: `Đã thêm ${count} khách (${tickets} vé)${skipped.length ? `, bỏ qua ${skipped.length} dòng` : ''}`,
     });
   } catch (err) {
     return serverError(res, 'Import guests', err);
@@ -247,7 +302,7 @@ async function importGuests(req, res) {
 }
 
 async function findGuest(event, req, res) {
-  const guest = await prisma.eventGuest.findFirst({ where: { id: req.params.guestId, eventId: event.id } });
+  const guest = await prisma.eventGuest.findFirst({ where: { id: req.params.guestId, eventId: event.id }, include: GUEST_INCLUDE });
   if (!guest) res.status(404).json({ success: false, error: 'GUEST_NOT_FOUND', message: 'Không tìm thấy khách' });
   return guest;
 }
@@ -270,12 +325,44 @@ async function updateGuest(req, res) {
       });
     }
 
-    // Đổi email thì địa chỉ mới chưa nhận thiệp — đưa về chờ gửi.
+    // Giảm số vé mà không gửi lại danh sách ghế: ghế đang giữ không được nhiều hơn số vé mới.
+    if (input.seats === null && input.value.ticketCount !== undefined) {
+      const held = await prisma.eventGuestSeat.count({ where: { guestId: guest.id } });
+      if (held > input.value.ticketCount) {
+        return res.status(400).json({
+          success: false,
+          error: 'INVALID_GUEST',
+          message: `Khách đang giữ ${held} ghế — bỏ bớt ghế trước khi giảm số vé xuống ${input.value.ticketCount}`,
+        });
+      }
+    }
+    const seats = input.seats;
+    const invalid = validateSeats(event, seats);
+    if (invalid) return sendResult(res, invalid);
+
+    // Đổi email thì địa chỉ mới chưa nhận thiệp — đưa về chờ gửi. Đổi số vé/ghế thì
+    // thiệp đã gửi in số cũ — cũng đưa về chờ gửi để BTC gửi lại.
     const emailChanged = input.value.email !== guest.email;
-    const updated = await prisma.eventGuest.update({
-      where: { id: guest.id },
-      data: { ...input.value, ...(emailChanged && { inviteStatus: 'PENDING', inviteSentAt: null }) },
-    });
+    const ticketsChanged = input.value.ticketCount !== undefined && input.value.ticketCount !== guest.ticketCount;
+    let seatsChanged = false;
+    if (seats !== null) {
+      const current = await prisma.eventGuestSeat.findMany({ where: { guestId: guest.id }, select: { seat: true } });
+      seatsChanged = sortSeats(current.map((s) => s.seat)).join() !== seats.join();
+    }
+    const resend = emailChanged || ticketsChanged || seatsChanged;
+    try {
+      await prisma.$transaction([
+        prisma.eventGuest.update({
+          where: { id: guest.id },
+          data: { ...input.value, ...(resend && { inviteStatus: 'PENDING', inviteSentAt: null }) },
+        }),
+        ...(seatsChanged ? seatWrites(event.id, guest.id, seats) : []),
+      ]);
+    } catch (err) {
+      if (!isUniqueViolation(err, 'seat')) throw err;
+      return sendResult(res, await seatTaken(event.id, seats, guest.id));
+    }
+    const updated = await prisma.eventGuest.findUnique({ where: { id: guest.id }, include: GUEST_INCLUDE });
     return res.json({ success: true, data: guestView(updated), message: 'Đã cập nhật khách mời' });
   } catch (err) {
     return serverError(res, 'Update guest', err);
@@ -305,6 +392,7 @@ async function rotateGuestCode(req, res) {
     const updated = await prisma.eventGuest.update({
       where: { id: guest.id },
       data: { code: generateGuestCode(), inviteStatus: 'PENDING', inviteSentAt: null },
+      include: GUEST_INCLUDE,
     });
     return res.json({ success: true, data: guestView(updated), message: 'Đã cấp mã mới — thiệp cũ không dùng được nữa' });
   } catch (err) {
@@ -344,6 +432,7 @@ async function undoGuestCheckIn(req, res) {
     const updated = await prisma.eventGuest.update({
       where: { id: guest.id },
       data: { checkedInAt: null, checkedInBy: null },
+      include: GUEST_INCLUDE,
     });
     return res.json({ success: true, data: guestView(updated), message: `Đã huỷ check-in của ${guest.name}` });
   } catch (err) {
@@ -358,6 +447,99 @@ async function addWalkInGuest(req, res) {
     return sendResult(res, await addWalkIn(event, req.body, actorOf(req)));
   } catch (err) {
     return serverError(res, 'Add walk-in guest', err);
+  }
+}
+
+// ── Sơ đồ ghế ────────────────────────────────────────────────────────────
+
+// Sơ đồ + ghế đã gán (kèm khách giữ ghế, đã tới chưa) để vẽ sơ đồ, và danh sách
+// khách còn thiếu ghế để chọn khi bấm vào một ghế trống.
+async function getSeats(req, res) {
+  try {
+    const event = await loadInvitationEvent(req, res);
+    if (!event) return;
+    const [assigned, guests] = await Promise.all([
+      prisma.eventGuestSeat.findMany({
+        where: { eventId: event.id },
+        select: { seat: true, guest: { select: { id: true, name: true, ticketCount: true, checkedInAt: true, isWalkIn: true } } },
+      }),
+      prisma.eventGuest.findMany({
+        where: { eventId: event.id },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, ticketCount: true, checkedInAt: true, isWalkIn: true, _count: { select: { seats: true } } },
+      }),
+    ]);
+    res.set('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      data: {
+        seatMap: event.seatMap || null,
+        assignments: assigned.map((a) => ({
+          seat: a.seat,
+          guestId: a.guest.id,
+          name: a.guest.name,
+          ticketCount: a.guest.ticketCount,
+          checkedIn: Boolean(a.guest.checkedInAt),
+        })),
+        guests: guests.map(({ _count, ...g }) => ({ ...g, seatCount: _count.seats })),
+      },
+    });
+  } catch (err) {
+    return serverError(res, 'Get seats', err);
+  }
+}
+
+// Lưu sơ đồ. Sơ đồ mới phải còn chứa mọi ghế đang được gán (thu nhỏ hàng hay bỏ
+// ghế đã bán sẽ làm khách mất chỗ mà không ai hay) — 409 SEAT_IN_USE kèm danh sách.
+// Body { seatMap: null } = bỏ sơ đồ, chỉ khi chưa gán ghế nào.
+async function saveSeatMap(req, res) {
+  try {
+    const event = await loadInvitationEvent(req, res);
+    if (!event) return;
+
+    let seatMap = null;
+    if (req.body?.seatMap != null) {
+      const parsed = normalizeSeatMap(req.body.seatMap);
+      if (parsed.error) return res.status(400).json({ success: false, error: 'INVALID_SEAT_MAP', message: parsed.error });
+      seatMap = parsed.value;
+    }
+
+    const assigned = await prisma.eventGuestSeat.findMany({ where: { eventId: event.id }, select: { seat: true } });
+    const usable = seatMap ? usableSeats(seatMap) : new Set();
+    const lost = sortSeats(assigned.map((a) => a.seat).filter((s) => !usable.has(s)));
+    if (lost.length) {
+      const list = lost.length > 12 ? `${lost.slice(0, 12).join(', ')}… (${lost.length} ghế)` : lost.join(', ');
+      return res.status(409).json({
+        success: false,
+        error: 'SEAT_IN_USE',
+        message: seatMap
+          ? `Các ghế đang có khách sẽ mất khỏi sơ đồ: ${list}. Bỏ gán các ghế này trước.`
+          : 'Còn khách đang được gán ghế — bỏ gán hết ghế trước khi xoá sơ đồ.',
+        seats: lost,
+      });
+    }
+
+    await prisma.event.update({ where: { id: event.id }, data: { seatMap: seatMap ?? Prisma.DbNull } });
+    return res.json({ success: true, data: { seatMap }, message: seatMap ? 'Đã lưu sơ đồ ghế' : 'Đã xoá sơ đồ ghế' });
+  } catch (err) {
+    return serverError(res, 'Save seat map', err);
+  }
+}
+
+// Gán/bỏ/đổi ghế của một khách từ sơ đồ: gửi danh sách ghế MỚI của khách đó.
+async function setGuestSeats(req, res) {
+  try {
+    const event = await loadInvitationEvent(req, res);
+    if (!event) return;
+    const result = await replaceGuestSeats(event, req.params.guestId, req.body?.seats ?? []);
+    return res.status(result.status).json({
+      success: result.ok,
+      ...(result.error && { error: result.error }),
+      message: result.message,
+      ...(result.guest && { data: guestView(result.guest) }),
+    });
+  } catch (err) {
+    return serverError(res, 'Set guest seats', err);
   }
 }
 
@@ -384,8 +566,8 @@ async function getScannerSummary(req, res) {
 
 // ── Thiệp PDF ────────────────────────────────────────────────────────────
 
-function loadTemplate(eventId) {
-  return prisma.eventInvitationTemplate.findUnique({ where: { eventId } });
+async function loadTemplate(eventId) {
+  return withAllFields(await prisma.eventInvitationTemplate.findUnique({ where: { eventId } }));
 }
 
 const pdfItem = (guest, event) => ({ values: invitationValues(guest, event), qrText: invitationUrl(guest.code) });
@@ -421,6 +603,7 @@ async function downloadAllInvitations(req, res) {
     const guests = await prisma.eventGuest.findMany({
       where: { eventId: event.id, isWalkIn: false },
       orderBy: { name: 'asc' },
+      include: GUEST_INCLUDE,
     });
     if (!guests.length) {
       return res.status(400).json({ success: false, error: 'NO_GUESTS', message: 'Chưa có khách mời nào' });
@@ -448,7 +631,7 @@ async function deliverInvitations(event, guestIds) {
       data: { inviteStatus: 'SENDING' },
     });
     if (!claimed.count) return;
-    const guest = await prisma.eventGuest.findUnique({ where: { id } });
+    const guest = await prisma.eventGuest.findUnique({ where: { id }, include: GUEST_INCLUDE });
     if (!guest?.email) return;
     try {
       const pdf = await renderInvitationsPdf(template, [pdfItem(guest, event)], {
@@ -456,6 +639,7 @@ async function deliverInvitations(event, guestIds) {
       });
       await emailService.sendInvitationEmail(guest.email, guest.name, event, {
         whenText,
+        seatText: seatLabel(guest),
         viewUrl: invitationUrl(guest.code),
         pdf,
         filename: `${toAsciiFilename(`Thiep moi ${event.name}`).slice(0, 80)}.pdf`,
@@ -524,6 +708,9 @@ module.exports = {
   updateGuest,
   deleteGuest,
   rotateGuestCode,
+  getSeats,
+  saveSeatMap,
+  setGuestSeats,
   scanGuest,
   checkInGuestManually,
   undoGuestCheckIn,

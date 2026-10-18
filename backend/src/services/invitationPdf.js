@@ -164,13 +164,16 @@ async function renderDefaultPages(doc, font, items) {
       center(page, line, y, sans, 11.5, C.muted);
       y += 16;
     }
+    // "Ghế E08, E09 · 2 vé" — dòng dài nhất (event 3 dòng + địa điểm 2 dòng) vẫn nằm
+    // trên mép QR (QR_TOP = 393).
+    if (values.seat) center(page, values.seat, y + 12, bold, 13, C.accent);
 
     drawQr(page, qrText, (W - QR_SIDE) / 2, QR_TOP, QR_SIDE, H);
     center(page, 'Vui lòng xuất trình mã QR này khi tới sự kiện', H - 30, sans, 9.5, C.muted);
   }
 }
 
-// items: [{ values: { name, event, time, location }, qrText }] — mỗi khách một trang.
+// items: [{ values: { name, event, time, location, seat }, qrText }] — mỗi khách một trang.
 // template null = thiệp mặc định.
 async function renderInvitationsPdf(template, items, { title } = {}) {
   const { doc, font } = await newDoc(title);

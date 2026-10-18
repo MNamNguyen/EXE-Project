@@ -8,11 +8,13 @@ const {
 } = require('../services/htmlReport.service');
 const { readPublicForm } = require('../lib/publicForm');
 const { fmtDateTime } = require('../lib/datetime');
+const { GUEST_INCLUDE } = require('../lib/guestCheckin');
+const { guestSeats } = require('../lib/seatMap');
 
 // Sự kiện thiệp mời có danh sách khách (EventGuest) thay cho bảng điểm danh của
 // tài khoản — mọi đường xuất báo cáo (Excel, HTML, link chia sẻ) rẽ ở đây.
 function loadGuestRows(eventId) {
-  return prisma.eventGuest.findMany({ where: { eventId }, orderBy: { name: 'asc' } });
+  return prisma.eventGuest.findMany({ where: { eventId }, orderBy: { name: 'asc' }, include: GUEST_INCLUDE });
 }
 
 async function buildHtmlFor(event) {
@@ -60,13 +62,13 @@ function guestWorkbook(event, guests) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Khách mời');
 
-  sheet.mergeCells('A1:H1');
+  sheet.mergeCells('A1:J1');
   const titleCell = sheet.getCell('A1');
   titleCell.value = `Danh sách khách mời: ${event.name}`;
   titleCell.font = { bold: true, size: 14, color: { argb: 'FF1A6BFF' } };
   titleCell.alignment = { horizontal: 'center' };
 
-  sheet.getRow(2).values = ['STT', 'Họ và tên', 'SĐT', 'Email', 'Loại', 'Trạng thái', 'Giờ check-in', 'Người check-in'];
+  sheet.getRow(2).values = ['STT', 'Họ và tên', 'SĐT', 'Email', 'Số vé', 'Ghế', 'Loại', 'Trạng thái', 'Giờ check-in', 'Người check-in'];
   sheet.getRow(2).font = { bold: true };
   sheet.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FF' } };
   sheet.columns = [
@@ -74,6 +76,8 @@ function guestWorkbook(event, guests) {
     { key: 'name', width: 28 },
     { key: 'phone', width: 16 },
     { key: 'email', width: 28 },
+    { key: 'tickets', width: 8 },
+    { key: 'seats', width: 24 },
     { key: 'kind', width: 14 },
     { key: 'status', width: 14 },
     { key: 'checkin', width: 20 },
@@ -86,6 +90,8 @@ function guestWorkbook(event, guests) {
       name: g.name,
       phone: g.phone || '',
       email: g.email || '',
+      tickets: g.ticketCount || 1,
+      seats: guestSeats(g).join(', '),
       kind: g.isWalkIn ? 'Khách tại chỗ' : 'Khách mời',
       status: g.checkedInAt ? 'Đã tới' : 'Chưa tới',
       checkin: g.checkedInAt ? fmtDateTime(g.checkedInAt) : '',
@@ -93,6 +99,8 @@ function guestWorkbook(event, guests) {
     });
     if (idx % 2 === 1) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F8FF' } };
   });
+  // Dòng tổng như file bán vé của BTC: một thiệp có thể mang nhiều vé.
+  sheet.addRow({ name: 'Tổng số vé', tickets: guests.reduce((n, g) => n + (g.ticketCount || 1), 0) }).font = { bold: true };
   return workbook;
 }
 

@@ -5,6 +5,7 @@
 // ngược trên màn hình QR — QRDisplay.jsx — để nhất quán phong cách trong app).
 
 const { fmtDateTime, fmtTime, TIME_ZONE } = require('../lib/datetime');
+const { guestSeats } = require('../lib/seatMap');
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({
@@ -227,25 +228,32 @@ ${REPORT_STYLE}
 }
 
 // Báo cáo sự kiện thiệp mời: khách ngoài, chỉ có check-in. "Có mặt" gồm cả khách
-// được mời lẫn khách thêm tại chỗ; "vắng" chỉ tính khách được mời.
+// được mời lẫn khách thêm tại chỗ; "vắng" chỉ tính khách được mời. Một thiệp có thể
+// mang nhiều vé (quét một lần cả nhóm vào) nên số liệu đếm theo NGƯỜI = tổng số vé.
 function buildGuestHtmlReport(event, guests) {
   const invited = guests.filter((g) => !g.isWalkIn);
   const attendedInvited = invited.filter((g) => g.checkedInAt);
   const walkIns = guests.filter((g) => g.isWalkIn);
   const absent = invited.filter((g) => !g.checkedInAt);
   const present = guests.filter((g) => g.checkedInAt);
-  const rate = invited.length ? Math.round((attendedInvited.length / invited.length) * 100) : 0;
+  const people = (list) => list.reduce((n, g) => n + (g.ticketCount || 1), 0);
+  const invitedPeople = people(invited);
+  const rate = invitedPeople ? Math.round((people(attendedInvited) / invitedPeople) * 100) : 0;
 
   const chart = donutChart(
     [
-      { label: 'Khách mời đã tới', value: attendedInvited.length, color: COLORS.checkedInOnly },
-      { label: 'Khách tại chỗ', value: walkIns.length, color: COLORS.checkedOut },
-      { label: 'Chưa tới', value: absent.length, color: COLORS.absent },
+      { label: 'Khách mời đã tới', value: people(attendedInvited), color: COLORS.checkedInOnly },
+      { label: 'Khách tại chỗ', value: people(walkIns), color: COLORS.checkedOut },
+      { label: 'Chưa tới', value: people(absent), color: COLORS.absent },
     ],
     { centerTitle: `${rate}%`, centerSub: 'khách mời tới dự' },
   );
 
   const contact = (g) => [g.phone, g.email].filter(Boolean).map(escapeHtml).join('<br>') || '<span class="muted">—</span>';
+  const tickets = (g) => {
+    const seats = guestSeats(g);
+    return `${g.ticketCount || 1}${seats.length ? `<br><span class="muted">${escapeHtml(seats.join(', '))}</span>` : ''}`;
+  };
 
   const presentRows = present
     .sort((a, b) => new Date(a.checkedInAt) - new Date(b.checkedInAt))
@@ -254,9 +262,10 @@ function buildGuestHtmlReport(event, guests) {
         <td>${i + 1}</td>
         <td>${escapeHtml(g.name)}${g.isWalkIn ? ' <span class="badge teal">Tại chỗ</span>' : ''}</td>
         <td>${contact(g)}</td>
+        <td>${tickets(g)}</td>
         <td>${timeOrDash(g.checkedInAt)}</td>
         <td>${escapeHtml(g.checkedInBy || '')}</td>
-      </tr>`).join('') || `<tr><td colspan="5" class="empty">Chưa có khách nào check-in</td></tr>`;
+      </tr>`).join('') || `<tr><td colspan="6" class="empty">Chưa có khách nào check-in</td></tr>`;
 
   const absentRows = absent
     .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
@@ -265,7 +274,8 @@ function buildGuestHtmlReport(event, guests) {
         <td>${i + 1}</td>
         <td>${escapeHtml(g.name)}</td>
         <td>${contact(g)}</td>
-      </tr>`).join('') || `<tr><td colspan="3" class="empty">Mọi khách mời đều đã tới 🎉</td></tr>`;
+        <td>${tickets(g)}</td>
+      </tr>`).join('') || `<tr><td colspan="4" class="empty">Mọi khách mời đều đã tới 🎉</td></tr>`;
 
   const schedule = event.startsAt ? dateTimeOrDash(event.startsAt) : '—';
 
@@ -293,33 +303,33 @@ ${REPORT_STYLE}
     </div>
 
     <div class="stats">
-      <div class="stat total"><div class="n">${invited.length}</div><div class="l">Khách được mời</div></div>
-      <div class="stat checkedin"><div class="n">${attendedInvited.length}</div><div class="l">Khách mời đã tới</div></div>
-      <div class="stat checkedout"><div class="n">${walkIns.length}</div><div class="l">Khách tại chỗ</div></div>
-      <div class="stat absent"><div class="n">${absent.length}</div><div class="l">Chưa tới</div></div>
+      <div class="stat total"><div class="n">${invitedPeople}</div><div class="l">Khách được mời (${invited.length} thiệp)</div></div>
+      <div class="stat checkedin"><div class="n">${people(attendedInvited)}</div><div class="l">Khách mời đã tới</div></div>
+      <div class="stat checkedout"><div class="n">${people(walkIns)}</div><div class="l">Khách tại chỗ</div></div>
+      <div class="stat absent"><div class="n">${people(absent)}</div><div class="l">Chưa tới</div></div>
     </div>
 
     <div class="chart-card">
       ${chart}
       <div class="legend">
-        <div class="legend-item"><span class="dot" style="background:${COLORS.checkedInOnly}"></span> Khách mời đã tới <span class="val">${attendedInvited.length}</span></div>
-        <div class="legend-item"><span class="dot" style="background:${COLORS.checkedOut}"></span> Khách thêm tại chỗ <span class="val">${walkIns.length}</span></div>
-        <div class="legend-item"><span class="dot" style="background:${COLORS.absent}"></span> Khách mời chưa tới <span class="val">${absent.length}</span></div>
+        <div class="legend-item"><span class="dot" style="background:${COLORS.checkedInOnly}"></span> Khách mời đã tới <span class="val">${people(attendedInvited)}</span></div>
+        <div class="legend-item"><span class="dot" style="background:${COLORS.checkedOut}"></span> Khách thêm tại chỗ <span class="val">${people(walkIns)}</span></div>
+        <div class="legend-item"><span class="dot" style="background:${COLORS.absent}"></span> Khách mời chưa tới <span class="val">${people(absent)}</span></div>
       </div>
     </div>
 
     <div class="section">
-      <h2>✅ Đã có mặt <span class="badge green">${present.length} người</span></h2>
+      <h2>✅ Đã có mặt <span class="badge green">${people(present)} người</span></h2>
       <table>
-        <thead><tr><th>STT</th><th>Họ và tên</th><th>Liên hệ</th><th>Check-in</th><th>Người check-in</th></tr></thead>
+        <thead><tr><th>STT</th><th>Họ và tên</th><th>Liên hệ</th><th>Vé / ghế</th><th>Check-in</th><th>Người check-in</th></tr></thead>
         <tbody>${presentRows}</tbody>
       </table>
     </div>
 
     <div class="section">
-      <h2>❌ Khách mời chưa tới <span class="badge red">${absent.length} người</span></h2>
+      <h2>❌ Khách mời chưa tới <span class="badge red">${people(absent)} người</span></h2>
       <table>
-        <thead><tr><th>STT</th><th>Họ và tên</th><th>Liên hệ</th></tr></thead>
+        <thead><tr><th>STT</th><th>Họ và tên</th><th>Liên hệ</th><th>Vé / ghế</th></tr></thead>
         <tbody>${absentRows}</tbody>
       </table>
     </div>

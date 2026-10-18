@@ -97,6 +97,11 @@ where the whole router shares a role. `/api/public/*` is the only unauthenticate
   self-scan APIs with `INVITATION_EVENT`. Invitation PDF layout is `lib/invitationLayout.js` ↔
   `frontend/src/pages/certificates/invitationRender.js` (same rule as the certificate pair; both use
   the `qrcode` package). Reports branch on `kind`. Spec: `docs/superpowers/specs/2026-10-16-invitation-event-design.md`.
+  One invitation can carry several tickets (`EventGuest.ticketCount`; one scan admits the whole group) and
+  seats from `Event.seatMap`. Seat codes (`E08`) are parsed/validated only in `lib/seatMap.js`; assignments
+  live in `EventGuestSeat` with `@@unique([eventId, seat])`, so a double-booking is a P2002 → `SEAT_TAKEN`
+  — write seats in the same `$transaction` as the guest. Load guests with `GUEST_INCLUDE` so `guestView`
+  has seats. Spec: `docs/superpowers/specs/2026-10-18-invitation-seating-design.md`.
 - Public check-in events (`Event.kind = 'PUBLIC'`): a **fixed** QR on the projector (`QRDisplay` with
   `kind PUBLIC`) points to `/check-in/:eventId`, where visitors with no account fill a BTC-built form
   (`Event.publicForm`; name is always present and not in `fields`). Every form write and submission goes

@@ -7,13 +7,22 @@ import { Field, Input } from '../../../components/ui/Input';
 
 // Thêm hoặc sửa một khách mời. guest = null là thêm mới. Họ tên bắt buộc; SĐT, email
 // tuỳ chọn (không có email thì BTC tải thiệp PDF tự gửi). Trùng email/SĐT trong cùng
-// sự kiện server trả 409.
+// sự kiện server trả 409. Một khách có thể đặt hộ nhiều vé (một thiệp, quét một lần cả
+// nhóm vào); ghế gõ dạng "E08, E09" hoặc "F06-F10", trùng ghế server trả SEAT_TAKEN.
 export default function GuestFormModal({ open, eventId, guest, onClose, onSaved }) {
-  const [form, setForm] = useState({ name: '', phone: '', email: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', ticketCount: '1', seats: '' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) setForm({ name: guest?.name || '', phone: guest?.phone || '', email: guest?.email || '' });
+    if (open) {
+      setForm({
+        name: guest?.name || '',
+        phone: guest?.phone || '',
+        email: guest?.email || '',
+        ticketCount: String(guest?.ticketCount || 1),
+        seats: (guest?.seats || []).join(', '),
+      });
+    }
   }, [open, guest]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -56,6 +65,14 @@ export default function GuestFormModal({ open, eventId, guest, onClose, onSaved 
         <Field label="Số điện thoại" optional>
           {(id) => <Input id={id} type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} autoComplete="off" />}
         </Field>
+        <div className="grid grid-cols-[7rem_1fr] gap-4">
+          <Field label="Số vé" required>
+            {(id) => <Input id={id} type="number" inputMode="numeric" min={1} max={50} value={form.ticketCount} onChange={set('ticketCount')} />}
+          </Field>
+          <Field label="Ghế" optional hint="Vd. E08, E09 hoặc F06-F10 — hoặc xếp trên tab Sơ đồ ghế">
+            {(id) => <Input id={id} value={form.seats} onChange={set('seats')} placeholder="E08, E09" autoComplete="off" />}
+          </Field>
+        </div>
         <Field label="Email" optional hint={guest?.email && form.email.trim().toLowerCase() !== guest.email ? 'Đổi email thì thiệp được đánh dấu chưa gửi để bạn gửi lại tới địa chỉ mới.' : 'Có email thì gửi thiệp được ngay từ hệ thống.'}>
           {(id) => <Input id={id} type="email" inputMode="email" value={form.email} onChange={set('email')} autoComplete="off" />}
         </Field>

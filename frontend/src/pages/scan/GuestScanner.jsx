@@ -17,7 +17,10 @@ import useQrCamera from './useQrCamera';
 // VolunteerScan) nên hai nơi luôn cùng luật, cùng giao diện. Dữ liệu khách ở link
 // quét đã được server che SĐT/email — màn này chỉ hiển thị đúng thứ nhận được.
 //
-// api: { summary(), scan(code), search(q), checkIn(guestId), walkIn({ name, phone, email }) }
+// api: { summary(), scan(code), search(q), checkIn(guestId), walkIn({ name, phone, email, ticketCount }) }
+//
+// Một thiệp có thể mang nhiều vé (người đặt hộ người thân): quét một lần là cả nhóm vào,
+// nên thẻ kết quả hiện to số người + ghế để người đứng cửa đếm và chỉ chỗ.
 
 const RESULT_TTL = { success: 2500, warning: 5000, error: 5000 };
 // Cùng một thiệp còn nằm trước camera thì khung hình nào cũng đọc ra. Cửa sổ TRƯỢT:
@@ -38,6 +41,13 @@ const ERROR_TITLES = {
 };
 
 const hhmm = (d) => (d ? format(new Date(d), 'HH:mm') : '');
+
+// "5 người · F06, F07, …" — gọn cho danh sách; '' với khách 1 vé không ghế.
+function groupText(g) {
+  if (!g) return '';
+  const people = g.ticketCount > 1 ? `${g.ticketCount} người` : '';
+  return [people, g.seats?.length ? g.seats.join(', ') : ''].filter(Boolean).join(' · ');
+}
 
 // Tiếng bíp ngắn: người đứng cửa không phải nhìn màn hình mới biết quét được hay chưa.
 let audioCtx = null;
@@ -97,6 +107,18 @@ function ResultCard({ result, onDismiss, onCheckInExisting, className }) {
         <div className="min-w-0 flex-1">
           <p className={cx('text-sm font-semibold', t.iconCls)}>{result.title}</p>
           {g?.name && <p className="mt-1 text-balance text-2xl font-semibold text-foreground">{g.name}</p>}
+          {g && (g.ticketCount > 1 || g.seats?.length > 0) && (
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+              <p className="text-lg font-semibold tabular-nums text-foreground">
+                {g.ticketCount || 1} <span className="text-sm font-medium text-foreground/70">người</span>
+              </p>
+              {g.seats?.length > 0 && (
+                <p className="text-lg font-semibold tabular-nums text-foreground">
+                  <span className="text-sm font-medium text-foreground/70">Ghế </span>{g.seats.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
           {contact && <p className="mt-1 truncate text-sm tabular-nums text-foreground/70">{contact}</p>}
           {result.tone === 'success'
             ? <p className="mt-1 text-sm text-foreground/70">{result.detail}</p>
@@ -204,7 +226,7 @@ export default function GuestScanner({ api, onFatal }) {
         </div>
         {stats && (
           <p className="text-sm tabular-nums text-muted">
-            Đã tới <span className="text-lg font-semibold text-foreground">{stats.checkedIn}</span>/{stats.total}
+            Đã tới <span className="text-lg font-semibold text-foreground">{stats.ticketsCheckedIn ?? stats.checkedIn}</span>/{stats.tickets ?? stats.total} người
             {stats.walkIns > 0 && <span> · {stats.walkIns} tại chỗ</span>}
           </p>
         )}
@@ -283,7 +305,7 @@ export default function GuestScanner({ api, onFatal }) {
               <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
-                  {r.checkedInBy && <p className="truncate text-xs text-muted">{r.checkedInBy}</p>}
+                  <p className="truncate text-xs tabular-nums text-muted">{[groupText(r), r.checkedInBy].filter(Boolean).join(' · ')}</p>
                 </div>
                 {r.isWalkIn && <Badge tone="teal">Tại chỗ</Badge>}
                 <span className="text-sm tabular-nums text-muted">{hhmm(r.checkedInAt)}</span>
@@ -318,7 +340,7 @@ function SearchPanel({ api, busy, onCheckIn, refreshKey }) {
   return (
     <div className="flex flex-col gap-3">
       <SearchInput
-        placeholder="Gõ tên hoặc số điện thoại (ít nhất 2 ký tự)"
+        placeholder="Gõ tên, số điện thoại hoặc số ghế (ít nhất 2 ký tự)"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onClear={() => setQ('')}
@@ -336,7 +358,7 @@ function SearchPanel({ api, busy, onCheckIn, refreshKey }) {
             <li key={g.id} className="flex items-center gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">{g.name}</p>
-                <p className="truncate text-xs tabular-nums text-muted">{[g.phone, g.email].filter(Boolean).join(' · ') || '—'}</p>
+                <p className="truncate text-xs tabular-nums text-muted">{[groupText(g), g.phone, g.email].filter(Boolean).join(' · ') || '—'}</p>
               </div>
               {g.checkedInAt ? (
                 <Badge tone="success" icon={Clock}>{hhmm(g.checkedInAt)}</Badge>
@@ -354,22 +376,28 @@ function SearchPanel({ api, busy, onCheckIn, refreshKey }) {
 // Khách không có trong danh sách: thêm và check-in luôn. Trùng email/SĐT với khách đã
 // có thì server trả khách đó (GUEST_EXISTS) để check-in đúng người.
 function WalkInPanel({ busy, onSubmit }) {
-  const [form, setForm] = useState({ name: '', phone: '', email: '' });
+  const empty = { name: '', phone: '', email: '', ticketCount: '1' };
+  const [form, setForm] = useState(empty);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = async (e) => {
     e.preventDefault();
     if (form.name.trim().length < 2) return toast.error('Vui lòng nhập họ tên khách');
     const ok = await onSubmit(form);
-    if (ok) setForm({ name: '', phone: '', email: '' });
+    if (ok) setForm(empty);
   };
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4">
       <p className="text-pretty text-sm text-muted">Khách tới mà không có tên trong danh sách. Khách được thêm và check-in ngay, báo cáo ghi là “khách tại chỗ”.</p>
-      <Field label="Họ tên" required>
-        {(id) => <Input id={id} value={form.name} onChange={set('name')} autoComplete="off" />}
-      </Field>
+      <div className="grid grid-cols-[1fr_6rem] gap-4">
+        <Field label="Họ tên" required>
+          {(id) => <Input id={id} value={form.name} onChange={set('name')} autoComplete="off" />}
+        </Field>
+        <Field label="Số người" required>
+          {(id) => <Input id={id} type="number" inputMode="numeric" min={1} max={50} value={form.ticketCount} onChange={set('ticketCount')} />}
+        </Field>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Số điện thoại" optional>
           {(id) => <Input id={id} type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} autoComplete="off" />}

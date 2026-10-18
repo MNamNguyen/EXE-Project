@@ -14,6 +14,7 @@ export const INVITATION_FIELD_LABELS = {
   event: 'Tên sự kiện',
   time: 'Thời gian',
   location: 'Địa điểm',
+  seat: 'Ghế / số vé',
   qr: 'Mã QR',
 };
 
@@ -22,6 +23,7 @@ export const INVITATION_DEFAULT_FIELDS = [
   { key: 'event', enabled: true, x: 0.5, y: 0.46, size: 0.04, maxWidth: 0.84, font: 'sans-bold', color: '#1F2A44', align: 'center' },
   { key: 'time', enabled: true, x: 0.5, y: 0.53, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
   { key: 'location', enabled: true, x: 0.5, y: 0.58, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
+  { key: 'seat', enabled: true, x: 0.5, y: 0.63, size: 0.03, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
   { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3 },
 ];
 

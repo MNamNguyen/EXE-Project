@@ -9,12 +9,12 @@ import { downloadBlob } from '../../certificates/certRender';
 
 // File mẫu CSV (Excel mở được, BOM để Excel nhận đúng tiếng Việt).
 function downloadSample() {
-  const csv = '﻿Họ tên,SĐT,Email\nNguyễn Văn A,0901234567,nguyenvana@congty.vn\nTrần Thị B,0912345678,\n';
+  const csv = '﻿Họ tên,SĐT,Email,Số lượng vé,Ghế\nNguyễn Văn A,0901234567,nguyenvana@congty.vn,2,"E08, E09"\nTrần Thị B,0912345678,,1,F15\n';
   downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'mau-danh-sach-khach-moi.csv');
 }
 
-// Import danh sách khách từ Excel/CSV: cột Họ tên (bắt buộc), SĐT, Email. Dòng lỗi
-// hoặc trùng (email/SĐT đã có) bị bỏ qua và liệt kê lại để BTC sửa.
+// Import danh sách khách từ Excel/CSV: cột Họ tên (bắt buộc), SĐT, Email, Số lượng vé,
+// Ghế. Dòng lỗi hoặc trùng (email/SĐT/ghế đã có) bị bỏ qua và liệt kê lại để BTC sửa.
 export default function GuestImportModal({ open, eventId, onClose, onImported }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
@@ -51,8 +51,9 @@ export default function GuestImportModal({ open, eventId, onClose, onImported })
       <div className="flex flex-col gap-4">
         <p className="text-pretty text-sm text-muted">
           File Excel (.xlsx) hoặc CSV, dòng đầu là tiêu đề cột: <span className="font-medium text-foreground">Họ tên</span> (bắt buộc),
-          {' '}<span className="font-medium text-foreground">SĐT</span>, <span className="font-medium text-foreground">Email</span>.
-          Khách trùng email hoặc SĐT với người đã có sẽ được bỏ qua.
+          {' '}<span className="font-medium text-foreground">SĐT</span>, <span className="font-medium text-foreground">Email</span>,
+          {' '}<span className="font-medium text-foreground">Số lượng vé</span>, <span className="font-medium text-foreground">Ghế</span> (vd. E08, E09).
+          Khách trùng email/SĐT hoặc trùng ghế với người đã có sẽ được bỏ qua. Nhập cột Ghế thì cần khai báo sơ đồ ghế trước.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button variant="primary" size="form" icon={Upload} loading={busy} onClick={() => fileRef.current?.click()}>Chọn file</Button>
@@ -61,7 +62,7 @@ export default function GuestImportModal({ open, eventId, onClose, onImported })
 
         {result && (
           <div className="flex flex-col gap-3">
-            <Banner tone={result.skipped.length ? 'warning' : 'info'} compact title={`Đã thêm ${result.added} khách`}>
+            <Banner tone={result.skipped.length ? 'warning' : 'info'} compact title={`Đã thêm ${result.added} khách · ${result.tickets ?? result.added} vé${result.seats ? ` · ${result.seats} ghế` : ''}`}>
               {result.skipped.length > 0 && `Bỏ qua ${result.skipped.length} dòng — xem lý do bên dưới.`}
             </Banner>
             {result.skipped.length > 0 && (

@@ -25,6 +25,7 @@ import GuestFormModal from './GuestFormModal';
 import GuestImportModal from './GuestImportModal';
 import ScannerLinkModal from './ScannerLinkModal';
 import InvitationPanel from './InvitationPanel';
+import SeatMapPanel from './SeatMapPanel';
 
 const PAGE_SIZE = 20;
 
@@ -48,6 +49,16 @@ function InviteBadge({ guest }) {
   if (!guest.email) return <Badge>Không có email</Badge>;
   const b = INVITE_BADGE[guest.inviteStatus] || { label: guest.inviteStatus, tone: 'neutral' };
   return <Badge tone={b.tone} icon={Mail}>{b.label}</Badge>;
+}
+
+// "2 vé" + ghế bên dưới; khách 1 vé không ghế thì chỉ "1".
+function TicketCell({ guest }) {
+  return (
+    <div className="tabular-nums">
+      <p className="text-foreground">{guest.ticketCount}</p>
+      {guest.seats?.length > 0 && <p className="mt-0.5 max-w-[16ch] truncate text-xs text-muted" title={guest.seats.join(', ')}>{guest.seats.join(', ')}</p>}
+    </div>
+  );
 }
 
 function CheckinCell({ guest }) {
@@ -227,7 +238,8 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
   }
 
   const phase = eventPhase(event);
-  const presentPct = stats?.invited ? Math.round((stats.invitedCheckedIn / stats.invited) * 100) : 0;
+  // Một thiệp có thể mang nhiều vé → số liệu "người" là tổng số vé.
+  const presentPct = stats?.tickets ? Math.round((stats.ticketsCheckedIn / stats.tickets) * 100) : 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const filtered = Boolean(search || status);
 
@@ -259,9 +271,9 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
 
       <StatGrid
         tiles={[
-          { label: 'Khách được mời', value: stats?.invited ?? '—' },
-          { label: 'Đã tới', value: stats?.checkedIn ?? '—', sub: stats?.invited ? `${presentPct}% khách mời` : undefined },
-          { label: 'Khách tại chỗ', value: stats?.walkIns ?? '—' },
+          { label: 'Vé đã mời', value: stats?.invitedTickets ?? '—', sub: stats ? `${stats.invited} thiệp · ${stats.seatsAssigned} ghế đã xếp` : undefined },
+          { label: 'Đã tới', value: stats ? `${stats.ticketsCheckedIn}/${stats.tickets}` : '—', unit: 'người', sub: stats?.tickets ? `${presentPct}% · ${stats.checkedIn} thiệp đã quét` : undefined },
+          { label: 'Khách tại chỗ', value: stats ? stats.tickets - stats.invitedTickets : '—', sub: stats?.walkIns ? `${stats.walkIns} lượt thêm` : undefined },
           {
             label: 'Thiệp đã gửi',
             value: stats ? `${stats.sent}/${stats.withEmail}` : '—',
@@ -279,6 +291,7 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
           onChange={setTab}
           items={[
             { value: 'guests', label: 'Khách mời', count: stats?.total ?? 0 },
+            { value: 'seats', label: 'Sơ đồ ghế' },
             { value: 'invitation', label: 'Thiệp mời' },
           ]}
         />
@@ -287,7 +300,7 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
       <div hidden={tab !== 'guests'}>
         <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <SearchInput className="w-full sm:w-64" placeholder="Tìm theo tên, SĐT, email" value={search}
+            <SearchInput className="w-full sm:w-64" placeholder="Tìm theo tên, SĐT, email, ghế" value={search}
               onChange={(e) => setSearch(e.target.value)} onClear={() => setSearch('')} />
             <Select inline label="Trạng thái:" aria-label="Lọc theo trạng thái" value={status} onChange={setStatus} options={STATUS_OPTIONS} />
           </div>
@@ -312,6 +325,7 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
                 <thead className="border-b border-border">
                   <tr>
                     <Th className="w-full">Khách</Th>
+                    <Th>Vé · ghế</Th>
                     <Th>Thiệp</Th>
                     <Th>Check-in</Th>
                     <th className="w-px px-2"><span className="sr-only">Thao tác</span></th>
@@ -324,6 +338,7 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
                         <p className="truncate font-medium text-foreground" title={g.name}>{g.name}</p>
                         <p className="mt-0.5 truncate text-xs tabular-nums text-muted">{[g.phone, g.email].filter(Boolean).join(' · ') || '—'}</p>
                       </td>
+                      <td className="whitespace-nowrap px-4 py-3"><TicketCell guest={g} /></td>
                       <td className="whitespace-nowrap px-4 py-3"><InviteBadge guest={g} /></td>
                       <td className="whitespace-nowrap px-4 py-3"><CheckinCell guest={g} /></td>
                       <td className="px-2 py-3">{guestMenu(g)}</td>
@@ -338,6 +353,9 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
                       <p className="truncate text-sm font-medium text-foreground">{g.name}</p>
                       <p className="mt-0.5 truncate text-xs tabular-nums text-muted">{[g.phone, g.email].filter(Boolean).join(' · ') || '—'}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {(g.ticketCount > 1 || g.seats?.length > 0) && (
+                          <Badge tone="info">{[g.ticketCount > 1 && `${g.ticketCount} vé`, g.seats?.join(', ')].filter(Boolean).join(' · ')}</Badge>
+                        )}
                         <InviteBadge guest={g} />
                         {g.checkedInAt && <Badge tone="success" icon={UserCheck}>{format(new Date(g.checkedInAt), 'HH:mm')}</Badge>}
                       </div>
@@ -359,6 +377,10 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
             </>
           )}
         </TableCard>
+      </div>
+
+      <div hidden={tab !== 'seats'}>
+        <SeatMapPanel event={event} visible={tab === 'seats'} onChanged={reload} />
       </div>
 
       <div hidden={tab !== 'invitation'}>

@@ -49,16 +49,17 @@ afterEach(() => restoreStubs());
 
 // ── Bố cục / mã ─────────────────────────────────────────────────
 
-test('normalizeFields: đủ 5 ô, ô tên và ô QR luôn bật, QR chỉ giữ x/y/size và bị kẹp', () => {
+test('normalizeFields: đủ 6 ô, ô tên và ô QR luôn bật, QR chỉ giữ x/y/size và bị kẹp', () => {
   const { value } = normalizeFields([
     { key: 'name', enabled: false },
     { key: 'qr', enabled: false, x: 2, y: -1, size: 9, font: 'script' },
     { key: 'location', enabled: false },
   ]);
-  assert.deepStrictEqual(value.map((f) => f.key), ['name', 'event', 'time', 'location', 'qr']);
+  assert.deepStrictEqual(value.map((f) => f.key), ['name', 'event', 'time', 'location', 'seat', 'qr']);
   assert.strictEqual(value[0].enabled, true);
   assert.strictEqual(value[3].enabled, false);
-  assert.deepStrictEqual(value[4], { key: 'qr', enabled: true, x: 1, y: 0, size: 0.6 });
+  assert.strictEqual(value[4].enabled, true); // mẫu cũ chưa có ô ghế → nhận ô mặc định
+  assert.deepStrictEqual(value[5], { key: 'qr', enabled: true, x: 1, y: 0, size: 0.6 });
   assert.ok(normalizeFields(null).error);
 });
 
@@ -205,7 +206,9 @@ test('thêm khách: sinh mã, chặn trùng email/SĐT trong sự kiện', async
   stubEvent();
   stubMethod(prisma.eventGuest, 'findFirst', async ({ where }) =>
     (where.OR.some((c) => c.email === 'hoa@corp.vn') ? guest() : null));
-  const create = stubMethod(prisma.eventGuest, 'create', async ({ data }) => guest({ ...data, id: 'g-new' }));
+  const create = stubMethod(prisma.eventGuest, 'create', async ({ data }) => guest(data));
+  stubMethod(prisma, '$transaction', async (ops) => Promise.all(ops));
+  stubMethod(prisma.eventGuest, 'findUnique', async ({ where }) => guest({ ...create.calls.at(-1)[0].data, id: where.id }));
 
   const dup = await request(app).post('/api/events/evt-1/guests').set('Authorization', auth('btc-1'))
     .send({ name: 'Hoa 2', email: 'HOA@corp.vn' });
@@ -226,6 +229,8 @@ test('import Excel: nhận tiêu đề tiếng Việt, bỏ dòng lỗi/trùng (
   loginAs();
   stubEvent();
   stubMethod(prisma.eventGuest, 'findMany', async () => [{ email: 'old@corp.vn', phone: null }]);
+  stubMethod(prisma.eventGuestSeat, 'findMany', async () => []);
+  stubMethod(prisma, '$transaction', async (ops) => Promise.all(ops));
   const createMany = stubMethod(prisma.eventGuest, 'createMany', async ({ data }) => ({ count: data.length }));
 
   const sheet = XLSX.utils.aoa_to_sheet([
@@ -266,6 +271,8 @@ test('đổi email khách → trạng thái gửi về chờ gửi; cấp lại 
   stubEvent();
   stubMethod(prisma.eventGuest, 'findFirst', async ({ where }) => (where.id === 'g-1' ? guest({ inviteStatus: 'SENT' }) : null));
   const update = stubMethod(prisma.eventGuest, 'update', async ({ data }) => guest(data));
+  stubMethod(prisma, '$transaction', async (ops) => Promise.all(ops));
+  stubMethod(prisma.eventGuest, 'findUnique', async () => guest());
 
   await request(app).put('/api/events/evt-1/guests/g-1').set('Authorization', auth('btc-1'))
     .send({ name: 'Lê Thị Hoa', email: 'moi@corp.vn' });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { CalendarDays, CircleCheck, Download, MapPin, RotateCw } from 'lucide-react';
+import { CalendarDays, CircleCheck, Download, MapPin, RotateCw, Ticket } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -84,6 +84,12 @@ export default function InvitationView() {
               <div className="px-6 pb-5 pt-7 text-center">
                 <p className="text-xs font-semibold uppercase tracking-widest text-primary">Trân trọng kính mời</p>
                 <h1 className="mt-3 text-balance text-2xl font-semibold text-foreground">{guest.name}</h1>
+                {(guest.ticketCount > 1 || guest.seats?.length > 0) && (
+                  <div className="mx-auto mt-3 inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl bg-primary/10 px-4 py-2 text-sm tabular-nums text-primary">
+                    <span className="inline-flex items-center gap-1.5 font-semibold"><Ticket className="size-4" aria-hidden="true" />{guest.ticketCount} vé</span>
+                    {guest.seats?.length > 0 && <span className="font-semibold">Ghế {guest.seats.join(', ')}</span>}
+                  </div>
+                )}
                 <p className="mt-4 text-sm text-muted">tới dự</p>
                 <p className="mt-1 text-balance text-lg font-semibold text-foreground">{event.name}</p>
                 <dl className="mt-4 space-y-1.5 text-left text-sm">
@@ -107,7 +113,11 @@ export default function InvitationView() {
                     <CircleCheck className="size-4" aria-hidden="true" /> Đã check-in lúc {format(new Date(guest.checkedInAt), 'HH:mm')}
                   </p>
                 ) : (
-                  <p className="mb-4 text-pretty text-sm text-muted">Đưa mã này cho Ban tổ chức quét khi tới nơi</p>
+                  <p className="mb-4 text-pretty text-sm text-muted">
+                    {guest.ticketCount > 1
+                      ? `Đưa mã này cho Ban tổ chức quét khi tới nơi — quét một lần cho cả ${guest.ticketCount} người`
+                      : 'Đưa mã này cho Ban tổ chức quét khi tới nơi'}
+                  </p>
                 )}
                 <div className="mx-auto w-fit rounded-2xl bg-white p-3">
                   <QRCodeSVG value={qrText} size={224} level="M" marginSize={1} title="Mã QR thiệp mời" />

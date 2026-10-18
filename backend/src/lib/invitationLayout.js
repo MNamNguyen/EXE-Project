@@ -2,16 +2,19 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 const { FONTS, layoutField } = require('./certificateLayout');
 const { fmtDate, fmtTime } = require('./datetime');
+const { seatLabel } = require('./seatMap');
 
 // Quy tắc bố cục thiệp mời — DÙNG CHUNG giữa PDF ở server (services/invitationPdf.js)
 // và canvas ở trình duyệt (frontend/src/pages/certificates/invitationRender.js).
 // Đổi ở đây thì đổi bên kia y hệt, nếu không bản xem trên web lệch với PDF tải về.
 //
-// Ô chữ (name/event/time/location) theo đúng quy tắc của chứng nhận — xem
+// Ô chữ (name/event/time/location/seat) theo đúng quy tắc của chứng nhận — xem
 // certificateLayout.js: toạ độ tỉ lệ 0–1, y là baseline, tự thu nhỏ khi dài.
 // Ô "qr" là hình vuông: x, y là TÂM ô; size = cạnh theo tỉ lệ chiều rộng ảnh.
 
-const TEXT_KEYS = ['name', 'event', 'time', 'location'];
+// seat = "Ghế E08, E09 · 2 vé" (lib/seatMap.js#seatLabel); khách 1 vé không ghế thì
+// chuỗi rỗng và ô không được vẽ. Mẫu lưu trước khi có ô này: xem withAllFields.
+const TEXT_KEYS = ['name', 'event', 'time', 'location', 'seat'];
 const FIELD_KEYS = [...TEXT_KEYS, 'qr'];
 const ALIGNS = ['left', 'center', 'right'];
 
@@ -20,6 +23,7 @@ const DEFAULT_FIELDS = [
   { key: 'event', enabled: true, x: 0.5, y: 0.46, size: 0.04, maxWidth: 0.84, font: 'sans-bold', color: '#1F2A44', align: 'center' },
   { key: 'time', enabled: true, x: 0.5, y: 0.53, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
   { key: 'location', enabled: true, x: 0.5, y: 0.58, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
+  { key: 'seat', enabled: true, x: 0.5, y: 0.63, size: 0.03, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
   { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3 },
 ];
 
@@ -52,6 +56,13 @@ function normalizeFields(input) {
   return { value };
 }
 
+// Mẫu đọc từ DB → bố cục đủ mọi ô hiện có. Mẫu lưu trước khi thêm một ô mới (vd. ô
+// ghế) thì ô đó nhận vị trí mặc định — PDF và editor cùng đi qua đây nên thấy như nhau.
+function withAllFields(template) {
+  if (!template?.fields) return template;
+  return { ...template, fields: normalizeFields(template.fields).value || DEFAULT_FIELDS };
+}
+
 // "14:30 · Thứ Ba, 20/10/2026"
 function invitationTime(date) {
   return `${fmtTime(date)} · ${fmtDate(date, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}`;
@@ -65,6 +76,7 @@ function invitationValues(guest, event) {
     event: event?.name || '',
     time: event?.startsAt ? invitationTime(event.startsAt) : '',
     location: event?.location || '',
+    seat: seatLabel(guest),
   };
 }
 
@@ -114,6 +126,7 @@ module.exports = {
   DEFAULT_FIELDS,
   QR_QUIET_MODULES,
   normalizeFields,
+  withAllFields,
   invitationValues,
   invitationTime,
   layoutField,

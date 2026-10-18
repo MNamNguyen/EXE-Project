@@ -317,7 +317,7 @@ const MAX_INVITATION_ATTACHMENT = 3 * 1024 * 1024;
 // Thiệp mời gửi khách ngoài (không có tài khoản). Khác chứng nhận, ở đây KHÔNG thể
 // bảo người nhận "đăng nhập để tải" — nên kèm luôn PDF, cùng link trang xem thiệp
 // (có QR to để đưa ra ở cửa, dùng được cả khi lạc mất file).
-async function sendInvitationEmail(email, name, event, { whenText, viewUrl, pdf, filename } = {}) {
+async function sendInvitationEmail(email, name, event, { whenText, seatText, viewUrl, pdf, filename } = {}) {
   assertConfigured();
   const button = viewUrl
     ? `<p style="text-align: center; margin: 28px 0 8px;">
@@ -342,6 +342,7 @@ async function sendInvitationEmail(email, name, event, { whenText, viewUrl, pdf,
             <p style="margin: 0 0 6px; font-size: 17px;"><strong>${escapeHtml(event.name)}</strong></p>
             ${whenText ? `<p style="margin: 0 0 4px; color: #6b7b9a;"><strong>Thời gian:</strong> ${escapeHtml(whenText)}</p>` : ''}
             <p style="margin: 0; color: #6b7b9a;"><strong>Địa điểm:</strong> ${escapeHtml(event.location)}</p>
+            ${seatText ? `<p style="margin: 8px 0 0; color: #C2410C; font-weight: bold;">${escapeHtml(seatText)}</p>` : ''}
           </div>
           <p style="color: #6b7b9a; font-size: 14px;">
             ${attach ? 'Thiệp mời đính kèm email này. ' : ''}Khi tới nơi, vui lòng xuất trình <strong>mã QR trên thiệp</strong>

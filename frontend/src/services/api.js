@@ -223,6 +223,11 @@ export const guestApi = {
   scan: (eventId, code) => api.post(`/api/events/${eventId}/guests/scan`, { code }),
   walkIn: (eventId, data) => api.post(`/api/events/${eventId}/guests/walk-in`, data),
   scannerSummary: (eventId) => api.get(`/api/events/${eventId}/scanner-summary`),
+  // Sơ đồ ghế: { seatMap, assignments, guests }. seatMap null = xoá sơ đồ.
+  seats: (eventId) => api.get(`/api/events/${eventId}/seats`),
+  saveSeatMap: (eventId, seatMap) => api.put(`/api/events/${eventId}/seat-map`, { seatMap }),
+  // Danh sách ghế MỚI của một khách (gán thêm, bỏ, đổi ghế đều gửi cả danh sách).
+  setGuestSeats: (eventId, guestId, seats) => api.put(`/api/events/${eventId}/guests/${guestId}/seats`, { seats }),
   guestPdf: (eventId, guestId) => api.get(`/api/events/${eventId}/guests/${guestId}/invitation.pdf`, { responseType: 'blob' }),
   // Gộp mọi thiệp thành một PDF để in — danh sách dài cần lâu hơn timeout mặc định.
   allPdf: (eventId) => api.get(`/api/events/${eventId}/invitations/pdf`, { responseType: 'blob', timeout: 120000 }),

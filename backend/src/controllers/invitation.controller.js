@@ -1,9 +1,12 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const { inlineHeader } = require('../lib/contentDisposition');
-const { DEFAULT_FIELDS, normalizeFields, invitationValues, invitationUrl } = require('../lib/invitationLayout');
 const {
-  maskedGuestView, checkInByCode, checkInById, addWalkIn, searchGuests,
+  DEFAULT_FIELDS, normalizeFields, withAllFields, invitationValues, invitationUrl,
+} = require('../lib/invitationLayout');
+const { guestSeats } = require('../lib/seatMap');
+const {
+  GUEST_INCLUDE, maskedGuestView, checkInByCode, checkInById, addWalkIn, searchGuests,
 } = require('../lib/guestCheckin');
 const { inspectTemplateImage } = require('../services/certificatePdf');
 const { renderInvitationsPdf } = require('../services/invitationPdf');
@@ -29,7 +32,7 @@ async function getInvitationTemplate(req, res) {
     const event = await loadInvitationEvent(req, res);
     if (!event) return;
     const template = await prisma.eventInvitationTemplate.findUnique({ where: { eventId: event.id }, select: TEMPLATE_META });
-    return res.json({ success: true, data: { template } });
+    return res.json({ success: true, data: { template: withAllFields(template) } });
   } catch (err) {
     return serverError(res, 'Get invitation template', err);
   }
@@ -123,7 +126,7 @@ async function previewInvitation(req, res) {
     const name = typeof req.query.name === 'string' && req.query.name.trim()
       ? req.query.name.trim().slice(0, 100)
       : 'Nguyễn Văn A';
-    const sample = { name, code: 'XEM-THU-KHONG-DUNG-DUOC' };
+    const sample = { name, code: 'XEM-THU-KHONG-DUNG-DUOC', ticketCount: 2, seats: ['E08', 'E09'] };
     const pdf = await renderInvitationsPdf(await loadTemplate(event.id), [pdfItem(sample, event)], {
       title: `Xem thử thiệp mời - ${event.name}`,
     });
@@ -282,7 +285,7 @@ async function publicWalkIn(req, res) {
 async function loadGuestByCode(req, res) {
   const code = String(req.params.code || '');
   const guest = /^[A-Za-z0-9_-]{16,64}$/.test(code)
-    ? await prisma.eventGuest.findUnique({ where: { code }, include: { event: true } })
+    ? await prisma.eventGuest.findUnique({ where: { code }, include: { event: true, ...GUEST_INCLUDE } })
     : null;
   if (!guest || !guest.event.isActive) {
     res.status(404).json({
@@ -304,7 +307,7 @@ async function getPublicInvitation(req, res) {
     return res.json({
       success: true,
       data: {
-        guest: { name: guest.name, checkedInAt: guest.checkedInAt },
+        guest: { name: guest.name, checkedInAt: guest.checkedInAt, ticketCount: guest.ticketCount, seats: guestSeats(guest) },
         event: { name: event.name, description: event.description, location: event.location, startsAt: event.startsAt },
         values: invitationValues(guest, event),
         qrText: invitationUrl(guest.code),

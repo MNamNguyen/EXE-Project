@@ -194,6 +194,10 @@ ALTER TABLE "attendance_events"
 ALTER TABLE "attendance_events"
   ADD COLUMN IF NOT EXISTS "publicForm" JSONB;
 
+-- Sơ đồ ghế của sự kiện thiệp mời ({ rows, aisleAfter, disabled } — lib/seatMap.js).
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "seatMap" JSONB;
+
 CREATE UNIQUE INDEX IF NOT EXISTS "attendance_events_scannerToken_key"
   ON "attendance_events"("scannerToken");
 
@@ -462,6 +466,10 @@ CREATE TABLE IF NOT EXISTS "attendance_event_guests" (
 ALTER TABLE "attendance_event_guests"
   ADD COLUMN IF NOT EXISTS "answers" JSONB;
 
+-- Một thiệp/mã QR có thể mang nhiều vé (người đặt hộ người thân).
+ALTER TABLE "attendance_event_guests"
+  ADD COLUMN IF NOT EXISTS "ticketCount" INTEGER NOT NULL DEFAULT 1;
+
 -- Khoá chống trùng của check-in công khai ("fieldId:giá trị chuẩn hoá"), unique theo
 -- sự kiện để hai người gửi cùng SĐT cùng lúc bị chặn ngay ở DB.
 CREATE TABLE IF NOT EXISTS "attendance_event_guest_keys" (
@@ -476,6 +484,24 @@ CREATE TABLE IF NOT EXISTS "attendance_event_guest_keys" (
     REFERENCES "attendance_events"("id")
     ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "attendance_event_guest_keys_guestId_fkey"
+    FOREIGN KEY ("guestId")
+    REFERENCES "attendance_event_guests"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- Ghế đã gán cho khách mời, unique theo sự kiện để không ai bị gán trùng ghế.
+CREATE TABLE IF NOT EXISTS "attendance_event_guest_seats" (
+  "id"      TEXT NOT NULL,
+  "eventId" TEXT NOT NULL,
+  "guestId" TEXT NOT NULL,
+  "seat"    TEXT NOT NULL,
+  CONSTRAINT "attendance_event_guest_seats_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_event_guest_seats_eventId_seat_key" UNIQUE ("eventId", "seat"),
+  CONSTRAINT "attendance_event_guest_seats_eventId_fkey"
+    FOREIGN KEY ("eventId")
+    REFERENCES "attendance_events"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "attendance_event_guest_seats_guestId_fkey"
     FOREIGN KEY ("guestId")
     REFERENCES "attendance_event_guests"("id")
     ON DELETE CASCADE ON UPDATE CASCADE
@@ -514,6 +540,7 @@ ALTER TABLE "attendance_certificates"           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_event_guests"           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_invitation_templates"   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_event_guest_keys"       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_event_guest_seats"      ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- BƯỚC 4: UNIQUE constraints bổ sung
@@ -695,6 +722,9 @@ CREATE INDEX IF NOT EXISTS "attendance_event_guests_eventId_checkedInAt_idx"
 
 CREATE INDEX IF NOT EXISTS "attendance_event_guest_keys_guestId_idx"
   ON "attendance_event_guest_keys"("guestId");
+
+CREATE INDEX IF NOT EXISTS "attendance_event_guest_seats_guestId_idx"
+  ON "attendance_event_guest_seats"("guestId");
 
 -- ============================================================
 -- BƯỚC 6: Trigger tự động cập nhật updatedAt

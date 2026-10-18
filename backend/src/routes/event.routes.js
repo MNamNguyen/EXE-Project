@@ -18,7 +18,7 @@ const {
 const {
   listGuests, addGuest, importGuests, updateGuest, deleteGuest, rotateGuestCode,
   scanGuest, checkInGuestManually, undoGuestCheckIn, addWalkInGuest, getScannerSummary,
-  downloadGuestInvitation, downloadAllInvitations, sendInvitations,
+  downloadGuestInvitation, downloadAllInvitations, sendInvitations, getSeats, saveSeatMap, setGuestSeats,
 } = require('../controllers/guest.controller');
 const {
   getInvitationTemplate, getInvitationTemplateImage, uploadInvitationTemplateImage,
@@ -88,11 +88,14 @@ router.post('/:id/guests/scan', guestManager, scanGuest);
 router.post('/:id/guests/walk-in', guestManager, addWalkInGuest);
 router.put('/:id/guests/:guestId', guestManager, updateGuest);
 router.delete('/:id/guests/:guestId', guestManager, deleteGuest);
+router.put('/:id/guests/:guestId/seats', guestManager, setGuestSeats);
 router.post('/:id/guests/:guestId/rotate-code', guestManager, rotateGuestCode);
 router.post('/:id/guests/:guestId/checkin', guestManager, checkInGuestManually);
 router.delete('/:id/guests/:guestId/checkin', guestManager, undoGuestCheckIn);
 router.get('/:id/guests/:guestId/invitation.pdf', guestManager, downloadGuestInvitation);
 router.get('/:id/scanner-summary', guestManager, getScannerSummary);
+router.get('/:id/seats', guestManager, getSeats);
+router.put('/:id/seat-map', guestManager, saveSeatMap);
 router.get('/:id/invitations/pdf', guestManager, downloadAllInvitations);
 router.post('/:id/invitations/send', guestManager, sendInvitations);
 router.get('/:id/invitation-template', guestManager, getInvitationTemplate);

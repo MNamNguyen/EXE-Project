@@ -116,6 +116,9 @@ model Event {
   scannerSharedAt   DateTime?
   // Form check-in của sự kiện PUBLIC: { fields: [...], thankYou } — xem lib/publicForm.js.
   publicForm        Json?
+  // Sơ đồ ghế của sự kiện thiệp mời: { rows: [{ label, seats }], aisleAfter, disabled }
+  // — xem lib/seatMap.js. NULL = sự kiện không xếp ghế (vẫn dùng được số vé).
+  seatMap           Json?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -130,6 +133,7 @@ model Event {
   certificates        Certificate[]
   guests              EventGuest[]
   guestKeys           EventGuestKey[]
+  guestSeats          EventGuestSeat[]
   invitationTemplate  EventInvitationTemplate?
 
   @@index([createdById])
@@ -430,11 +434,15 @@ model EventGuest {
   checkedInBy  String?
   // Sự kiện PUBLIC: câu trả lời form check-in { fieldId: string | string[] }.
   answers      Json?
+  // Một người đặt hộ nhiều vé cho người thân nhưng chỉ có MỘT thiệp/mã QR — quét một
+  // lần là cả nhóm vào. Không lưu tên từng người đi kèm, chỉ số lượng.
+  ticketCount  Int       @default(1)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  event Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
   keys  EventGuestKey[]
+  seats EventGuestSeat[]
 
   // Email trùng trong cùng sự kiện là nhập trùng; Postgres cho nhiều NULL nên khách
   // không có email không vướng ràng buộc này.
@@ -459,6 +467,22 @@ model EventGuestKey {
   @@unique([eventId, key])
   @@index([guestId])
   @@map("attendance_event_guest_keys")
+}
+
+// Ghế đã gán cho khách mời (seat = "E08", xem lib/seatMap.js). Unique theo sự kiện
+// nên hai BTC gán cùng một ghế cùng lúc thì một bên bị chặn ngay ở DB (P2002).
+model EventGuestSeat {
+  id      String @id @default(cuid())
+  eventId String
+  guestId String
+  seat    String
+
+  event Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest EventGuest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, seat])
+  @@index([guestId])
+  @@map("attendance_event_guest_seats")
 }
 
 // Mẫu thiệp mời của MỘT sự kiện — cùng cách lưu với EventCertificateTemplate (ảnh
