@@ -12,12 +12,25 @@ const { fmtDate } = require('./datetime');
 //   y        — ĐƯỜNG CƠ SỞ (baseline) của dòng chữ, tính từ mép trên
 //   size     — cỡ chữ = size × chiều rộng ảnh
 //   maxWidth — chữ dài hơn maxWidth × chiều rộng thì tự thu nhỏ cho vừa (tên dài)
+//   uppercase — in hoa (mẫu thiết kế toàn chữ in hoa); đổi chữ TRƯỚC khi đo nên thu nhỏ vẫn đúng
 
+// Khoá font được lưu trong bố cục ở DB — chỉ thêm, đừng đổi tên khoá cũ (mẫu đã lưu
+// sẽ rơi về font mặc định). Mọi font phải đủ dấu tiếng Việt (test/fonts.test.js).
 const FONTS = {
   sans: 'BeVietnamPro-Regular.ttf',
   'sans-bold': 'BeVietnamPro-Bold.ttf',
+  montserrat: 'Montserrat-SemiBold.ttf',
   serif: 'NoticiaText-Bold.ttf',
+  playfair: 'PlayfairDisplay-Bold.ttf',
+  cormorant: 'CormorantGaramond-Bold.ttf',
+  lora: 'Lora-Regular.ttf',
   script: 'GreatVibes-Regular.ttf',
+  pinyon: 'PinyonScript-Regular.ttf',
+  dancing: 'DancingScript-Bold.ttf',
+  charm: 'Charm-Bold.ttf',
+  pacifico: 'Pacifico-Regular.ttf',
+  lobster: 'Lobster-Regular.ttf',
+  patrick: 'PatrickHand-Regular.ttf',
 };
 
 const FIELD_KEYS = ['name', 'event', 'date', 'code'];
@@ -52,9 +65,15 @@ function normalizeFields(input) {
       font: FONTS[f.font] ? f.font : def.font,
       color: /^#[0-9a-fA-F]{6}$/.test(f.color || '') ? f.color.toUpperCase() : def.color,
       align: ALIGNS.includes(f.align) ? f.align : def.align,
+      uppercase: f.uppercase === true,
     };
   });
   return { value };
+}
+
+// Chuỗi thực sự in cho một ô — mọi renderer (PDF, canvas) lấy chữ qua đây.
+function fieldText(field, text) {
+  return text && field.uppercase ? String(text).toUpperCase() : text;
 }
 
 // Nội dung điền vào từng ô. Server tính sẵn và gửi cho trình duyệt để hai nơi
@@ -94,6 +113,7 @@ function generateCertificateCode() {
 
 module.exports = {
   FONTS,
+  fieldText,
   FIELD_KEYS,
   DEFAULT_FIELDS,
   normalizeFields,

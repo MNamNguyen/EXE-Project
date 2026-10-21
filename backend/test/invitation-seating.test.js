@@ -85,7 +85,11 @@ test('số vé + ghế của khách: mặc định theo số ghế, không cho �
   assert.strictEqual(seatLabel(guest({ ticketCount: 2, seats: [{ seat: 'E09' }, { seat: 'E08' }] })), 'Ghế E08, E09 · 2 vé');
   assert.strictEqual(seatLabel(guest({ ticketCount: 3 })), '3 vé');
   assert.strictEqual(seatLabel(guest()), '');
-  assert.strictEqual(invitationValues(guest({ ticketCount: 1, seats: [{ seat: 'F15' }] }), EVENT).seat, 'Ghế F15');
+  const one = invitationValues(guest({ ticketCount: 1, seats: [{ seat: 'F15' }] }), EVENT);
+  assert.strictEqual(one.seat, 'Ghế F15');
+  assert.strictEqual(one.tickets, '');
+  const group = invitationValues(guest({ ticketCount: 3, seats: [{ seat: 'E09' }, { seat: 'E08' }] }), EVENT);
+  assert.deepStrictEqual([group.seat, group.tickets], ['Ghế E08, E09', '3 vé']);
 });
 
 // ── Thêm / sửa khách có ghế ─────────────────────────────────────

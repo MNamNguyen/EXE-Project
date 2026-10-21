@@ -3,3 +3,8 @@ Font dùng để vẽ chứng nhận tham gia. Server (PDF, `backend/assets/font
 khớp với file PDF tải về. Đổi font ở một bên thì đổi cả bên kia.
 
 Tất cả thuộc SIL Open Font License 1.1 (xem các file OFL-*.txt), lấy từ github.com/google/fonts.
+
+Thêm font: chép file .ttf (bản tĩnh, không phải variable) + OFL vào CẢ HAI thư mục, rồi thêm khoá
+vào `FONTS` (backend/src/lib/certificateLayout.js) và `FONT_FILES`/`FONT_LABELS`
+(frontend/src/pages/certificates/certRender.js). `backend/test/fonts.test.js` kiểm hai bên trùng
+nhau và font đủ dấu tiếng Việt.

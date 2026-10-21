@@ -8,6 +8,7 @@ import { Field, Input, RangeInput } from '../../components/ui/Input';
 import { Checkbox } from '../../components/ui/Choice';
 import CertificateCanvas from './CertificateCanvas';
 import { FONT_LABELS, downloadBlob } from './certRender';
+import { BARE_FIELDS } from './invitationRender';
 import { cx } from '../../utils/cx';
 
 const clamp01 = (n) => Math.min(1, Math.max(0, n));
@@ -219,6 +220,14 @@ export default function LayoutEditorModal({
                     onChange={(e) => update('qr', { size: Number(e.target.value) })} />
                 )}
               </Field>
+              <Checkbox
+                label="Nền trắng sau mã QR"
+                desc={current.background === false
+                  ? 'Mã vẽ thẳng lên ảnh mẫu — chỗ đặt mã phải đủ sáng và trơn, nhớ in thử rồi quét bằng điện thoại.'
+                  : 'Nên giữ: nền trắng tách mã khỏi ảnh nên camera quét nhanh hơn.'}
+                checked={current.background !== false}
+                onChange={(e) => update('qr', { background: e.target.checked })}
+              />
               <div>
                 <Button size="sm" onClick={() => update('qr', { x: 0.5 })}>Đưa ra giữa</Button>
               </div>
@@ -266,6 +275,24 @@ export default function LayoutEditorModal({
                     onChange={(e) => update(current.key, { maxWidth: Number(e.target.value) })} />
                 )}
               </Field>
+              <div className="flex flex-col gap-3">
+                <Checkbox
+                  label="In hoa"
+                  desc="Hợp với mẫu thiết kế toàn chữ in hoa."
+                  checked={current.uppercase === true}
+                  onChange={(e) => update(current.key, { uppercase: e.target.checked })}
+                />
+                {BARE_FIELDS[current.key] && (
+                  <Checkbox
+                    label={`Kèm chữ “${BARE_FIELDS[current.key].word}”`}
+                    desc={current.bare
+                      ? `Chỉ in giá trị (vd. ${current.key === 'seat' ? '“E08, E09”' : '“2”'}) — dùng khi ảnh mẫu đã in sẵn nhãn.`
+                      : `Bỏ tick nếu ảnh mẫu đã in sẵn nhãn ${current.key === 'seat' ? '“VỊ TRÍ GHẾ”' : '“SỐ VÉ”'}.`}
+                    checked={!current.bare}
+                    onChange={(e) => update(current.key, { bare: !e.target.checked })}
+                  />
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium text-foreground">Căn lề</span>
                 <div role="radiogroup" aria-label="Căn lề" className="inline-flex gap-1 rounded-xl bg-foreground/5 p-1 shadow-segment-track">

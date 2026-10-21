@@ -138,14 +138,21 @@ function parseTicketCount(raw, seatCount = 0) {
 // Danh sách mã ghế của một khách đã include seats.
 const guestSeats = (guest) => sortSeats((guest?.seats || []).map((s) => (typeof s === 'string' ? s : s.seat)));
 
-// Chuỗi in trên thiệp / email / báo cáo: "Ghế E08, E09 · 2 vé", "2 vé", hoặc '' (1 vé
-// không ghế — thiệp như cũ). Một nguồn chuỗi cho mọi nơi.
-function seatLabel(guest) {
+// Hai ô riêng trên thiệp: "Ghế E08, E09" (rỗng khi chưa xếp ghế) và "2 vé" (rỗng khi
+// 1 vé — thiệp 1 người như cũ).
+function seatText(guest) {
   const seats = guestSeats(guest);
+  return seats.length ? `Ghế ${seats.join(', ')}` : '';
+}
+
+function ticketText(guest) {
   const count = guest?.ticketCount || 1;
-  const tickets = count > 1 ? `${count} vé` : '';
-  if (!seats.length) return tickets;
-  return [`Ghế ${seats.join(', ')}`, tickets].filter(Boolean).join(' · ');
+  return count > 1 ? `${count} vé` : '';
+}
+
+// Chuỗi gộp cho email / báo cáo / thiệp mặc định: "Ghế E08, E09 · 2 vé", "2 vé", hoặc ''.
+function seatLabel(guest) {
+  return [seatText(guest), ticketText(guest)].filter(Boolean).join(' · ');
 }
 
 module.exports = {
@@ -160,5 +167,7 @@ module.exports = {
   invalidSeats,
   parseTicketCount,
   guestSeats,
+  seatText,
+  ticketText,
   seatLabel,
 };

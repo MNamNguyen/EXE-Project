@@ -9,7 +9,7 @@ const qrService = require('../src/services/qr.service');
 const emailService = require('../src/services/email.service');
 const app = require('../src/app');
 const {
-  normalizeFields, extractGuestCode, generateGuestCode, invitationUrl, qrMatrix, layoutQr, invitationValues,
+  normalizeFields, withAllFields, invitationFieldText, extractGuestCode, generateGuestCode, invitationUrl, qrMatrix, layoutQr, invitationValues,
 } = require('../src/lib/invitationLayout');
 const { normalizeGuestInput, maskPhone, maskEmail } = require('../src/lib/guestCheckin');
 const { renderInvitationsPdf, wrapText } = require('../src/services/invitationPdf');
@@ -49,18 +49,48 @@ afterEach(() => restoreStubs());
 
 // ── Bố cục / mã ─────────────────────────────────────────────────
 
-test('normalizeFields: đủ 6 ô, ô tên và ô QR luôn bật, QR chỉ giữ x/y/size và bị kẹp', () => {
+test('normalizeFields: đủ 7 ô, ô tên và ô QR luôn bật, QR chỉ giữ x/y/size và bị kẹp', () => {
   const { value } = normalizeFields([
     { key: 'name', enabled: false },
     { key: 'qr', enabled: false, x: 2, y: -1, size: 9, font: 'script' },
     { key: 'location', enabled: false },
   ]);
-  assert.deepStrictEqual(value.map((f) => f.key), ['name', 'event', 'time', 'location', 'seat', 'qr']);
+  assert.deepStrictEqual(value.map((f) => f.key), ['name', 'event', 'time', 'location', 'seat', 'tickets', 'qr']);
   assert.strictEqual(value[0].enabled, true);
   assert.strictEqual(value[3].enabled, false);
   assert.strictEqual(value[4].enabled, true); // mẫu cũ chưa có ô ghế → nhận ô mặc định
-  assert.deepStrictEqual(value[5], { key: 'qr', enabled: true, x: 1, y: 0, size: 0.6 });
+  assert.deepStrictEqual(value[6], { key: 'qr', enabled: true, x: 1, y: 0, size: 0.6, background: true });
+  const noBg = normalizeFields([{ key: 'qr', x: 0.5, y: 0.5, size: 0.3, background: false }]).value[6];
+  assert.strictEqual(noBg.background, false);
   assert.ok(normalizeFields(null).error);
+});
+
+test('withAllFields: mẫu cũ chưa có ô số vé → đặt ngay dưới ô ghế, cùng kiểu chữ', () => {
+  const seat = { key: 'seat', enabled: true, x: 0.3, y: 0.5, size: 0.02, maxWidth: 0.4, font: 'playfair', color: '#B91C1C', align: 'left', uppercase: true, bare: false };
+  const { fields } = withAllFields({ width: 1000, height: 2000, fields: [seat] });
+  const tickets = fields.find((f) => f.key === 'tickets');
+  assert.deepStrictEqual({ ...tickets, y: undefined }, { ...seat, key: 'tickets', y: undefined });
+  assert.ok(Math.abs(tickets.y - (0.5 + 0.02 * 0.5 * 1.4)) < 1e-9);
+
+  // Mẫu đã có ô số vé thì giữ nguyên chỗ BTC đặt.
+  const saved = withAllFields({ width: 1000, height: 2000, fields: [seat, { ...seat, key: 'tickets', x: 0.7, y: 0.9 }] });
+  assert.strictEqual(saved.fields.find((f) => f.key === 'tickets').y, 0.9);
+});
+
+test('invitationFieldText: in hoa, ô ghế/số vé bỏ nhãn thì in giá trị trần', () => {
+  const values = invitationValues({ name: 'Trần Thị Đào', ticketCount: 1, seats: [{ seat: 'E08' }] }, EVENT);
+  assert.strictEqual(invitationFieldText({ key: 'name', uppercase: true }, values), 'TRẦN THỊ ĐÀO');
+  assert.strictEqual(invitationFieldText({ key: 'seat', uppercase: true }, values), 'GHẾ E08');
+  assert.strictEqual(invitationFieldText({ key: 'seat', bare: true }, values), 'E08');
+  // 1 vé: ô có nhãn để trống (thiệp như cũ), ô trần vẫn in "1" vì mẫu đã có nhãn "SỐ VÉ".
+  assert.strictEqual(invitationFieldText({ key: 'tickets' }, values), '');
+  assert.strictEqual(invitationFieldText({ key: 'tickets', bare: true }, values), '1');
+  // bare chỉ có nghĩa với ô ghế/số vé.
+  assert.strictEqual(invitationFieldText({ key: 'name', bare: true }, values), 'Trần Thị Đào');
+
+  const { value } = normalizeFields([{ key: 'name', bare: true, uppercase: 'yes' }, { key: 'seat', bare: true, uppercase: true }]);
+  assert.deepStrictEqual([value[0].uppercase, 'bare' in value[0]], [false, false]);
+  assert.deepStrictEqual([value[4].uppercase, value[4].bare, value[5].bare], [true, true, false]);
 });
 
 test('extractGuestCode: nhận link /thiep/<mã> ở mọi tên miền và mã thô; từ chối nội dung lạ', () => {

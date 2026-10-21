@@ -6,15 +6,36 @@
 export const FONT_FILES = {
   sans: 'BeVietnamPro-Regular.ttf',
   'sans-bold': 'BeVietnamPro-Bold.ttf',
+  montserrat: 'Montserrat-SemiBold.ttf',
   serif: 'NoticiaText-Bold.ttf',
+  playfair: 'PlayfairDisplay-Bold.ttf',
+  cormorant: 'CormorantGaramond-Bold.ttf',
+  lora: 'Lora-Regular.ttf',
   script: 'GreatVibes-Regular.ttf',
+  pinyon: 'PinyonScript-Regular.ttf',
+  dancing: 'DancingScript-Bold.ttf',
+  charm: 'Charm-Bold.ttf',
+  pacifico: 'Pacifico-Regular.ttf',
+  lobster: 'Lobster-Regular.ttf',
+  patrick: 'PatrickHand-Regular.ttf',
 };
 
+// Thứ tự ở đây là thứ tự trong ô chọn font của editor.
 export const FONT_LABELS = {
   sans: 'Không chân',
   'sans-bold': 'Không chân (đậm)',
+  montserrat: 'Hiện đại · Montserrat',
   serif: 'Có chân (đậm)',
+  playfair: 'Sang trọng · Playfair',
+  cormorant: 'Cổ điển · Cormorant',
+  lora: 'Có chân mảnh · Lora',
   script: 'Viết tay',
+  pinyon: 'Viết tay thanh · Pinyon',
+  dancing: 'Viết tay đậm · Dancing',
+  charm: 'Thư pháp · Charm',
+  pacifico: 'Viết tay tròn · Pacifico',
+  lobster: 'Trang trí · Lobster',
+  patrick: 'Nét bút · Patrick Hand',
 };
 
 export const FIELD_LABELS = {
@@ -32,22 +53,33 @@ export const DEFAULT_FIELDS = [
 ];
 
 const family = (key) => `cert-${key}`;
-let fontsPromise = null;
 
-// Nạp font một lần cho cả phiên. Canvas vẽ bằng font chưa tải xong sẽ lặng lẽ
-// dùng font hệ thống — nên luôn await hàm này trước khi vẽ.
-export function loadCertFonts() {
-  if (!fontsPromise) {
-    fontsPromise = Promise.all(Object.entries(FONT_FILES).map(async ([key, file]) => {
-      const face = new FontFace(family(key), `url(/fonts/cert/${file})`);
-      await face.load();
-      document.fonts.add(face);
-    })).catch((err) => {
-      fontsPromise = null;
-      throw err;
-    });
-  }
-  return fontsPromise;
+// Giống fieldText ở backend: in hoa trước khi đo để tự thu nhỏ vẫn đúng.
+export function fieldText(field, text) {
+  return text && field.uppercase ? String(text).toUpperCase() : text;
+}
+
+const fontPromises = new Map();
+
+// Khoá font các ô đang bật dùng — chỉ những font này cần tải trước khi vẽ.
+export function fontKeysOf(fields) {
+  return [...new Set((fields || []).filter((f) => f.enabled && FONT_FILES[f.font]).map((f) => f.font))].sort();
+}
+
+// Nạp font (mỗi font một lần cho cả phiên), chỉ những font được hỏi: có hơn chục
+// font, tải hết thì khách mở thiệp trên điện thoại phải chờ vài MB. Canvas vẽ bằng
+// font chưa tải xong sẽ lặng lẽ dùng font hệ thống — nên luôn await hàm này trước khi vẽ.
+export function loadCertFonts(keys = Object.keys(FONT_FILES)) {
+  return Promise.all(keys.filter((key) => FONT_FILES[key]).map((key) => {
+    if (!fontPromises.has(key)) {
+      const face = new FontFace(family(key), `url(/fonts/cert/${FONT_FILES[key]})`);
+      fontPromises.set(key, face.load().then(() => { document.fonts.add(face); }).catch((err) => {
+        fontPromises.delete(key);
+        throw err;
+      }));
+    }
+    return fontPromises.get(key);
+  }));
 }
 
 // Giống hệt layoutField ở backend: x theo align, y là baseline, tự thu nhỏ khi dài.
@@ -75,7 +107,7 @@ export function drawCertificate(ctx, img, fields, values) {
 
   const boxes = {};
   for (const field of fields) {
-    const text = values[field.key];
+    const text = fieldText(field, values[field.key]);
     if (!field.enabled || !text) continue;
     const measure = (t, size) => {
       ctx.font = `${size}px "${family(field.font)}"`;

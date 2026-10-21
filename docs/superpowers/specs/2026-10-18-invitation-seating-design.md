@@ -59,6 +59,9 @@ Mã lỗi mới: `SEAT_TAKEN`, `SEAT_NOT_IN_MAP`, `NO_SEAT_MAP`, `SEAT_IN_USE`, 
 - Thiệp: ô chữ mới `seat` ("Ghế E08, E09 · 2 vé") trong `lib/invitationLayout.js` ↔ `invitationRender.js`.
   Mẫu đã lưu trước đó đi qua `withAllFields` nên nhận ô mặc định (PDF và editor như nhau); thiệp mặc định
   in thêm một dòng ghế. Khách 1 vé không ghế: chuỗi rỗng, thiệp như cũ.
+  *Cập nhật 2026-10-21:* tách thành hai ô `seat` ("Ghế E08, E09", `seatText`) và `tickets` ("2 vé",
+  `ticketText`) để BTC đặt mỗi thứ một chỗ. Mẫu lưu trước đó chưa có ô `tickets` thì `withAllFields` đặt nó
+  ngay dưới ô ghế, cùng kiểu chữ. Thiệp mặc định, email và báo cáo vẫn dùng chuỗi gộp `seatLabel`.
 - Email thiệp, trang `/thiep/:code`, màn quét (thẻ kết quả to "5 người · Ghế …"), bảng khách (cột Vé · ghế,
   tìm theo mã ghế), báo cáo Excel (cột Số vé, Ghế, dòng tổng) và HTML (đếm theo người).
 - Tab "Sơ đồ ghế": `SeatMapPanel` (xếp/đổi/bỏ ghế, ghế đổi màu "đã tới" khi khách check-in) +

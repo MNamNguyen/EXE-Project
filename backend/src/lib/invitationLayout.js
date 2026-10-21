@@ -1,8 +1,8 @@
 const crypto = require('crypto');
 const QRCode = require('qrcode');
-const { FONTS, layoutField } = require('./certificateLayout');
+const { FONTS, layoutField, fieldText } = require('./certificateLayout');
 const { fmtDate, fmtTime } = require('./datetime');
-const { seatLabel } = require('./seatMap');
+const { seatText, ticketText, guestSeats } = require('./seatMap');
 
 // Quy tắc bố cục thiệp mời — DÙNG CHUNG giữa PDF ở server (services/invitationPdf.js)
 // và canvas ở trình duyệt (frontend/src/pages/certificates/invitationRender.js).
@@ -10,12 +10,17 @@ const { seatLabel } = require('./seatMap');
 //
 // Ô chữ (name/event/time/location/seat) theo đúng quy tắc của chứng nhận — xem
 // certificateLayout.js: toạ độ tỉ lệ 0–1, y là baseline, tự thu nhỏ khi dài.
-// Ô "qr" là hình vuông: x, y là TÂM ô; size = cạnh theo tỉ lệ chiều rộng ảnh.
+// Ô "qr" là hình vuông: x, y là TÂM ô; size = cạnh theo tỉ lệ chiều rộng ảnh;
+// background = có vẽ nền trắng sau mã không (tắt khi ảnh mẫu đã chừa sẵn chỗ sáng màu).
 
-// seat = "Ghế E08, E09 · 2 vé" (lib/seatMap.js#seatLabel); khách 1 vé không ghế thì
-// chuỗi rỗng và ô không được vẽ. Mẫu lưu trước khi có ô này: xem withAllFields.
-const TEXT_KEYS = ['name', 'event', 'time', 'location', 'seat'];
+// seat = "Ghế E08, E09", tickets = "2 vé" (lib/seatMap.js) — hai ô riêng để BTC đặt mỗi
+// thứ một chỗ trên thiệp; chuỗi rỗng (chưa xếp ghế / 1 vé) thì ô không được vẽ. Mẫu lưu
+// trước khi có các ô này: xem withAllFields.
+const TEXT_KEYS = ['name', 'event', 'time', 'location', 'seat', 'tickets'];
 const FIELD_KEYS = [...TEXT_KEYS, 'qr'];
+// Ô ghế/số vé có thể bỏ chữ "Ghế"/"vé" (bare) khi ảnh mẫu đã in sẵn nhãn "VỊ TRÍ GHẾ" /
+// "SỐ VÉ" — khi đó in giá trị trần lấy từ khoá này trong values.
+const BARE_VALUES = { seat: 'seatCodes', tickets: 'ticketNumber' };
 const ALIGNS = ['left', 'center', 'right'];
 
 const DEFAULT_FIELDS = [
@@ -24,7 +29,8 @@ const DEFAULT_FIELDS = [
   { key: 'time', enabled: true, x: 0.5, y: 0.53, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
   { key: 'location', enabled: true, x: 0.5, y: 0.58, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
   { key: 'seat', enabled: true, x: 0.5, y: 0.63, size: 0.03, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
-  { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3 },
+  { key: 'tickets', enabled: true, x: 0.5, y: 0.67, size: 0.026, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
+  { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3, background: true },
 ];
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
@@ -39,7 +45,15 @@ function normalizeFields(input) {
   const value = DEFAULT_FIELDS.map((def) => {
     const f = byKey.get(def.key) || def;
     if (def.key === 'qr') {
-      return { key: 'qr', enabled: true, x: num(f.x, def.x, 0, 1), y: num(f.y, def.y, 0, 1), size: num(f.size, def.size, 0.08, 0.6) };
+      return {
+        key: 'qr',
+        enabled: true,
+        x: num(f.x, def.x, 0, 1),
+        y: num(f.y, def.y, 0, 1),
+        size: num(f.size, def.size, 0.08, 0.6),
+        // Mẫu lưu trước khi có tuỳ chọn này vẫn có nền trắng như cũ.
+        background: f.background !== false,
+      };
     }
     return {
       key: def.key,
@@ -51,6 +65,8 @@ function normalizeFields(input) {
       font: FONTS[f.font] ? f.font : def.font,
       color: /^#[0-9a-fA-F]{6}$/.test(f.color || '') ? f.color.toUpperCase() : def.color,
       align: ALIGNS.includes(f.align) ? f.align : def.align,
+      uppercase: f.uppercase === true,
+      ...(BARE_VALUES[def.key] && { bare: f.bare === true }),
     };
   });
   return { value };
@@ -58,9 +74,17 @@ function normalizeFields(input) {
 
 // Mẫu đọc từ DB → bố cục đủ mọi ô hiện có. Mẫu lưu trước khi thêm một ô mới (vd. ô
 // ghế) thì ô đó nhận vị trí mặc định — PDF và editor cùng đi qua đây nên thấy như nhau.
+// Riêng ô số vé: trước đây "2 vé" in chung dòng với ô ghế, nên mẫu cũ đặt ô số vé ngay
+// dưới ô ghế, cùng kiểu chữ — thiệp cũ vẫn đủ thông tin và không đè lên chỗ khác.
 function withAllFields(template) {
   if (!template?.fields) return template;
-  return { ...template, fields: normalizeFields(template.fields).value || DEFAULT_FIELDS };
+  let { fields } = template;
+  if (Array.isArray(fields) && !fields.some((f) => f?.key === 'tickets')) {
+    const seat = fields.find((f) => f?.key === 'seat');
+    const ratio = template.width && template.height ? template.width / template.height : 1;
+    if (seat) fields = [...fields, { ...seat, key: 'tickets', y: Number(seat.y) + Number(seat.size) * ratio * 1.4 }];
+  }
+  return { ...template, fields: normalizeFields(fields).value || DEFAULT_FIELDS };
 }
 
 // "14:30 · Thứ Ba, 20/10/2026"
@@ -76,8 +100,19 @@ function invitationValues(guest, event) {
     event: event?.name || '',
     time: event?.startsAt ? invitationTime(event.startsAt) : '',
     location: event?.location || '',
-    seat: seatLabel(guest),
+    seat: seatText(guest),
+    tickets: ticketText(guest),
+    // Giá trị trần cho ô bỏ nhãn: "E08, E09" và "2". Số vé trần luôn in (kể cả 1) vì
+    // ảnh mẫu đã có nhãn "SỐ VÉ" thì để trống trông như thiếu.
+    seatCodes: guestSeats(guest).join(', '),
+    ticketNumber: String(guest?.ticketCount || 1),
   };
+}
+
+// Chuỗi in cho một ô chữ của thiệp: chọn giá trị có nhãn / trần rồi in hoa nếu bật.
+function invitationFieldText(field, values) {
+  const key = field.bare && BARE_VALUES[field.key] ? BARE_VALUES[field.key] : field.key;
+  return fieldText(field, values[key]);
 }
 
 // Vị trí ô QR trên khung W×H (gốc toạ độ góc TRÊN-trái).
@@ -128,6 +163,7 @@ module.exports = {
   normalizeFields,
   withAllFields,
   invitationValues,
+  invitationFieldText,
   invitationTime,
   layoutField,
   layoutQr,

@@ -55,7 +55,10 @@ export default function InvitationPanel({ event, stats, onChanged }) {
     event: event.name,
     time: event.startsAt ? invitationTime(event.startsAt) : '',
     location: event.location,
-    seat: 'Ghế E08, E09 · 2 vé', // mẫu như invitation.controller#previewInvitation
+    seat: 'Ghế E08, E09', // mẫu như invitation.controller#previewInvitation
+    tickets: '2 vé',
+    seatCodes: 'E08, E09',
+    ticketNumber: '2',
   }), [event.name, event.startsAt, event.location]);
   const sampleValues = useMemo(() => makeValues('Nguyễn Văn A'), [makeValues]);
 

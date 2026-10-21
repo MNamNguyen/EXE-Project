@@ -1,7 +1,7 @@
 import QRCode from 'qrcode';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { layoutField, FONT_FILES } from './certRender';
+import { layoutField, fieldText, FONT_FILES } from './certRender';
 
 // Vẽ thiệp mời lên <canvas> (editor bố cục, trang xem thiệp). Quy tắc là BẢN SAO của
 // backend/src/lib/invitationLayout.js + services/invitationPdf.js — sửa một bên thì
@@ -14,9 +14,22 @@ export const INVITATION_FIELD_LABELS = {
   event: 'Tên sự kiện',
   time: 'Thời gian',
   location: 'Địa điểm',
-  seat: 'Ghế / số vé',
+  seat: 'Vị trí ghế',
+  tickets: 'Số vé',
   qr: 'Mã QR',
 };
+
+// Ô có thể bỏ nhãn: khoá giá trị trần + chữ nhãn hiện trong editor
+// (cùng BARE_VALUES ở backend/src/lib/invitationLayout.js).
+export const BARE_FIELDS = {
+  seat: { value: 'seatCodes', word: 'Ghế' },
+  tickets: { value: 'ticketNumber', word: 'vé' },
+};
+
+export function invitationFieldText(field, values) {
+  const key = field.bare && BARE_FIELDS[field.key] ? BARE_FIELDS[field.key].value : field.key;
+  return fieldText(field, values[key]);
+}
 
 export const INVITATION_DEFAULT_FIELDS = [
   { key: 'name', enabled: true, x: 0.5, y: 0.36, size: 0.07, maxWidth: 0.8, font: 'script', color: '#1F2A44', align: 'center' },
@@ -24,7 +37,8 @@ export const INVITATION_DEFAULT_FIELDS = [
   { key: 'time', enabled: true, x: 0.5, y: 0.53, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
   { key: 'location', enabled: true, x: 0.5, y: 0.58, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
   { key: 'seat', enabled: true, x: 0.5, y: 0.63, size: 0.03, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
-  { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3 },
+  { key: 'tickets', enabled: true, x: 0.5, y: 0.67, size: 0.026, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
+  { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3, background: true },
 ];
 
 // "14:30 · Thứ Ba, 20/10/2026" — cùng dạng invitationTime ở backend.
@@ -43,12 +57,15 @@ export function layoutQr(field, W, H) {
 }
 
 // Cùng thư viện, cùng mức sửa lỗi M với server → cùng một ma trận.
-export function drawQr(ctx, text, left, top, side) {
+// background = false: bỏ nền trắng như drawQr ở services/invitationPdf.js.
+export function drawQr(ctx, text, left, top, side, background = true) {
   const { modules } = QRCode.create(text, { errorCorrectionLevel: 'M' });
   const n = modules.size;
   const cell = side / (n + QR_QUIET_MODULES * 2);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(left, top, side, side);
+  if (background) {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(left, top, side, side);
+  }
   ctx.fillStyle = '#000000';
   for (let r = 0; r < n; r++) {
     let c = 0;
@@ -77,11 +94,11 @@ export function drawInvitation(ctx, img, fields, values, qrText) {
   for (const field of fields) {
     if (field.key === 'qr') {
       const { left, top, side } = layoutQr(field, W, H);
-      drawQr(ctx, qrText, left, top, side);
+      drawQr(ctx, qrText, left, top, side, field.background !== false);
       boxes.qr = { left: left / W, top: top / H, width: side / W, height: side / H };
       continue;
     }
-    const text = values[field.key];
+    const text = invitationFieldText(field, values);
     if (!field.enabled || !text || !FONT_FILES[field.font]) continue;
     const measure = (t, size) => {
       ctx.font = `${size}px "${family(field.font)}"`;

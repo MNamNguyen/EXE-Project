@@ -3,7 +3,7 @@ const path = require('path');
 const { PDFDocument, rgb } = require('pdf-lib');
 const fontkit = require('@pdf-lib/fontkit');
 const { FONTS } = require('../lib/certificateLayout');
-const { layoutField, layoutQr, qrMatrix, QR_QUIET_MODULES } = require('../lib/invitationLayout');
+const { layoutField, layoutQr, qrMatrix, QR_QUIET_MODULES, invitationFieldText } = require('../lib/invitationLayout');
 const { pageSize } = require('./certificatePdf');
 
 const FONT_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
@@ -26,10 +26,11 @@ const INK = rgb(0, 0, 0);
 // góc TRÊN như layoutQr; pdf-lib đặt gốc ở góc DƯỚI nên lật trục y khi vẽ. Gộp
 // các ô đen liền nhau trên một hàng thành một hình chữ nhật — ít lệnh vẽ hơn
 // nhiều và không lộ đường kẻ mảnh giữa các ô khi phóng to.
-function drawQr(page, text, left, top, side, H) {
+// background = false: bỏ nền trắng, mã vẽ thẳng lên ảnh mẫu (vị trí/cỡ ô giữ nguyên).
+function drawQr(page, text, left, top, side, H, background = true) {
   const qr = qrMatrix(text);
   const cell = side / (qr.size + QR_QUIET_MODULES * 2);
-  page.drawRectangle({ x: left, y: H - top - side, width: side, height: side, color: WHITE });
+  if (background) page.drawRectangle({ x: left, y: H - top - side, width: side, height: side, color: WHITE });
   for (let r = 0; r < qr.size; r++) {
     let c = 0;
     while (c < qr.size) {
@@ -74,10 +75,10 @@ async function renderTemplatePages(doc, font, template, items) {
     for (const field of template.fields) {
       if (field.key === 'qr') {
         const { left, top, side } = layoutQr(field, W, H);
-        drawQr(page, qrText, left, top, side, H);
+        drawQr(page, qrText, left, top, side, H, field.background !== false);
         continue;
       }
-      const text = values[field.key];
+      const text = invitationFieldText(field, values);
       if (!field.enabled || !text) continue;
       const f = await font(field.font);
       const { left, baseline, fontSize } = layoutField(field, text, W, H, (t, s) => f.widthOfTextAtSize(t, s));
@@ -164,9 +165,10 @@ async function renderDefaultPages(doc, font, items) {
       center(page, line, y, sans, 11.5, C.muted);
       y += 16;
     }
-    // "Ghế E08, E09 · 2 vé" — dòng dài nhất (event 3 dòng + địa điểm 2 dòng) vẫn nằm
-    // trên mép QR (QR_TOP = 393).
-    if (values.seat) center(page, values.seat, y + 12, bold, 13, C.accent);
+    // Thiệp mặc định gộp ghế + số vé một dòng "Ghế E08, E09 · 2 vé" — dòng dài nhất
+    // (event 3 dòng + địa điểm 2 dòng) vẫn nằm trên mép QR (QR_TOP = 393).
+    const seatLine = [values.seat, values.tickets].filter(Boolean).join(' · ');
+    if (seatLine) center(page, seatLine, y + 12, bold, 13, C.accent);
 
     drawQr(page, qrText, (W - QR_SIDE) / 2, QR_TOP, QR_SIDE, H);
     center(page, 'Vui lòng xuất trình mã QR này khi tới sự kiện', H - 30, sans, 9.5, C.muted);

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { PDFDocument, rgb } = require('pdf-lib');
 const fontkit = require('@pdf-lib/fontkit');
-const { FONTS, layoutField } = require('../lib/certificateLayout');
+const { FONTS, layoutField, fieldText } = require('../lib/certificateLayout');
 
 const FONT_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
 const fontCache = new Map();
@@ -58,7 +58,7 @@ async function renderCertificatePdf(template, values, { title } = {}) {
 
   const embedded = new Map();
   for (const field of template.fields) {
-    const text = values[field.key];
+    const text = fieldText(field, values[field.key]);
     if (!field.enabled || !text) continue;
     if (!embedded.has(field.font)) embedded.set(field.font, await doc.embedFont(fontBytes(field.font), { subset: true }));
     const font = embedded.get(field.font);
