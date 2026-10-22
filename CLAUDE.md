@@ -111,16 +111,6 @@ where the whole router shares a role. `/api/public/*` is the only unauthenticate
   (off = `checkinState OPEN`); GPS goes through `lib/geo.js#gpsRejection`. `lib/geo.js` and
   `attendanceGate.gateRejection` are shared with the self-scan flow — keep error codes identical.
   Spec: `docs/superpowers/specs/2026-10-16-public-checkin-design.md`.
-- Face check-in kiosk (`pages/btc/FaceCheckin.jsx`, `/events/:id/face-checkin`): 1:N face recognition
-  for STANDARD events. **The model runs only in the browser** (`@vladmandic/human`, wrapped by
-  `pages/face/faceEngine.js`; models served at `/models/human/` by a plugin in `vite.config.js`, not
-  committed). The server never runs ML: `lib/faceProfile.js` only stores and compares vectors, and its
-  `similarity` + thresholds must stay identical to `pages/face/faceMatch.js`. Changing the model or
-  config means bumping `FACE_MODEL`. Biometric data needs consent: the kiosk uses only profiles with
-  `consentAt`, and admin-imported photos (`POST /api/admin/face-profiles/import`) start unconsented.
-  Students manage their profile at `/khuon-mat` (`/api/me/face-profile`). Saving rejects lookalikes of
-  other accounts (`FACE_DUPLICATE`) to stop proxy attendance.
-  Spec: `docs/superpowers/specs/2026-10-22-face-checkin-design.md`.
 - `lib/datetime.js` — **every** user-facing timestamp on the backend (reports, Excel, emails,
   check-in messages) must be formatted here. `toLocaleString('vi-VN')` without an explicit
   `timeZone` follows the *server's* TZ, and Render runs Node in UTC, so times printed 7 hours off

@@ -817,5 +817,4 @@ module.exports = {
   getQRToken, getLiveCheckins, getAttendance, manualCheckin,
   listMembers, addMembers, removeMember, searchUsersForEvent,
   listClasses, addMembersByClass,
-  rejectNonStandardEvent,
 };

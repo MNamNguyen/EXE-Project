@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import {
-  Ellipsis, FileCode2, FileSpreadsheet, FileText, Link2, Pencil, QrCode, ScanFace, UserCheck, Users,
+  Ellipsis, FileCode2, FileSpreadsheet, FileText, Link2, Pencil, QrCode, UserCheck, Users,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -285,11 +285,6 @@ export default function EventDetail() {
           <Dropdown align="end" ariaLabel="Thêm thao tác" trigger={<OutlineIconButton icon={Ellipsis} label="Thêm thao tác" />}>
             <MenuGroup>
               <MenuItem icon={Pencil} onSelect={() => setEditModal(true)}>Sửa sự kiện</MenuItem>
-              {canProject && (
-                <MenuItem icon={ScanFace} onSelect={() => window.open(`/events/${id}/face-checkin`, '_blank', 'noopener')}>
-                  Kiosk check-in khuôn mặt
-                </MenuItem>
-              )}
               {event.allowRegistration !== false && (
                 <MenuItem icon={Link2} onSelect={handleCopyRegistrationLink}>Sao chép link đăng ký</MenuItem>
               )}

@@ -5,7 +5,6 @@ const {
   listUsers, createUser, updateUser, deleteUser, resetPassword, resetDeviceBinding, importStudents, getStats,
   bulkUpdateUsers, bulkResetPasswords, bulkResetDevices, bulkDeleteUsers,
 } = require('../controllers/admin.controller');
-const { importFaceProfiles } = require('../controllers/face.controller');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -15,8 +14,6 @@ router.get('/stats', getStats);
 router.get('/users', listUsers);
 router.post('/users', createUser);
 router.post('/users/import', upload.single('file'), importStudents);
-// Ảnh thẻ theo MSSV: trình duyệt admin tính embedding, chỉ gửi vector + thumbnail lên.
-router.post('/face-profiles/import', importFaceProfiles);
 
 // PHẢI đứng trước các route '/users/:id/...': '/users/bulk/reset-password' khớp
 // với '/users/:id/reset-password' (id = "bulk") nếu đăng ký sau.

@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Award, CalendarDays, ChevronsUpDown, ClipboardList, GraduationCap, History, House, LayoutDashboard,
-  LogOut, Monitor, Moon, ScanFace, ShieldAlert, Sun, Users,
+  LogOut, Monitor, Moon, ShieldAlert, Sun, Users,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -29,7 +29,6 @@ export const NAV = {
     { to: '/dashboard', icon: House, label: 'Trang chủ' },
     { to: '/my-attendance', icon: History, label: 'Lịch sử tham dự', short: 'Lịch sử' },
     { to: '/my-certificates', icon: Award, label: 'Chứng nhận' },
-    { to: '/khuon-mat', icon: ScanFace, label: 'Khuôn mặt' },
   ],
 };
 
