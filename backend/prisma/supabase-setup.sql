@@ -537,9 +537,11 @@ CREATE TABLE IF NOT EXISTS "attendance_face_profiles" (
   "thumbnail"       BYTEA,
   "source"          TEXT        NOT NULL,
   "importEmbedding" BYTEA,
-  "consentAt"       TIMESTAMPTZ,
-  "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "updatedAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- TIMESTAMP(3), không TIMESTAMPTZ: đúng kiểu Prisma sinh cho DateTime. Lệch kiểu thì
+  -- `prisma db push` khi build trên Render đòi ALTER bảng này.
+  "consentAt"       TIMESTAMP(3),
+  "createdAt"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt"       TIMESTAMP(3) NOT NULL,
   CONSTRAINT "attendance_face_profiles_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "attendance_face_profiles_userId_key" UNIQUE ("userId"),
   CONSTRAINT "attendance_face_profiles_userId_fkey"
