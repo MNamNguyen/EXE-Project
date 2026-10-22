@@ -506,10 +506,6 @@ model EventInvitationTemplate {
   @@map("attendance_invitation_templates")
 }
 
-// TÍNH NĂNG ĐANG GỠ (2026-10-22, trang bị lag sau khi deploy): code đã bỏ, model GIỮ LẠI vì
-// bảng trên Supabase có dữ liệu — xoá model thì `prisma db push` lúc build Render đòi drop
-// bảng và build hỏng. Bật lại: xem commit 9fa3fc4 và spec 2026-10-22-face-checkin-design.md.
-//
 // Khuôn mặt dùng cho check-in tại cửa (kiosk BTC). Embedding do TRÌNH DUYỆT tính
 // (@vladmandic/human, faceres 1024 chiều) — server không chạy mô hình, chỉ lưu và so
 // vector, xem lib/faceProfile.js. Không lưu ảnh gốc: chỉ vector + thumbnail nhỏ để
