@@ -231,6 +231,10 @@ export const guestApi = {
   guestPdf: (eventId, guestId) => api.get(`/api/events/${eventId}/guests/${guestId}/invitation.pdf`, { responseType: 'blob' }),
   // Gộp mọi thiệp thành một PDF để in — danh sách dài cần lâu hơn timeout mặc định.
   allPdf: (eventId) => api.get(`/api/events/${eventId}/invitations/pdf`, { responseType: 'blob', timeout: 120000 }),
+  // Mỗi khách một file PDF, gói ZIP — server vẽ từng file nên lâu hơn file gộp.
+  allZip: (eventId) => api.get(`/api/events/${eventId}/invitations/zip`, { responseType: 'blob', timeout: 300000 }),
+  // Chuỗi in + link QR + tên file từng khách để trình duyệt vẽ PNG (invitation/invitationExport.js).
+  cards: (eventId, guestId) => api.get(`/api/events/${eventId}/invitations/cards`, { params: guestId ? { guestId } : {} }),
   // Không truyền guestIds = gửi cho mọi khách có email chưa nhận thiệp.
   send: (eventId, guestIds) => api.post(`/api/events/${eventId}/invitations/send`, guestIds ? { guestIds } : {}),
 

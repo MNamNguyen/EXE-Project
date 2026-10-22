@@ -185,4 +185,20 @@ async function renderInvitationsPdf(template, items, { title } = {}) {
   return doc.save();
 }
 
-module.exports = { renderInvitationsPdf, wrapText };
+// Mỗi khách một file PDF riêng (xuất ZIP). Vẽ chung một lần rồi chép từng trang ra
+// file con: ảnh mẫu PNG chỉ giải nén một lần thay vì một lần mỗi khách (Render free
+// CPU yếu), font đã subset sẵn. Trả từng file lần lượt để nơi gọi ghi ZIP dạng luồng —
+// 300 thiệp × ảnh mẫu vài MB không được dồn hết vào RAM.
+async function* renderInvitationsSeparately(template, items, { titles = [] } = {}) {
+  const merged = await PDFDocument.load(await renderInvitationsPdf(template, items));
+  for (let i = 0; i < items.length; i++) {
+    const doc = await PDFDocument.create();
+    if (titles[i]) doc.setTitle(titles[i]);
+    doc.setCreator('FPT Event System');
+    const [page] = await doc.copyPages(merged, [i]);
+    doc.addPage(page);
+    yield doc.save();
+  }
+}
+
+module.exports = { renderInvitationsPdf, renderInvitationsSeparately, wrapText };

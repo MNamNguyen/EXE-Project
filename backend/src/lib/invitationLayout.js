@@ -151,6 +151,26 @@ function extractGuestCode(raw) {
   return CODE_RE.test(code) ? code : null;
 }
 
+// Tên file (chưa có đuôi) cho từng thiệp khi xuất mỗi khách một file: giữ nguyên tên
+// tiếng Việt cho BTC dễ tìm, bỏ ký tự Windows cấm trong tên file. Trùng tên (so không
+// phân biệt hoa thường — ổ đĩa Windows coi là một) thì thêm " (2)", " (3)"… để không file
+// nào đè file nào trong ZIP. PDF (ZIP ở server) và PNG (vẽ ở trình duyệt) cùng lấy tên ở đây.
+function invitationFileNames(names) {
+  const used = new Set();
+  return names.map((raw) => {
+    const base = String(raw || '')
+      .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[. ]+$/, '')
+      .slice(0, 80) || 'Khach moi';
+    let name = base;
+    for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base} (${i})`;
+    used.add(name.toLowerCase());
+    return name;
+  });
+}
+
 // 15 byte ngẫu nhiên → 20 ký tự base64url: không đoán được, QR vẫn nhỏ gọn.
 function generateGuestCode() {
   return crypto.randomBytes(15).toString('base64url');
@@ -172,4 +192,5 @@ module.exports = {
   invitationUrl,
   extractGuestCode,
   generateGuestCode,
+  invitationFileNames,
 };

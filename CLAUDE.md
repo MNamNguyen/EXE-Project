@@ -96,7 +96,10 @@ where the whole router shares a role. `/api/public/*` is the only unauthenticate
   `controllers/event.controller` locks the self-scan fields (`INVITATION_LOCKED`) and rejects the
   self-scan APIs with `INVITATION_EVENT`. Invitation PDF layout is `lib/invitationLayout.js` ↔
   `frontend/src/pages/certificates/invitationRender.js` (same rule as the certificate pair; both use
-  the `qrcode` package). Reports branch on `kind`. Spec: `docs/superpowers/specs/2026-10-16-invitation-event-design.md`.
+  the `qrcode` package). Reports branch on `kind`. Per-guest export: `GET /invitations/zip` (one PDF per
+  guest, streamed ZIP via `fflate`) and PNG, which the **browser** draws with `drawInvitation`
+  (`pages/btc/invitation/invitationExport.js` + `GET /invitations/cards`) because the server has no
+  canvas — so PNG needs an uploaded template. File names come from `invitationFileNames` on both paths. Spec: `docs/superpowers/specs/2026-10-16-invitation-event-design.md`.
   One invitation can carry several tickets (`EventGuest.ticketCount`; one scan admits the whole group) and
   seats from `Event.seatMap`. Seat codes (`E08`) are parsed/validated only in `lib/seatMap.js`; assignments
   live in `EventGuestSeat` with `@@unique([eventId, seat])`, so a double-booking is a P2002 → `SEAT_TAKEN`

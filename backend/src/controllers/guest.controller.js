@@ -11,9 +11,10 @@ const {
 const { normalizeSeatMap, usableSeats, sortSeats, seatLabel } = require('../lib/seatMap');
 const crypto = require('crypto');
 const {
-  generateGuestCode, withAllFields, invitationValues, invitationTime, invitationUrl,
+  generateGuestCode, withAllFields, invitationValues, invitationTime, invitationUrl, invitationFileNames,
 } = require('../lib/invitationLayout');
-const { renderInvitationsPdf } = require('../services/invitationPdf');
+const { renderInvitationsPdf, renderInvitationsSeparately } = require('../services/invitationPdf');
+const { Zip, ZipPassThrough } = require('fflate');
 const { TIME_ZONE } = require('../lib/datetime');
 const emailService = require('../services/email.service');
 
@@ -600,11 +601,7 @@ async function downloadAllInvitations(req, res) {
   try {
     const event = await loadInvitationEvent(req, res);
     if (!event) return;
-    const guests = await prisma.eventGuest.findMany({
-      where: { eventId: event.id, isWalkIn: false },
-      orderBy: { name: 'asc' },
-      include: GUEST_INCLUDE,
-    });
+    const guests = await invitedGuests(event.id);
     if (!guests.length) {
       return res.status(400).json({ success: false, error: 'NO_GUESTS', message: 'Chưa có khách mời nào' });
     }
@@ -614,6 +611,83 @@ async function downloadAllInvitations(req, res) {
     return sendPdf(res, pdf, `thiep-moi-${event.name}`, false);
   } catch (err) {
     return serverError(res, 'Download all invitations', err);
+  }
+}
+
+// Khách có thiệp (không tính khách tại chỗ), cùng thứ tự với file PDF gộp.
+function invitedGuests(eventId) {
+  return prisma.eventGuest.findMany({
+    where: { eventId, isWalkIn: false },
+    orderBy: { name: 'asc' },
+    include: GUEST_INCLUDE,
+  });
+}
+
+// Mỗi khách một file PDF, gói trong một ZIP — để BTC gửi riêng từng người (Zalo,
+// Messenger) thay vì tách tay file gộp. Ghi ZIP dạng luồng: file nào vẽ xong gửi đi
+// ngay. Không nén (level 0): PDF đã nén sẵn, nén lại chỉ tốn CPU.
+async function downloadInvitationsZip(req, res) {
+  let started = false;
+  try {
+    const event = await loadInvitationEvent(req, res);
+    if (!event) return;
+    const guests = await invitedGuests(event.id);
+    if (!guests.length) {
+      return res.status(400).json({ success: false, error: 'NO_GUESTS', message: 'Chưa có khách mời nào' });
+    }
+    const names = invitationFileNames(guests.map((g) => g.name));
+    const files = renderInvitationsSeparately(await loadTemplate(event.id), guests.map((g) => pdfItem(g, event)), {
+      titles: guests.map((g) => `Thiệp mời - ${g.name} - ${event.name}`),
+    });
+
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', attachmentHeader(`thiep-moi-${event.name}`, 'zip'));
+    res.set('Cache-Control', 'private, no-store');
+    started = true;
+    const zip = new Zip((err, chunk, final) => {
+      if (err) return res.destroy(err);
+      res.write(Buffer.from(chunk));
+      if (final) res.end();
+    });
+    let i = 0;
+    for await (const pdf of files) {
+      const entry = new ZipPassThrough(`${names[i++]}.pdf`);
+      zip.add(entry);
+      entry.push(pdf, true);
+    }
+    zip.end();
+  } catch (err) {
+    // Đã gửi header thì không trả JSON được nữa — cắt kết nối để trình duyệt báo lỗi
+    // thay vì lưu một file ZIP hỏng.
+    if (started) {
+      console.error('Download invitations zip:', err);
+      return res.destroy(err);
+    }
+    return serverError(res, 'Download invitations zip', err);
+  }
+}
+
+// Dữ liệu để trình duyệt tự vẽ thiệp PNG (pages/btc/invitation/invitationExport.js) —
+// server không có canvas. Chuỗi in trên thiệp vẫn tính ở đây như PDF (giờ VN, ghế).
+// ?guestId= lấy một khách. template null = thiệp mặc định, chỉ có PDF.
+async function getInvitationCards(req, res) {
+  try {
+    const event = await loadInvitationEvent(req, res);
+    if (!event) return;
+    const guests = await invitedGuests(event.id);
+    const names = invitationFileNames(guests.map((g) => g.name));
+    let items = guests.map((g, i) => ({ id: g.id, fileName: names[i], values: invitationValues(g, event), qrText: invitationUrl(g.code) }));
+    if (req.query.guestId) {
+      items = items.filter((it) => it.id === req.query.guestId);
+      if (!items.length) return res.status(404).json({ success: false, error: 'GUEST_NOT_FOUND', message: 'Không tìm thấy khách' });
+    }
+    const template = await prisma.eventInvitationTemplate.findUnique({
+      where: { eventId: event.id },
+      select: { width: true, height: true, fields: true, updatedAt: true },
+    });
+    return res.json({ success: true, data: { template: withAllFields(template), items } });
+  } catch (err) {
+    return serverError(res, 'Get invitation cards', err);
   }
 }
 
@@ -718,6 +792,8 @@ module.exports = {
   getScannerSummary,
   downloadGuestInvitation,
   downloadAllInvitations,
+  downloadInvitationsZip,
+  getInvitationCards,
   sendInvitations,
   deliverInvitations,
 };

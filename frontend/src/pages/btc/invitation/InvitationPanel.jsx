@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileDown, Printer, Send, SlidersHorizontal, Trash2, Upload } from 'lucide-react';
+import { FileDown, FileImage, FileText, FolderArchive, Printer, Send, SlidersHorizontal, Trash2, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { guestApi } from '../../../services/api';
 import Modal, { useConfirm } from '../../../components/ui/Modal';
 import Button from '../../../components/ui/Button';
+import Dropdown, { MenuGroup, MenuItem } from '../../../components/ui/Dropdown';
 import { Card } from '../../../components/ui/Card';
 import { Banner, Skeleton } from '../../../components/ui/States';
 import CertificateCanvas from '../../certificates/CertificateCanvas';
@@ -12,6 +13,7 @@ import { downloadBlob } from '../../certificates/certRender';
 import {
   INVITATION_DEFAULT_FIELDS, INVITATION_FIELD_LABELS, drawInvitation, invitationTime,
 } from '../../certificates/invitationRender';
+import { exportErrorMessage, exportInvitationPngs } from './invitationExport';
 
 // Brevo gói free ~300 email/ngày cho CẢ hệ thống.
 const QUOTA_WARN = 250;
@@ -124,6 +126,28 @@ export default function InvitationPanel({ event, stats, onChanged }) {
     }
   };
 
+  // Mỗi khách một file riêng (để gửi từng người qua Zalo/Messenger), gói một ZIP.
+  // PDF do server vẽ; PNG do trình duyệt vẽ — xem invitationExport.js.
+  const handleZip = async (format) => {
+    setBusy(`zip-${format}`);
+    const toastId = toast.loading(format === 'png' ? 'Đang vẽ thiệp…' : 'Đang tạo thiệp — danh sách dài có thể mất vài phút…');
+    try {
+      if (format === 'pdf') {
+        const { data } = await guestApi.allZip(event.id);
+        downloadBlob(data, `thiep-moi-${event.name}.zip`);
+      } else {
+        await exportInvitationPngs(event, {
+          onProgress: (done, total) => toast.loading(`Đang vẽ thiệp ${done}/${total}…`, { id: toastId }),
+        });
+      }
+      toast.success('Đã tải xong thiệp', { id: toastId });
+    } catch (err) {
+      toast.error(exportErrorMessage(err), { id: toastId });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Email gửi nền ở server — hỏi lại vài lần để cập nhật số đã gửi.
   const poll = (attempt = 0) => {
     clearTimeout(pollRef.current);
@@ -211,7 +235,25 @@ export default function InvitationPanel({ event, stats, onChanged }) {
             {toSend > 0 ? `Gửi thiệp cho ${toSend} khách chưa nhận` : 'Mọi khách có email đã nhận thiệp'}
           </Button>
           <Button icon={Printer} loading={busy === 'all'} disabled={!stats?.invited} onClick={handleDownloadAll}>Tải tất cả thiệp để in (PDF)</Button>
+          <Dropdown
+            align="start"
+            matchWidth
+            ariaLabel="Tải từng thiệp riêng"
+            trigger={(
+              <Button icon={FolderArchive} loading={busy?.startsWith('zip-')} disabled={!stats?.invited || Boolean(busy)}>
+                Tải từng thiệp riêng (ZIP)
+              </Button>
+            )}
+          >
+            <MenuGroup>
+              <MenuItem icon={FileText} onSelect={() => handleZip('pdf')}>PDF — mỗi khách một file</MenuItem>
+              <MenuItem icon={FileImage} disabled={!template} onSelect={() => handleZip('png')}>PNG — mỗi khách một ảnh</MenuItem>
+            </MenuGroup>
+          </Dropdown>
         </div>
+        {template === null && (
+          <p className="mt-3 text-pretty text-xs text-muted">Ảnh PNG cần mẫu thiệp riêng — thiệp mặc định chỉ tải được PDF.</p>
+        )}
         {noEmail > 0 && (
           <p className="mt-3 text-pretty text-xs text-muted">
             {noEmail} khách không có email: tải thiệp từng người ở tab Khách mời (hoặc sao chép link thiệp) để gửi qua Zalo, hoặc in thiệp.

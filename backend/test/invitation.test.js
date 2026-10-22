@@ -4,12 +4,14 @@ const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const XLSX = require('xlsx');
 const { PDFDocument } = require('pdf-lib');
+const { unzipSync } = require('fflate');
 const prisma = require('../src/lib/prisma');
 const qrService = require('../src/services/qr.service');
 const emailService = require('../src/services/email.service');
 const app = require('../src/app');
 const {
   normalizeFields, withAllFields, invitationFieldText, extractGuestCode, generateGuestCode, invitationUrl, qrMatrix, layoutQr, invitationValues,
+  invitationFileNames,
 } = require('../src/lib/invitationLayout');
 const { normalizeGuestInput, maskPhone, maskEmail } = require('../src/lib/guestCheckin');
 const { renderInvitationsPdf, wrapText } = require('../src/services/invitationPdf');
@@ -472,6 +474,74 @@ test('trang thiệp công khai: mã sai → 404; mã đúng trả nội dung thi
     .parse((r, cb) => { const b = []; r.on('data', (c) => b.push(c)); r.on('end', () => cb(null, Buffer.concat(b))); });
   assert.strictEqual(pdf.headers['content-type'], 'application/pdf');
   assert.strictEqual((await PDFDocument.load(pdf.body)).getPageCount(), 1);
+});
+
+// ── Xuất từng thiệp riêng ───────────────────────────────────────
+
+const readBinary = (r, cb) => { const b = []; r.on('data', (c) => b.push(c)); r.on('end', () => cb(null, Buffer.concat(b))); };
+
+test('invitationFileNames: giữ dấu tiếng Việt, bỏ ký tự cấm, trùng tên (kể cả khác hoa thường) thì đánh số', () => {
+  assert.deepStrictEqual(
+    invitationFileNames(['Nguyễn Văn A', 'nguyễn văn a', 'a\\b/c:d?', '  ...', 'Trần B. ', 'Nguyễn Văn A']),
+    ['Nguyễn Văn A', 'nguyễn văn a (2)', 'a b c d', 'Khach moi', 'Trần B', 'Nguyễn Văn A (3)'],
+  );
+});
+
+test('xuất ZIP: mỗi khách (trừ khách tại chỗ) một file PDF một trang, tên file theo tên khách', async () => {
+  loginAs();
+  stubEvent();
+  stubMethod(prisma.eventInvitationTemplate, 'findUnique', async () => null);
+  const findMany = stubMethod(prisma.eventGuest, 'findMany', async () => [
+    guest({ id: 'g-1', name: 'Lê Thị Hoa' }),
+    guest({ id: 'g-2', name: 'Lê Thị Hoa', code: generateGuestCode() }),
+    guest({ id: 'g-3', name: 'Phạm Minh', code: generateGuestCode() }),
+  ]);
+  const res = await request(app).get('/api/events/evt-1/invitations/zip').set('Authorization', auth('btc-1'))
+    .buffer(true).parse(readBinary);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.headers['content-type'], 'application/zip');
+  assert.match(res.headers['content-disposition'], /^attachment; filename="thiep-moi-Gala_Doanh_nghiep\.zip"/);
+  assert.deepStrictEqual(findMany.calls[0][0].where, { eventId: 'evt-1', isWalkIn: false });
+
+  const files = unzipSync(new Uint8Array(res.body));
+  assert.deepStrictEqual(Object.keys(files), ['Lê Thị Hoa.pdf', 'Lê Thị Hoa (2).pdf', 'Phạm Minh.pdf']);
+  for (const bytes of Object.values(files)) assert.strictEqual((await PDFDocument.load(bytes)).getPageCount(), 1);
+});
+
+test('xuất ZIP: chưa có khách → 400 NO_GUESTS; BTC khác không xuất được', async () => {
+  loginAs();
+  stubEvent();
+  stubMethod(prisma.eventGuest, 'findMany', async () => []);
+  const empty = await request(app).get('/api/events/evt-1/invitations/zip').set('Authorization', auth('btc-1'));
+  assert.strictEqual(empty.status, 400);
+  assert.strictEqual(empty.body.error, 'NO_GUESTS');
+  const other = await request(app).get('/api/events/evt-1/invitations/zip').set('Authorization', auth('btc-2'));
+  assert.strictEqual(other.status, 403);
+});
+
+test('dữ liệu vẽ PNG: chuỗi in + link QR + tên file từng khách; ?guestId lọc một khách; mẫu null = thiệp mặc định', async () => {
+  loginAs();
+  stubEvent();
+  stubMethod(prisma.eventGuest, 'findMany', async () => [guest(), guest({ id: 'g-2', name: 'lê thị hoa', code: 'x'.repeat(20) })]);
+  let template = null;
+  stubMethod(prisma.eventInvitationTemplate, 'findUnique', async () => template);
+
+  const all = await request(app).get('/api/events/evt-1/invitations/cards').set('Authorization', auth('btc-1'));
+  assert.strictEqual(all.status, 200);
+  assert.strictEqual(all.body.data.template, null);
+  assert.deepStrictEqual(all.body.data.items.map((it) => it.fileName), ['Lê Thị Hoa', 'lê thị hoa (2)']);
+  assert.strictEqual(all.body.data.items[0].qrText, invitationUrl(CODE));
+  assert.strictEqual(all.body.data.items[0].values.event, 'Gala Doanh nghiệp');
+
+  template = { width: 1000, height: 1400, fields: [{ key: 'qr', x: 0.5, y: 0.5, size: 0.2 }], updatedAt: new Date() };
+  const one = await request(app).get('/api/events/evt-1/invitations/cards?guestId=g-2').set('Authorization', auth('btc-1'));
+  assert.deepStrictEqual(one.body.data.items.map((it) => it.fileName), ['lê thị hoa (2)']);
+  assert.strictEqual(one.body.data.template.fields.length, 7); // withAllFields bù đủ ô
+  assert.strictEqual(one.body.data.template.image, undefined);
+
+  const missing = await request(app).get('/api/events/evt-1/invitations/cards?guestId=nope').set('Authorization', auth('btc-1'));
+  assert.strictEqual(missing.status, 404);
+  assert.strictEqual(missing.body.error, 'GUEST_NOT_FOUND');
 });
 
 // ── Gửi thiệp ───────────────────────────────────────────────────

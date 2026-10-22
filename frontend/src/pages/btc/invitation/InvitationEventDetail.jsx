@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Copy, Ellipsis, FileCode2, FileDown, FileSpreadsheet, FileText, KeyRound, Link2, Mail, Pencil, Plus, ScanLine,
+  Copy, Ellipsis, FileCode2, FileDown, FileImage, FileSpreadsheet, FileText, KeyRound, Link2, Mail, Pencil, Plus, ScanLine,
   Send, Trash2, Undo2, Upload, UserCheck,
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -25,6 +25,7 @@ import GuestFormModal from './GuestFormModal';
 import GuestImportModal from './GuestImportModal';
 import ScannerLinkModal from './ScannerLinkModal';
 import InvitationPanel from './InvitationPanel';
+import { exportErrorMessage, exportInvitationPngs } from './invitationExport';
 import SeatMapPanel from './SeatMapPanel';
 
 const PAGE_SIZE = 20;
@@ -180,6 +181,14 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
     }
   };
 
+  const handleGuestPng = async (g) => {
+    try {
+      await exportInvitationPngs(event, { guestId: g.id });
+    } catch (err) {
+      toast.error(exportErrorMessage(err));
+    }
+  };
+
   const handleExport = async (kind) => {
     setExporting(kind);
     try {
@@ -210,6 +219,7 @@ export default function InvitationEventDetail({ event, onEventChanged }) {
           <MenuSeparator />
           <MenuGroup>
             <MenuItem icon={FileDown} onSelect={() => handleGuestPdf(g)}>Tải thiệp (PDF)</MenuItem>
+            <MenuItem icon={FileImage} onSelect={() => handleGuestPng(g)}>Tải thiệp (ảnh PNG)</MenuItem>
             <MenuItem icon={Copy} onSelect={() => copyText(g.inviteUrl, 'Đã copy link thiệp')}>Sao chép link thiệp</MenuItem>
             {g.email && (
               <MenuItem icon={Send} onSelect={() => act(() => guestApi.send(event.id, [g.id]), 'Gửi thiệp thất bại')}>
