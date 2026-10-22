@@ -38,7 +38,7 @@ export const INVITATION_DEFAULT_FIELDS = [
   { key: 'location', enabled: true, x: 0.5, y: 0.58, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
   { key: 'seat', enabled: true, x: 0.5, y: 0.63, size: 0.03, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
   { key: 'tickets', enabled: true, x: 0.5, y: 0.67, size: 0.026, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
-  { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3, background: true },
+  { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3, background: false },
 ];
 
 // "14:30 · Thứ Ba, 20/10/2026" — cùng dạng invitationTime ở backend.
@@ -94,7 +94,7 @@ export function drawInvitation(ctx, img, fields, values, qrText) {
   for (const field of fields) {
     if (field.key === 'qr') {
       const { left, top, side } = layoutQr(field, W, H);
-      drawQr(ctx, qrText, left, top, side, field.background !== false);
+      drawQr(ctx, qrText, left, top, side, field.background === true);
       boxes.qr = { left: left / W, top: top / H, width: side / W, height: side / H };
       continue;
     }

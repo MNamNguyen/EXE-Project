@@ -222,10 +222,10 @@ export default function LayoutEditorModal({
               </Field>
               <Checkbox
                 label="Nền trắng sau mã QR"
-                desc={current.background === false
-                  ? 'Mã vẽ thẳng lên ảnh mẫu — chỗ đặt mã phải đủ sáng và trơn, nhớ in thử rồi quét bằng điện thoại.'
-                  : 'Nên giữ: nền trắng tách mã khỏi ảnh nên camera quét nhanh hơn.'}
-                checked={current.background !== false}
+                desc={current.background === true
+                  ? 'Nền trắng tách mã khỏi ảnh nên camera quét nhanh hơn.'
+                  : 'Mã vẽ thẳng lên ảnh mẫu — chỗ đặt mã phải đủ sáng và trơn; nếu điện thoại quét chậm thì bật nền trắng.'}
+                checked={current.background === true}
                 onChange={(e) => update('qr', { background: e.target.checked })}
               />
               <div>

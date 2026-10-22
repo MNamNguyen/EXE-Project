@@ -59,9 +59,9 @@ test('normalizeFields: đủ 7 ô, ô tên và ô QR luôn bật, QR chỉ giữ
   assert.strictEqual(value[0].enabled, true);
   assert.strictEqual(value[3].enabled, false);
   assert.strictEqual(value[4].enabled, true); // mẫu cũ chưa có ô ghế → nhận ô mặc định
-  assert.deepStrictEqual(value[6], { key: 'qr', enabled: true, x: 1, y: 0, size: 0.6, background: true });
-  const noBg = normalizeFields([{ key: 'qr', x: 0.5, y: 0.5, size: 0.3, background: false }]).value[6];
-  assert.strictEqual(noBg.background, false);
+  assert.deepStrictEqual(value[6], { key: 'qr', enabled: true, x: 1, y: 0, size: 0.6, background: false });
+  const withBg = normalizeFields([{ key: 'qr', x: 0.5, y: 0.5, size: 0.3, background: true }]).value[6];
+  assert.strictEqual(withBg.background, true);
   assert.ok(normalizeFields(null).error);
 });
 

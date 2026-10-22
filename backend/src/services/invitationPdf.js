@@ -27,6 +27,7 @@ const INK = rgb(0, 0, 0);
 // các ô đen liền nhau trên một hàng thành một hình chữ nhật — ít lệnh vẽ hơn
 // nhiều và không lộ đường kẻ mảnh giữa các ô khi phóng to.
 // background = false: bỏ nền trắng, mã vẽ thẳng lên ảnh mẫu (vị trí/cỡ ô giữ nguyên).
+// Thiệp mặc định luôn có nền (giấy kem, khung riêng); thiệp theo mẫu thì theo ô qr.
 function drawQr(page, text, left, top, side, H, background = true) {
   const qr = qrMatrix(text);
   const cell = side / (qr.size + QR_QUIET_MODULES * 2);
@@ -75,7 +76,7 @@ async function renderTemplatePages(doc, font, template, items) {
     for (const field of template.fields) {
       if (field.key === 'qr') {
         const { left, top, side } = layoutQr(field, W, H);
-        drawQr(page, qrText, left, top, side, H, field.background !== false);
+        drawQr(page, qrText, left, top, side, H, field.background === true);
         continue;
       }
       const text = invitationFieldText(field, values);

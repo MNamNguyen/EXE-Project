@@ -11,7 +11,8 @@ const { seatText, ticketText, guestSeats } = require('./seatMap');
 // Ô chữ (name/event/time/location/seat) theo đúng quy tắc của chứng nhận — xem
 // certificateLayout.js: toạ độ tỉ lệ 0–1, y là baseline, tự thu nhỏ khi dài.
 // Ô "qr" là hình vuông: x, y là TÂM ô; size = cạnh theo tỉ lệ chiều rộng ảnh;
-// background = có vẽ nền trắng sau mã không (tắt khi ảnh mẫu đã chừa sẵn chỗ sáng màu).
+// background = có vẽ nền trắng sau mã không. Mặc định TẮT — mã vẽ thẳng lên ảnh mẫu cho
+// hợp thiết kế; BTC bật lại khi chỗ đặt mã trên ảnh tối màu/nhiều hoạ tiết, camera khó đọc.
 
 // seat = "Ghế E08, E09", tickets = "2 vé" (lib/seatMap.js) — hai ô riêng để BTC đặt mỗi
 // thứ một chỗ trên thiệp; chuỗi rỗng (chưa xếp ghế / 1 vé) thì ô không được vẽ. Mẫu lưu
@@ -30,7 +31,7 @@ const DEFAULT_FIELDS = [
   { key: 'location', enabled: true, x: 0.5, y: 0.58, size: 0.026, maxWidth: 0.8, font: 'sans', color: '#4B5563', align: 'center' },
   { key: 'seat', enabled: true, x: 0.5, y: 0.63, size: 0.03, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
   { key: 'tickets', enabled: true, x: 0.5, y: 0.67, size: 0.026, maxWidth: 0.8, font: 'sans-bold', color: '#C2410C', align: 'center' },
-  { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3, background: true },
+  { key: 'qr', enabled: true, x: 0.5, y: 0.77, size: 0.3, background: false },
 ];
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
@@ -51,8 +52,8 @@ function normalizeFields(input) {
         x: num(f.x, def.x, 0, 1),
         y: num(f.y, def.y, 0, 1),
         size: num(f.size, def.size, 0.08, 0.6),
-        // Mẫu lưu trước khi có tuỳ chọn này vẫn có nền trắng như cũ.
-        background: f.background !== false,
+        // Chỉ có nền khi BTC bật hẳn — mẫu lưu trước khi có tuỳ chọn này cũng không còn nền.
+        background: f.background === true,
       };
     }
     return {
