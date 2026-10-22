@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Copy, Ellipsis, KeyRound, Lock, Pencil, Plus, Smartphone, Trash2, Upload, UserCheck, UserX } from 'lucide-react';
+import { Copy, Ellipsis, KeyRound, Lock, Pencil, Plus, ScanFace, Smartphone, Trash2, Upload, UserCheck, UserX } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -18,6 +18,7 @@ import { CheckCell } from '../../components/ui/Choice';
 import { LoadError, SkeletonRows } from '../../components/ui/States';
 import { cx } from '../../utils/cx';
 import ImportStudents from './ImportStudents';
+import FaceImport from './FaceImport';
 import BulkUserActions, { MAX_BULK } from './BulkUserActions';
 
 const PAGE_SIZES = [20, 50, 100];
@@ -90,6 +91,7 @@ export default function UserManagement() {
 
   const [createModal, setCreateModal] = useState(false);
   const [importModal, setImportModal] = useState(false);
+  const [faceImportModal, setFaceImportModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
 
@@ -473,6 +475,9 @@ export default function UserManagement() {
           <Button size="hdr" icon={Upload} aria-label="Import Excel" onClick={() => setImportModal(true)}>
             <span className="hidden sm:inline">Import Excel</span>
           </Button>
+          <Button size="hdr" icon={ScanFace} aria-label="Import ảnh khuôn mặt" onClick={() => setFaceImportModal(true)}>
+            <span className="hidden sm:inline">Ảnh khuôn mặt</span>
+          </Button>
           <Button variant="primary" size="hdr" icon={Plus} onClick={() => { setForm(EMPTY_FORM); setCreateModal(true); }}>Tạo tài khoản</Button>
         </>
       )}
@@ -615,6 +620,11 @@ export default function UserManagement() {
       {/* Import */}
       <Modal open={importModal} onClose={() => setImportModal(false)} title="Import sinh viên từ Excel" size="sm">
         <ImportStudents onSuccess={() => { setImportModal(false); setPage(1); load(1); }} />
+      </Modal>
+
+      {/* Import ảnh thẻ để check-in bằng khuôn mặt */}
+      <Modal open={faceImportModal} onClose={() => setFaceImportModal(false)} title="Import ảnh khuôn mặt theo MSSV" size="md">
+        <FaceImport />
       </Modal>
     </Layout>
   );

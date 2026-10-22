@@ -26,6 +26,8 @@ import GuestScanPage from './pages/btc/GuestScanPage';
 import VolunteerScan from './pages/public/VolunteerScan';
 import InvitationView from './pages/public/InvitationView';
 import PublicCheckin from './pages/public/checkin/PublicCheckin';
+import FaceCheckin from './pages/btc/FaceCheckin';
+import FaceEnroll from './pages/student/FaceEnroll';
 
 function RequireAuth({ children, roles }) {
   const { user, loading } = useAuth();
@@ -93,6 +95,13 @@ export default function App() {
         </RequireAuth>
       } />
 
+      {/* Kiosk check-in bằng khuôn mặt — laptop BTC ở cửa (mở ở tab mới) */}
+      <Route path="/events/:id/face-checkin" element={
+        <RequireAuth roles={['ADMIN', 'BTC']}>
+          <FaceCheckin />
+        </RequireAuth>
+      } />
+
       {/* Student */}
       <Route path="/dashboard" element={<RequireAuth><StudentDashboard /></RequireAuth>} />
       <Route path="/my-attendance" element={<RequireAuth><MyAttendance /></RequireAuth>} />
@@ -100,6 +109,7 @@ export default function App() {
       <Route path="/feedback/:eventId" element={<EventFeedback />} />
       {/* Link trong email "đã có chứng nhận" trỏ về đây */}
       <Route path="/my-certificates" element={<RequireAuth><MyCertificates /></RequireAuth>} />
+      <Route path="/khuon-mat" element={<RequireAuth roles={['STUDENT']}><FaceEnroll /></RequireAuth>} />
 
       {/* Events — BTC/ADMIN/LECTURER */}
       <Route path="/events" element={<RequireAuth roles={['ADMIN', 'BTC', 'LECTURER']}><EventList /></RequireAuth>} />

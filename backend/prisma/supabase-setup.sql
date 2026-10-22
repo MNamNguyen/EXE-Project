@@ -527,6 +527,27 @@ CREATE TABLE IF NOT EXISTS "attendance_invitation_templates" (
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- Khuôn mặt cho check-in tại cửa: chỉ vector (do trình duyệt tính) + thumbnail nhỏ,
+-- không lưu ảnh gốc. Xoá user thì xoá luôn dữ liệu sinh trắc học.
+CREATE TABLE IF NOT EXISTS "attendance_face_profiles" (
+  "id"              TEXT        NOT NULL,
+  "userId"          TEXT        NOT NULL,
+  "embedding"       BYTEA       NOT NULL,
+  "model"           TEXT        NOT NULL,
+  "thumbnail"       BYTEA,
+  "source"          TEXT        NOT NULL,
+  "importEmbedding" BYTEA,
+  "consentAt"       TIMESTAMPTZ,
+  "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "attendance_face_profiles_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "attendance_face_profiles_userId_key" UNIQUE ("userId"),
+  CONSTRAINT "attendance_face_profiles_userId_fkey"
+    FOREIGN KEY ("userId")
+    REFERENCES "attendance_users"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- Bật RLS cho các bảng mới: KHÔNG tạo policy nào, nên anon/authenticated key
 -- (REST API của Supabase — project này dùng chung với ứng dụng khác) không đọc
 -- ghi được gì. Backend kết nối bằng role postgres (chủ bảng, có BYPASSRLS) nên
@@ -541,6 +562,7 @@ ALTER TABLE "attendance_event_guests"           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_invitation_templates"   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_event_guest_keys"       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "attendance_event_guest_seats"      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "attendance_face_profiles"          ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- BƯỚC 4: UNIQUE constraints bổ sung
@@ -780,6 +802,11 @@ CREATE TRIGGER "attendance_invitation_templates_updated_at"
 DROP TRIGGER IF EXISTS "attendance_feedback_responses_updated_at" ON "attendance_feedback_responses";
 CREATE TRIGGER "attendance_feedback_responses_updated_at"
   BEFORE UPDATE ON "attendance_feedback_responses"
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS "attendance_face_profiles_updated_at" ON "attendance_face_profiles";
+CREATE TRIGGER "attendance_face_profiles_updated_at"
+  BEFORE UPDATE ON "attendance_face_profiles"
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================

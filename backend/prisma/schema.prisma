@@ -37,6 +37,7 @@ model User {
   sentReminders      EventReminder[]
   certificates       Certificate[]      @relation("CertificateRecipient")
   issuedCertificates Certificate[]      @relation("CertificateIssuer")
+  faceProfile        FaceProfile?
 
   @@index([role])
   @@index([isActive])
@@ -503,4 +504,28 @@ model EventInvitationTemplate {
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@map("attendance_invitation_templates")
+}
+
+// Khuôn mặt dùng cho check-in tại cửa (kiosk BTC). Embedding do TRÌNH DUYỆT tính
+// (@vladmandic/human, faceres 1024 chiều) — server không chạy mô hình, chỉ lưu và so
+// vector, xem lib/faceProfile.js. Không lưu ảnh gốc: chỉ vector + thumbnail nhỏ để
+// người đứng cửa nhìn đối chiếu. Dữ liệu sinh trắc học là dữ liệu nhạy cảm nên kiosk
+// chỉ dùng profile đã có consentAt; ảnh admin import mặc định chưa đồng ý.
+model FaceProfile {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  embedding       Bytes
+  // Khác FACE_MODEL hiện tại = vector của mô hình cũ, không so được → coi như chưa có.
+  model           String
+  thumbnail       Bytes?
+  source          String // SELF | IMPORT
+  // Vector ảnh admin import, giữ lại để ảnh sinh viên tự chụp phải giống ảnh này.
+  importEmbedding Bytes?
+  consentAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("attendance_face_profiles")
 }

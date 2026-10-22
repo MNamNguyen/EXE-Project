@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/utils/date.test.js"
+    "test": "node --test src/utils/date.test.js src/pages/face/faceMatch.test.js"
   },
   "dependencies": {
+    "@vladmandic/human": "3.3.6",
     "axios": "^1.7.9",
     "date-fns": "^4.1.0",
     "jsqr": "^1.4.0",

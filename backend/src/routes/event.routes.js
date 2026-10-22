@@ -8,6 +8,7 @@ const {
 } = require('../controllers/event.controller');
 const { registerSelf } = require('../controllers/registration.controller');
 const { getReminders, sendReminderNow } = require('../controllers/reminder.controller');
+const { getFaceGallery, getFaceThumbnail, faceCheckin } = require('../controllers/face.controller');
 const multer = require('multer');
 const { getPublicFormSetup, savePublicForm, addCheckinByStaff } = require('../controllers/publicCheckin.controller');
 const {
@@ -50,6 +51,10 @@ router.get('/:id/qr', authorize('ADMIN', 'BTC'), getQRToken);
 router.get('/:id/live', authorize('ADMIN', 'BTC'), getLiveCheckins);
 router.get('/:id/attendance', authorize('ADMIN', 'BTC', 'LECTURER'), getAttendance);
 router.post('/:id/manual-checkin', authorize('ADMIN', 'BTC'), manualCheckin);
+// Kiosk check-in bằng khuôn mặt: vector do trình duyệt so khớp, xem lib/faceProfile.js.
+router.get('/:id/face-gallery', authorize('ADMIN', 'BTC'), getFaceGallery);
+router.get('/:id/face-gallery/:userId/thumbnail', authorize('ADMIN', 'BTC'), getFaceThumbnail);
+router.post('/:id/face-checkin', authorize('ADMIN', 'BTC'), faceCheckin);
 
 // Người dùng đã đăng nhập tự ghi tên vào danh sách tham gia.
 router.post('/:id/register', registerSelf);
