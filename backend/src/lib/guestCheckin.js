@@ -282,23 +282,27 @@ function searchGuests(eventId, q, take = 20) {
   });
 }
 
-const sumTickets = async (where) => (
-  await prisma.eventGuest.aggregate({ where, _sum: { ticketCount: true } })
-)._sum.ticketCount || 0;
-
 // Số liệu cho trang quét và trang sự kiện. Các số đếm theo khách (= theo thiệp/mã QR);
 // tickets* đếm theo người (một thiệp nhiều vé) — trang hiển thị "đã tới x/87 người".
+// MỘT câu SQL thay vì 8 lệnh count/aggregate: Prisma chỉ giữ 1 kết nối (lib/prisma.js)
+// nên 8 lệnh chạy nối đuôi nhau, mỗi lệnh một vòng tới DB — trang quét gọi hàm này
+// sau mỗi lượt quét và 10 giây/lần trên mỗi máy, lượt quét kế tiếp phải xếp hàng sau.
 async function guestStats(eventId) {
-  const [total, checkedIn, walkIns, invitedCheckedIn, tickets, ticketsCheckedIn, walkInTickets, seatsAssigned] = await Promise.all([
-    prisma.eventGuest.count({ where: { eventId } }),
-    prisma.eventGuest.count({ where: { eventId, checkedInAt: { not: null } } }),
-    prisma.eventGuest.count({ where: { eventId, isWalkIn: true } }),
-    prisma.eventGuest.count({ where: { eventId, isWalkIn: false, checkedInAt: { not: null } } }),
-    sumTickets({ eventId }),
-    sumTickets({ eventId, checkedInAt: { not: null } }),
-    sumTickets({ eventId, isWalkIn: true }),
-    prisma.eventGuestSeat.count({ where: { eventId } }),
-  ]);
+  const [row] = await prisma.$queryRaw`
+    SELECT
+      COUNT(*)::int AS "total",
+      COUNT(*) FILTER (WHERE "checkedInAt" IS NOT NULL)::int AS "checkedIn",
+      COUNT(*) FILTER (WHERE "isWalkIn")::int AS "walkIns",
+      COUNT(*) FILTER (WHERE NOT "isWalkIn" AND "checkedInAt" IS NOT NULL)::int AS "invitedCheckedIn",
+      COALESCE(SUM("ticketCount"), 0)::int AS "tickets",
+      COALESCE(SUM("ticketCount") FILTER (WHERE "checkedInAt" IS NOT NULL), 0)::int AS "ticketsCheckedIn",
+      COALESCE(SUM("ticketCount") FILTER (WHERE "isWalkIn"), 0)::int AS "walkInTickets",
+      (SELECT COUNT(*)::int FROM "attendance_event_guest_seats" WHERE "eventId" = ${eventId}) AS "seatsAssigned"
+    FROM "attendance_event_guests"
+    WHERE "eventId" = ${eventId}`;
+  const {
+    total, checkedIn, walkIns, invitedCheckedIn, tickets, ticketsCheckedIn, walkInTickets, seatsAssigned,
+  } = row;
   return {
     total,
     checkedIn,

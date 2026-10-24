@@ -279,11 +279,10 @@ test('quét thiệp nhiều vé: một lần cho cả nhóm, trả số vé + gh
 });
 
 test('guestStats cộng số người theo vé; báo cáo HTML đếm theo người', async () => {
-  stubMethod(prisma.eventGuest, 'count', async () => 2);
-  stubMethod(prisma.eventGuestSeat, 'count', async () => 7);
-  stubMethod(prisma.eventGuest, 'aggregate', async ({ where }) => ({
-    _sum: { ticketCount: where.isWalkIn ? 2 : where.checkedInAt ? 5 : 9 },
-  }));
+  stubMethod(prisma, '$queryRaw', async () => [{
+    total: 2, checkedIn: 1, walkIns: 0, invitedCheckedIn: 1,
+    tickets: 9, ticketsCheckedIn: 5, walkInTickets: 2, seatsAssigned: 7,
+  }]);
   const stats = await guestStats('evt-1');
   assert.strictEqual(stats.tickets, 9);
   assert.strictEqual(stats.ticketsCheckedIn, 5);
