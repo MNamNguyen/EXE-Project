@@ -26,8 +26,8 @@ const RESULT_TTL = { success: 2500, warning: 5000, error: 5000 };
 // Cùng một thiệp còn nằm trước camera thì khung hình nào cũng đọc ra. Cửa sổ TRƯỢT:
 // mỗi lần còn thấy lại thiệp đó thì gia hạn, nên khách cầm thiệp đứng yên không bị
 // báo "đã check-in" ngay sau "mời vào"; phải đưa thiệp ra khỏi khung một lúc rồi quét
-// lại mới tính là lượt mới. Dài hơn thời gian hiện kết quả lâu nhất (lúc đó tạm
-// ngừng giải mã nên không có lần "thấy lại" nào để gia hạn).
+// lại mới tính là lượt mới. Dài hơn thời gian hiện kết quả lâu nhất (thẻ cảnh báo/lỗi
+// tạm ngừng giải mã nên không có lần "thấy lại" nào để gia hạn).
 const SAME_CODE_MS = 6000;
 const SUMMARY_POLL_MS = 10000;
 
@@ -195,7 +195,11 @@ export default function GuestScanner({ api, onFatal }) {
     run(() => api.scan(text));
   }, [api, run]);
 
-  const camera = useQrCamera({ onDecode, paused: busy || Boolean(result) || tab !== 'scan' });
+  // Thẻ "Mời vào" không chặn camera: khách sau đưa thiệp là quét luôn, thẻ mới thay thẻ
+  // cũ — hàng người ở cửa không phải chờ thẻ tự tắt. Thẻ cảnh báo/lỗi thì vẫn dừng để
+  // người đứng cửa kịp đọc.
+  const holdCamera = Boolean(result) && result.tone !== 'success';
+  const camera = useQrCamera({ onDecode, paused: busy || holdCamera || tab !== 'scan' });
   const { start: startCamera, stop: stopCamera, status: cameraStatus } = camera;
 
   // Bật camera khi ở tab quét, tắt khi rời đi (đỡ pin, tắt đèn camera).
