@@ -44,7 +44,13 @@ export default function FaceCheckin() {
   const loadGallery = useCallback(async () => {
     try {
       const { data: res } = await faceApi.gallery(id);
-      const people = res.data.people.map((p) => ({ ...p, vector: decodeEmbedding(p.embedding) }));
+      // Tải lại mỗi phút: chỉ giải mã vector của người mới/vừa đổi ảnh, còn lại dùng lại —
+      // vài trăm vector × 1024 số giải mã lại mỗi lần là một cú giật thấy được trên kiosk.
+      const previous = new Map(peopleRef.current.map((p) => [p.userId, p]));
+      const people = res.data.people.map((p) => {
+        const old = previous.get(p.userId);
+        return { ...p, vector: old?.embedding === p.embedding ? old.vector : decodeEmbedding(p.embedding) };
+      });
       people.forEach((p) => { if (p.checkedIn) doneRef.current.add(p.userId); });
       peopleRef.current = people;
       setGallery(res.data);
@@ -122,7 +128,7 @@ export default function FaceCheckin() {
     if (problem) {
       streakRef.current = { userId: null, count: 0 };
       setHint(face ? problem : '');
-      return;
+      return face ? undefined : 'idle';
     }
 
     const ranked = rankMatches(face.embedding, peopleRef.current);

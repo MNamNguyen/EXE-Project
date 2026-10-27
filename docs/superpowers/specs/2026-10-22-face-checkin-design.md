@@ -83,3 +83,19 @@ hoặc `STREAK_FRAMES` để bù.
 
 Hiệu năng trên webgl: tải mô hình khoảng 2.4 s, mỗi khung hình 180–330 ms. Kiosk lấy khung hình
 liên tục nhưng tuần tự, không chồng việc lên nhau.
+
+## Chạy mô hình trong Web Worker (2026-10-27)
+Bản đầu chạy Human trên luồng chính và bị gỡ sau khi deploy vì trang lag (commit f06e1d7): mỗi khung
+chiếm luồng giao diện, nên bấm nút, gõ MSSV, cuộn đều giật. Bây giờ:
+- `pages/face/faceWorker.js` (module worker) chạy Human. `faceEngine.js` gửi `ImageBitmap` cắt từ
+  video/ảnh sang worker (transfer, không copy) và nhận kết quả đã rút gọn (`slimFace`: box, score,
+  embedding, rotation.angle, real, live).
+- Cấu hình nằm ở `pages/face/faceConfig.js`, dùng chung cho worker và đường dự phòng.
+- Trình duyệt thiếu `OffscreenCanvas`/module worker, hoặc worker không khởi động được (không có WebGL
+  trong worker), thì `faceEngine` chạy Human trên luồng chính như cũ.
+- Đo trên Chrome ngày 2026-10-27 với ảnh mẫu của Human: cùng khuôn mặt qua worker và qua luồng chính
+  cho similarity 0.9926 (cách đọc ảnh khác nhau chút ít), cao hơn mọi ngưỡng rất xa nên **không** đổi
+  `FACE_MODEL`. Luồng chính bị chặn tối đa 22 ms (khi chạy trên luồng chính là 66 ms trên cùng máy; máy
+  GPU tích hợp còn tệ hơn). Mỗi khung trong worker chậm hơn khoảng 1.5 lần, nhưng giao diện vẫn mượt.
+- Khi khung không có ai, `useFaceCamera` giãn nhịp từ 150 ms lên 400 ms. Kiosk tải lại danh sách mỗi
+  60 s và chỉ giải mã vector của người mới hoặc vừa đổi ảnh.

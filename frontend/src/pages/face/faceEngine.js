@@ -1,40 +1,13 @@
 // Bọc @vladmandic/human: nạp mô hình MỘT lần, đọc khuôn mặt từ video/ảnh, kiểm tra chất
 // lượng và cắt thumbnail. Mọi embedding của hệ thống (sinh viên tự chụp, admin import,
-// kiosk) đều đi qua đây để cùng cấu hình — vector của hai cấu hình khác nhau không so
-// được với nhau. Đổi cấu hình/phiên bản ảnh hưởng vector thì đổi FACE_MODEL ở
-// backend/src/lib/faceProfile.js để mọi người đăng ký lại.
+// kiosk) đều đi qua đây để cùng cấu hình (faceConfig.js).
 //
-// Mô hình phục vụ tại /models/human/ (xem vite.config.js), không qua CDN.
+// Mô hình chạy trong Web Worker (faceWorker.js) để không chặn luồng giao diện. Trình duyệt
+// thiếu OffscreenCanvas/module worker (Safari cũ) thì chạy trên luồng chính như trước —
+// chậm tay hơn nhưng vẫn dùng được, và vector như nhau vì cùng cấu hình, cùng backend.
 
 import { EMBEDDING_DIM } from './faceMatch';
-
-const CONFIG = {
-  modelBasePath: '/models/human/',
-  backend: 'webgl',
-  debug: false,
-  warmup: 'face',
-  // 0 = tắt cache: kiosk cần vector và điểm liveness của đúng khung hình đang xét, không
-  // phải kết quả của người đứng trước đó vài giây.
-  cacheSensitivity: 0,
-  filter: { enabled: true, flip: false },
-  face: {
-    enabled: true,
-    detector: { rotation: true, maxDetected: 3, minConfidence: 0.5, return: false },
-    mesh: { enabled: true },
-    attention: { enabled: false },
-    iris: { enabled: false },
-    description: { enabled: true },
-    emotion: { enabled: false },
-    gear: { enabled: false },
-    antispoof: { enabled: true },
-    liveness: { enabled: true },
-  },
-  body: { enabled: false },
-  hand: { enabled: false },
-  object: { enabled: false },
-  gesture: { enabled: false },
-  segmentation: { enabled: false },
-};
+import { HUMAN_CONFIG, slimFace } from './faceConfig';
 
 // Khuôn mặt nhỏ hơn thế này (px) thì vector kém tin cậy — người đứng quá xa camera.
 const MIN_FACE_PX = 90;
@@ -49,14 +22,75 @@ const THUMB_SIZE = 128;
 
 let enginePromise = null;
 
+function canUseWorker() {
+  return typeof Worker !== 'undefined'
+    && typeof OffscreenCanvas !== 'undefined'
+    && typeof createImageBitmap === 'function';
+}
+
+async function workerEngine() {
+  const worker = new Worker(new URL('./faceWorker.js', import.meta.url), { type: 'module' });
+  const pending = new Map();
+  let seq = 0;
+  const failAll = (message) => {
+    pending.forEach(({ reject }) => reject(new Error(message)));
+    pending.clear();
+  };
+  worker.onmessage = ({ data }) => {
+    const call = pending.get(data.id);
+    if (!call) return;
+    pending.delete(data.id);
+    if (data.error) call.reject(new Error(data.error));
+    else call.resolve(data.faces);
+  };
+  // Script worker không tải/khởi động được → mọi lệnh đang chờ phải trả lỗi, không treo.
+  worker.onerror = (e) => { e.preventDefault?.(); failAll(e.message || 'Worker nhận diện bị lỗi'); };
+  const call = (msg, transfer = []) => new Promise((resolve, reject) => {
+    seq += 1;
+    pending.set(seq, { resolve, reject });
+    worker.postMessage({ ...msg, id: seq }, transfer);
+  });
+
+  try {
+    await call({ type: 'load' });
+  } catch (err) {
+    worker.terminate();
+    throw err;
+  }
+  return {
+    async detect(input) {
+      // ImageBitmap chuyển (transfer) sang worker, không copy điểm ảnh.
+      const bitmap = await createImageBitmap(input);
+      return call({ type: 'detect', bitmap }, [bitmap]);
+    },
+  };
+}
+
+async function mainThreadEngine() {
+  const { Human } = await import('@vladmandic/human');
+  const human = new Human(HUMAN_CONFIG);
+  await human.load();
+  await human.warmup();
+  return {
+    async detect(input) {
+      const result = await human.detect(input);
+      return (result.face || []).map(slimFace);
+    },
+  };
+}
+
 export function loadFaceEngine() {
   if (!enginePromise) {
     enginePromise = (async () => {
-      const { Human } = await import('@vladmandic/human');
-      const human = new Human(CONFIG);
-      await human.load();
-      await human.warmup();
-      return human;
+      if (canUseWorker()) {
+        try {
+          return await workerEngine();
+        } catch {
+          // Có worker nhưng không có WebGL trong worker, v.v. → thử luồng chính. Lỗi mạng
+          // khi tải mô hình thì luồng chính cũng lỗi và rơi xuống catch bên dưới.
+        }
+      }
+      return mainThreadEngine();
     })().catch((err) => {
       enginePromise = null; // lỗi mạng lúc tải mô hình → lần sau thử lại
       throw err;
@@ -67,9 +101,9 @@ export function loadFaceEngine() {
 
 // Mọi khuôn mặt trong input, lớn nhất (gần camera nhất) trước.
 export async function detectFaces(input) {
-  const human = await loadFaceEngine();
-  const result = await human.detect(input);
-  return [...(result.face || [])].sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3]);
+  const engine = await loadFaceEngine();
+  const faces = await engine.detect(input);
+  return faces.sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3]);
 }
 
 // null = dùng được; chuỗi = lý do (hiển thị nguyên văn cho người dùng).
