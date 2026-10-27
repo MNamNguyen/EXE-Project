@@ -11,6 +11,7 @@ import Badge, { AttendanceBadge, PhaseBadge } from '../../components/ui/Badge';
 import { Card, DateTile, StatGrid } from '../../components/ui/Card';
 import { EmptyText, LoadError, Skeleton, SkeletonRows } from '../../components/ui/States';
 import { eventPhase, formatNumber, gateNote, isGateOpen, shortDate, timeRange } from '../../utils/eventStatus';
+import { FaceConsentBanner } from './FaceEnroll';
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -422,7 +423,10 @@ function StudentHome({ events, loading, loadError, onRetry, onRegister, register
 
   return (
     <Layout title="Trang chủ">
-      <div className="max-w-3xl">{content}</div>
+      <div className="max-w-3xl">
+        <FaceConsentBanner />
+        {content}
+      </div>
     </Layout>
   );
 }

@@ -122,6 +122,22 @@ export const checkinApi = {
   getStatus: (eventId) => api.get(`/api/checkin/status/${eventId}`),
 };
 
+// Check-in bằng khuôn mặt. Embedding luôn do trình duyệt tính (pages/face/faceEngine.js);
+// server chỉ lưu/so vector.
+export const faceApi = {
+  // Sinh viên tự quản lý khuôn mặt của mình.
+  getMine: () => api.get('/api/me/face-profile'),
+  saveMine: (data) => api.post('/api/me/face-profile', { ...data, consent: true }),
+  consentMine: () => api.post('/api/me/face-profile/consent'),
+  deleteMine: () => api.delete('/api/me/face-profile'),
+  // Admin import ảnh thẻ theo MSSV — items: [{ mssv, embedding, thumbnail }].
+  importProfiles: (items) => api.post('/api/admin/face-profiles/import', { items }),
+  // Kiosk BTC.
+  gallery: (eventId) => api.get(`/api/events/${eventId}/face-gallery`),
+  thumbnail: (eventId, userId) => api.get(`/api/events/${eventId}/face-gallery/${userId}/thumbnail`, { responseType: 'blob' }),
+  checkIn: (eventId, userId) => api.post(`/api/events/${eventId}/face-checkin`, { userId }),
+};
+
 // Admin
 export const adminApi = {
   getStats: () => api.get('/api/admin/stats'),
