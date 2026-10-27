@@ -5,9 +5,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // nhưng mỗi khung gọi onFrame(video) bất đồng bộ và CHỜ nó xong mới lấy khung sau — mô
 // hình chạy chậm hơn một vòng lặp cố định thì không chồng việc lên nhau.
 //
+// onFrame trả về 'idle' khi khung không có ai → khung sau cách xa hơn: kiosk đứng cả buổi,
+// phần lớn thời gian không có người trước camera, không cần đốt GPU/pin ở nhịp tối đa.
+//
 // status: idle | starting | running | denied | unsupported | error
 
 const MIN_FRAME_GAP_MS = 150;
+const IDLE_FRAME_GAP_MS = 400;
 
 export default function useFaceCamera({ onFrame, paused = false }) {
   const videoRef = useRef(null);
@@ -60,15 +64,16 @@ export default function useFaceCamera({ onFrame, paused = false }) {
       const tick = async () => {
         if (gen !== genRef.current || !streamRef.current) return;
         const started = Date.now();
+        let gap = MIN_FRAME_GAP_MS;
         if (!pausedRef.current && video.readyState >= 2 && video.videoWidth) {
           try {
-            await onFrameRef.current?.(video);
+            if (await onFrameRef.current?.(video) === 'idle') gap = IDLE_FRAME_GAP_MS;
           } catch {
             // Một khung lỗi (GPU bận, mô hình chưa sẵn) không được làm dừng cả vòng lặp.
           }
         }
         if (gen !== genRef.current) return;
-        timerRef.current = setTimeout(tick, Math.max(0, MIN_FRAME_GAP_MS - (Date.now() - started)));
+        timerRef.current = setTimeout(tick, Math.max(0, gap - (Date.now() - started)));
       };
       tick();
     } catch (err) {

@@ -117,7 +117,10 @@ where the whole router shares a role. `/api/public/*` is the only unauthenticate
 - Face check-in kiosk (`pages/btc/FaceCheckin.jsx`, `/events/:id/face-checkin`): 1:N face recognition
   for STANDARD events. **The model runs only in the browser** (`@vladmandic/human`, wrapped by
   `pages/face/faceEngine.js`; models served at `/models/human/` by a plugin in `vite.config.js`, not
-  committed). The server never runs ML: `lib/faceProfile.js` only stores and compares vectors, and its
+  committed). Inference runs in a Web Worker (`pages/face/faceWorker.js`, config shared via
+  `faceConfig.js`) because on the main thread it froze the page and got the feature reverted once;
+  `faceEngine` falls back to the main thread only when the browser can't run it in a worker.
+  The server never runs ML: `lib/faceProfile.js` only stores and compares vectors, and its
   `similarity` + thresholds must stay identical to `pages/face/faceMatch.js`. Changing the model or
   config means bumping `FACE_MODEL`. Biometric data needs consent: the kiosk uses only profiles with
   `consentAt`, and admin-imported photos (`POST /api/admin/face-profiles/import`) start unconsented.

@@ -32,6 +32,8 @@ function humanModels() {
 
 export default defineConfig({
   plugins: [react(), humanModels()],
+  // faceWorker.js mở bằng { type: 'module' }; mặc định 'iife' của Vite không khớp kiểu đó.
+  worker: { format: 'es' },
   server: {
     port: 5173,
     proxy: {
