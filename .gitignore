@@ -4,3 +4,8 @@ dist/
 .env.local
 .claude/
 *.log
+
+# File dữ liệu/báo cáo (danh sách người tham gia, vé…) — không đưa lên repo
+*.xlsx
+*.xls
+*.csv
