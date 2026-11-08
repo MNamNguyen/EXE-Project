@@ -27,6 +27,7 @@ export default function EventCreate() {
     isWhitelisted: false,
     allowRegistration: true,
     otpCheckinEnabled: true,
+    checkinOtpRequired: true,
     kind: 'STANDARD',
     startsAt: '',
   });

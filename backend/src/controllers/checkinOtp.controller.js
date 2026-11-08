@@ -13,6 +13,7 @@ const { fmtTime } = require('../lib/datetime');
 // ─────────────────────────────────────────────────────────────────────────────
 // Check-in không cần đăng nhập: quét QR → nhập email/MSSV → OTP qua email → thẻ
 // điểm danh (lib/checkinPass.js) → điểm danh. Spec: 2026-11-07-otp-checkin-design.md
+// Event.checkinOtpRequired = false bỏ bước OTP: /request cấp thẻ luôn (xem skipOtp).
 //
 // KHÔNG cấp JWT: chiếm được hộp thư chỉ cho quyền
 // điểm danh đúng sự kiện đó, không chiếm được tài khoản — nên mở cho mọi vai trò
@@ -129,7 +130,7 @@ async function requestCheckinOtp(req, res) {
 
     const attendance = await prisma.attendance.findUnique({
       where: { userId_eventId: { userId: user.id, eventId } },
-      select: { checkinTime: true, checkoutTime: true },
+      select: { checkinTime: true, checkoutTime: true, deviceId: true },
     });
     if (type === 'checkin' && attendance?.checkinTime) {
       return res.status(400).json({
@@ -155,6 +156,18 @@ async function requestCheckinOtp(req, res) {
         await logFraud(user.id, eventId, 'SHARED_DEVICE', req);
         return res.status(403).json(shared);
       }
+    }
+
+    // BTC tắt OTP: đủ điều kiện thì cấp thẻ luôn, không gửi email. Check-in vẫn bị
+    // luật một máy một người chặn (ở trên). Check-out thì không có luật đó, nên chỉ
+    // bỏ OTP khi đúng máy đã check-in — máy khác (hoặc người được điểm danh bằng
+    // khuôn mặt/BTC) vẫn phải nhận mã như thường, kẻo ai gõ email người khác cũng
+    // check-out hộ được.
+    const skipOtp = event.checkinOtpRequired === false
+      && (type === 'checkin' || (attendance?.deviceId && attendance.deviceId === deviceId));
+    if (skipOtp) {
+      const { pass, expiresAt } = issuePass(user.id, eventId, deviceId);
+      return res.json({ success: true, otpRequired: false, pass, expiresAt, user: { name: user.name } });
     }
 
     const maskedEmail = maskEmail(user.email);
@@ -208,6 +221,7 @@ async function requestCheckinOtp(req, res) {
 
     return res.json({
       success: true,
+      otpRequired: true,
       maskedEmail,
       retryAfter: RESEND_COOLDOWN_MS / 1000,
       message: `Đã gửi mã xác minh tới ${maskedEmail}.`,

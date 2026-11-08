@@ -202,6 +202,10 @@ ALTER TABLE "attendance_events"
 ALTER TABLE "attendance_events"
   ADD COLUMN IF NOT EXISTS "otpCheckinEnabled" BOOLEAN NOT NULL DEFAULT TRUE;
 
+-- Check-in bằng email có bắt nhập mã OTP không (mặc định có; tắt = nhập email là check-in luôn).
+ALTER TABLE "attendance_events"
+  ADD COLUMN IF NOT EXISTS "checkinOtpRequired" BOOLEAN NOT NULL DEFAULT TRUE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS "attendance_events_scannerToken_key"
   ON "attendance_events"("scannerToken");
 

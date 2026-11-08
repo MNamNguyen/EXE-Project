@@ -101,6 +101,10 @@ model Event {
   // Check-in bằng email + OTP ngay trên trang quét, không cần đăng nhập
   // (lib/checkinPass.js). Mặc định bật; tắt thì trang quét bắt đăng nhập như cũ.
   otpCheckinEnabled Boolean   @default(true)
+  // Khi check-in bằng email đang bật: có bắt nhập mã OTP gửi qua email không.
+  // Tắt = nhập email/MSSV là check-in luôn (tiết kiệm hạn mức email) — chỉ còn
+  // QR động, GPS và luật một máy một người chặn điểm danh hộ. Mặc định bật.
+  checkinOtpRequired Boolean  @default(true)
   isActive          Boolean   @default(true)
   // Link chia sẻ báo cáo công khai: /api/public/reports/:reportShareToken xem
   // được không cần đăng nhập. NULL = chưa chia sẻ hoặc BTC đã thu hồi, nên thu

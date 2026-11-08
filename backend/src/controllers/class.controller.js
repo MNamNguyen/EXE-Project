@@ -307,6 +307,8 @@ async function createSession(req, res) {
         checkoutState: parseGateState(req.body.checkoutState),
         isWhitelisted: true,
         allowRegistration: false,
+        // Mặc định bắt OTP như sự kiện thường; BTC tắt thì nhập email là check-in luôn.
+        checkinOtpRequired: req.body.checkinOtpRequired !== false,
         createdById: req.user.id,
         classId: cls.id,
       },

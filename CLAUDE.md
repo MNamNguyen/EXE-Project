@@ -169,7 +169,9 @@ an email; 60 s cooldown) → `/verify` (OTP bound to deviceId, burned after 5 wr
 `OtpToken.attempts`) returns a **check-in pass** (`lib/checkinPass.js`, stateless HMAC of
 user+event+device, 24 h, no JWT) → `POST /api/public/self-checkin`. The pass also covers checkout and
 the feedback form (`/api/public/feedback/:id/response`, header `X-Checkin-Pass`) so one person costs
-one email per event. Pass errors are `400 PASS_INVALID`, never 401 (`api.js` logs out on 401).
+one email per event. `Event.checkinOtpRequired = false` (BTC toggle, separate column from
+`otpCheckinEnabled`) makes `/request` hand out the pass directly without an email — check-out skips
+the code only on the device that checked in. Pass errors are `400 PASS_INVALID`, never 401 (`api.js` logs out on 401).
 A device that already checked in someone else at an event gets `DEVICE_USED_BY_OTHER` on both paths.
 Spec: `docs/superpowers/specs/2026-11-07-otp-checkin-design.md`. Rejections that
 indicate abuse are written to `FraudLog` via a best-effort `logFraud` that never throws.

@@ -273,6 +273,21 @@ export default function EventFormFields({ form, setForm, inModal = false, canPic
                   checked={form.otpCheckinEnabled !== false}
                   onChange={(e) => set('otpCheckinEnabled', e.target.checked)}
                 />
+                {form.otpCheckinEnabled !== false && (
+                  <div className="ml-7 flex flex-col gap-2">
+                    <Checkbox
+                      label="Yêu cầu mã xác minh (OTP) qua email"
+                      desc="Tắt thì người tham gia chỉ cần quét QR và nhập email/MSSV là check-in luôn, không tốn email. Đổi lại ai biết email/MSSV của người khác đều check-in hộ được, chỉ còn QR động, GPS và luật một máy một người để chặn."
+                      checked={form.checkinOtpRequired !== false}
+                      onChange={(e) => set('checkinOtpRequired', e.target.checked)}
+                    />
+                    {form.checkinOtpRequired === false && !form.gpsEnabled && (
+                      <p className="text-pretty text-xs text-warning">
+                        GPS đang tắt — nên bật GPS khi không dùng OTP để người ở xa không check-in hộ được.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </Section>
           )}

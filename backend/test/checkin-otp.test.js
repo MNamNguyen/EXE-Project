@@ -134,6 +134,59 @@ test('request is refused when BTC turned email check-in off', async () => {
   assert.strictEqual(mail.calls.length, 0);
 });
 
+// ── BTC tắt OTP (checkinOtpRequired = false) ────────────────────────────────
+
+test('OTP off: check-in hands out a pass right away, no code and no email', async () => {
+  const { create, mail } = mockRequestPath({ event: openEvent({ checkinOtpRequired: false }) });
+
+  const res = await requestOtp();
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.otpRequired, false);
+  assert.strictEqual(validatePass(res.body.pass, 'evt-1', 'dev-1'), 'u1');
+  assert.strictEqual(create.calls.length, 0);
+  assert.strictEqual(mail.calls.length, 0);
+});
+
+test('OTP off: every check before the pass still applies (list, one device one person)', async () => {
+  const outsider = mockRequestPath({ event: openEvent({ checkinOtpRequired: false }), member: false });
+  const res1 = await requestOtp();
+  assert.strictEqual(res1.body.error, 'NOT_REGISTERED');
+  assert.strictEqual(res1.body.pass, undefined);
+  assert.strictEqual(outsider.mail.calls.length, 0);
+  restoreStubs();
+
+  mockRequestPath({ event: openEvent({ checkinOtpRequired: false }), otherOnDevice: { userId: 'u2' } });
+  const res2 = await requestOtp();
+  assert.strictEqual(res2.status, 403);
+  assert.strictEqual(res2.body.error, 'DEVICE_USED_BY_OTHER');
+  assert.strictEqual(res2.body.pass, undefined);
+});
+
+test('OTP off: check-out skips the code only on the phone that checked in', async () => {
+  const checkedIn = { checkinTime: new Date(), checkoutTime: null, deviceId: 'dev-1' };
+
+  mockRequestPath({ event: openEvent({ checkinOtpRequired: false }), attendance: checkedIn });
+  const same = await requestOtp({ type: 'checkout' });
+  assert.strictEqual(same.body.otpRequired, false);
+  assert.ok(same.body.pass);
+  restoreStubs();
+
+  // Máy khác gõ email người đó để check-out hộ → vẫn phải nhận mã qua email.
+  const { mail } = mockRequestPath({ event: openEvent({ checkinOtpRequired: false }), attendance: checkedIn });
+  const other = await requestOtp({ type: 'checkout', deviceId: 'dev-2' });
+  assert.strictEqual(other.body.otpRequired, true);
+  assert.strictEqual(other.body.pass, undefined);
+  assert.strictEqual(mail.calls.length, 1);
+});
+
+test('OTP on (default): request never returns a pass', async () => {
+  mockRequestPath();
+  const res = await requestOtp();
+  assert.strictEqual(res.body.otpRequired, true);
+  assert.strictEqual(res.body.pass, undefined);
+});
+
 test('request is refused on invitation events', async () => {
   const { mail } = mockRequestPath({ event: openEvent({ kind: 'INVITATION' }) });
 

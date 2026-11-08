@@ -248,6 +248,15 @@ export default function ScanLanding() {
       const { data } = await checkinApi.requestOtp({
         eventId, type, identifier: value, ticket: ticketRef.current || undefined, token,
       });
+      if (data.otpRequired === false && data.pass) {
+        // BTC tắt OTP: backend đã kiểm đủ điều kiện và cấp thẻ luôn — đi thẳng tới check-in.
+        const info = { pass: data.pass, expiresAt: data.expiresAt, name: data.user?.name };
+        storePass(eventId, info);
+        setPassInfo(info);
+        setBusy(false);
+        processCheckin(ticketRef.current, info.pass);
+        return;
+      }
       setMaskedEmail(data.maskedEmail);
       startResendTimer(data.retryAfter);
       setOtp('');
@@ -396,7 +405,8 @@ export default function ScanLanding() {
             </div>
             <h1 className="mt-4 text-center text-xl font-semibold text-foreground">Xác minh để {isCheckin ? 'check-in' : 'check-out'}</h1>
             <p className="mt-1 text-pretty text-center text-sm text-muted">
-              Nhập email hoặc MSSV đã đăng ký. Mã 6 chữ số sẽ được gửi tới email của bạn, không cần đăng nhập.
+              {/* Chưa biết sự kiện có bắt OTP không (BTC bật/tắt) nên câu này đúng cho cả hai. */}
+              Nhập email hoặc MSSV đã đăng ký, không cần đăng nhập. Nếu sự kiện yêu cầu, mã 6 chữ số sẽ được gửi tới email của bạn.
             </p>
             {emailNotice && <p className="mt-4 rounded-xl bg-warning-bg p-3 text-pretty text-sm text-warning">{emailNotice}</p>}
             <form onSubmit={requestCode} className="mt-5 flex flex-col gap-4">
@@ -416,7 +426,7 @@ export default function ScanLanding() {
                   />
                 )}
               </Field>
-              <Button type="submit" variant="primary" size="auth" loading={busy} className="w-full">Gửi mã xác minh</Button>
+              <Button type="submit" variant="primary" size="auth" loading={busy} className="w-full">Tiếp tục</Button>
             </form>
           </section>
         )}

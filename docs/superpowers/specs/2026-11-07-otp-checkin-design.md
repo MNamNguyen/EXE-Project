@@ -48,6 +48,20 @@ rồi mới quay lại `/scan`. Product owner muốn bỏ hẳn bước đăng n
   `feedback.controller`. Thẻ sai trả **400 `PASS_INVALID`**, không phải 401, vì 401 làm `api.js`
   đăng xuất và đá về `/login`.
 
+## Tắt OTP (bổ sung 2026-11-08)
+
+`Event.checkinOtpRequired` (mặc định `true`) là công tắc con của `otpCheckinEnabled`. Đây là cột
+riêng, không dùng lại `otpCheckinEnabled = false`, để sự kiện nào BTC đã tắt check-in bằng email
+không âm thầm chuyển thành "check-in không cần mã".
+
+- Khi tắt, `/checkin-otp/request` vẫn kiểm đủ mọi điều kiện như trên, rồi cấp luôn thẻ điểm danh
+  (`{ otpRequired: false, pass }`) thay vì gửi email. Frontend đi thẳng tới `/self-checkin`.
+- Check-in vẫn bị chặn bởi luật một máy một người. Check-out không có luật đó, nên chỉ bỏ OTP khi
+  đúng máy đã check-in (`attendance.deviceId`). Máy khác, hoặc người được điểm danh bằng khuôn
+  mặt/BTC, vẫn phải nhận mã như thường.
+- Rủi ro BTC chấp nhận khi tắt: ai biết email/MSSV của người khác đều check-in hộ được trên máy
+  mình. Chỉ còn QR động, GPS và luật một máy một người để chặn, nên form gợi ý bật GPS.
+
 ## Mã lỗi mới
 
 | Mã | Khi nào |

@@ -16,6 +16,7 @@ function defaultForm() {
     name: '',
     location: '',
     lat: '', lng: '', radius: '100', gpsEnabled: false,
+    checkinOtpRequired: true,
     // Mặc định để trống — buổi học không cần đặt lịch, tạo xong là mở điểm
     // danh ngay (xem backend: không có giờ nào thì checkinState tự thành OPEN).
     checkinOpen: '', checkinClose: '', checkoutOpen: '', checkoutClose: '',
@@ -192,6 +193,18 @@ export default function SessionCreateModal({ open, classId, className, onClose, 
                 </div>
               </div>
             )}
+          </section>
+
+          <section className="border-t border-border pt-5">
+            <SettingRow
+              id={`${uid}-otp`}
+              title="Yêu cầu mã xác minh (OTP) qua email"
+              desc={form.checkinOtpRequired
+                ? 'Quét QR, nhập email rồi nhập mã 6 số gửi qua email mới check-in được.'
+                : 'Quét QR và nhập email/MSSV là check-in luôn, không tốn email. Ai biết email/MSSV của bạn khác đều check-in hộ được — nên bật GPS.'}
+              checked={form.checkinOtpRequired}
+              onChange={(on) => set('checkinOtpRequired', on)}
+            />
           </section>
         </form>
       )}
