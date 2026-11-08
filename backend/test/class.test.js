@@ -363,12 +363,13 @@ test('tạo buổi điểm danh thiếu địa điểm hoặc sai giờ trả 40
   assert.strictEqual(create.calls.length, 0);
 });
 
-test('danh sách buổi điểm danh chỉ lấy sự kiện thuộc lớp này', async () => {
+test('danh sách buổi điểm danh chỉ lấy sự kiện thuộc lớp này và chưa bị xoá', async () => {
   mockAuth();
   mockClass();
   const findMany = stubMethod(prisma.event, 'findMany', async () => []);
 
   await request(app).get('/api/classes/cls-1/sessions').set('Authorization', `Bearer ${btcToken}`);
 
-  assert.deepStrictEqual(findMany.calls[0][0].where, { classId: 'cls-1' });
+  // Xoá sự kiện là xoá mềm (isActive=false) — buổi đã xoá không được hiện lại trong lớp.
+  assert.deepStrictEqual(findMany.calls[0][0].where, { classId: 'cls-1', isActive: true });
 });

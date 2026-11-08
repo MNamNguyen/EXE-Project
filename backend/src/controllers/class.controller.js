@@ -335,8 +335,10 @@ async function listSessions(req, res) {
     const cls = await loadClass(req.params.id);
     if (!cls) return res.status(404).json(CLASS_NOT_FOUND);
 
+    // Xoá sự kiện là xoá mềm (isActive=false, event.controller#deleteEvent) — buổi đã xoá
+    // phải biến khỏi tab Buổi điểm danh của lớp như ở danh sách sự kiện.
     const sessions = await prisma.event.findMany({
-      where: { classId: cls.id },
+      where: { classId: cls.id, isActive: true },
       orderBy: { checkinOpen: { sort: 'desc', nulls: 'first' } },
       include: { _count: { select: { attendances: true, eventMembers: true } } },
     });
