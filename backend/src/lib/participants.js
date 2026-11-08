@@ -45,7 +45,8 @@ function validateRows(input, { firstLine = 1 } = {}) {
   const seenMssv = new Set();
 
   input.forEach((raw, i) => {
-    const line = firstLine + i;
+    // Dòng từ file mang sẵn số dòng thật (parseSheet) vì tiêu đề có thể không ở dòng 1.
+    const line = raw?.line ?? firstLine + i;
     const row = normalizeRow(raw);
     const skip = (reason) => skipped.push({ line, email: row.email || null, name: row.name || null, reason });
 
@@ -66,43 +67,94 @@ function validateRows(input, { firstLine = 1 } = {}) {
 }
 
 // Tên cột Excel → trường, so khớp sau khi bỏ dấu/viết thường như import khách mời.
+// Danh sách lớp của trường hay tách "Họ đệm" + "Tên" thành hai cột: khi không có cột
+// họ tên đầy đủ thì ghép hai cột đó lại, nếu không sẽ chỉ còn mỗi tên ("An").
 const HEADER_ALIASES = {
-  email: ['email', 'mail', 'email', 'diachiemail', 'thudientu', 'gmail'],
-  name: ['hoten', 'hovaten', 'ten', 'name', 'fullname', 'hotensinhvien', 'tensinhvien'],
+  email: ['email', 'mail', 'diachiemail', 'thudientu', 'gmail'],
+  name: ['hoten', 'hovaten', 'name', 'fullname', 'hotensinhvien', 'hovatensinhvien', 'tensinhvien'],
+  givenName: ['ten', 'firstname'],
+  familyName: ['ho', 'hodem', 'holot', 'hotendem', 'hovatendem', 'lastname'],
   mssv: ['mssv', 'masosinhvien', 'masv', 'studentid', 'ma', 'masinhvien'],
   phone: ['sdt', 'sodienthoai', 'dienthoai', 'phone', 'mobile', 'sodt', 'dt'],
 };
+// File danh sách thường có vài dòng tên trường/lớp phía trên tiêu đề cột.
+const HEADER_SCAN_ROWS = 10;
 
 function headerKey(header) {
   const k = toAsciiFilename(header).toLowerCase().replace(/[^a-z0-9]/g, '');
   return Object.keys(HEADER_ALIASES).find((field) => HEADER_ALIASES[field].includes(k)) || null;
 }
 
-// File Excel/CSV → { rows } hoặc { error }. Dòng 1 là tiêu đề nên dữ liệu bắt đầu ở dòng 2.
+// Một dòng là tiêu đề khi có cột email và cột họ tên (đầy đủ, hoặc cột "Tên").
+function headerColumns(cells) {
+  const columns = {};
+  cells.forEach((cell, index) => {
+    const field = str(cell) && headerKey(str(cell));
+    if (field && columns[field] === undefined) columns[field] = index;
+  });
+  const hasName = columns.name !== undefined || columns.givenName !== undefined;
+  return columns.email !== undefined && hasName ? columns : null;
+}
+
+// CSV xuất từ Google Sheets / Notepad là UTF-8 nhưng không có BOM — đưa thẳng buffer
+// vào SheetJS thì nó đọc theo latin1, "Họ tên" thành ký tự rác và không khớp cột nào.
+// File xlsx (zip "PK") và xls (OLE) giữ nguyên đường đọc buffer.
+function readWorkbook(buffer) {
+  const isZip = buffer[0] === 0x50 && buffer[1] === 0x4b;
+  const isOle = buffer[0] === 0xd0 && buffer[1] === 0xcf;
+  if (!isZip && !isOle) {
+    let text = null;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    } catch {
+      // Không phải UTF-8 hợp lệ (vd. CSV ANSI) — để SheetJS tự đoán như trước.
+    }
+    // raw: giữ mọi ô CSV là chữ, để SĐT "0901..." không bị đổi thành số rồi mất số 0.
+    if (text !== null) return XLSX.read(text.replace(/^﻿/, ''), { type: 'string', raw: true });
+  }
+  return XLSX.read(buffer, { type: 'buffer' });
+}
+
+// File Excel/CSV → { rows } hoặc { error }. Mỗi dòng mang `line` = số dòng thật trong
+// file để BTC dò lại; tiêu đề được tìm trong HEADER_SCAN_ROWS dòng đầu.
 function parseSheet(buffer) {
-  let records;
+  let grid;
+  let startRow;
   try {
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const workbook = readWorkbook(buffer);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    records = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+    if (!sheet?.['!ref']) return { error: 'File trống hoặc không có dòng dữ liệu' };
+    // header: 1 giữ cả dòng trống nên chỉ số mảng khớp số dòng trong file.
+    grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false, blankrows: true });
+    startRow = XLSX.utils.decode_range(sheet['!ref']).s.r + 1;
   } catch {
     return { error: 'Không đọc được file — hãy dùng file Excel (.xlsx) hoặc CSV' };
   }
-  if (!records.length) return { error: 'File trống hoặc không có dòng dữ liệu' };
-  if (records.length > MAX_ROWS) return { error: `Mỗi lần nhập tối đa ${MAX_ROWS} người` };
 
-  const columns = {};
-  for (const header of Object.keys(records[0])) {
-    const field = headerKey(header);
-    if (field && !columns[field]) columns[field] = header;
+  let headerIndex = -1;
+  let columns = null;
+  for (let i = 0; i < Math.min(grid.length, HEADER_SCAN_ROWS); i++) {
+    columns = headerColumns(grid[i]);
+    if (columns) { headerIndex = i; break; }
   }
-  if (!columns.email || !columns.name) {
-    return { error: 'File cần có cột "Email" và cột "Họ tên" ở dòng đầu (MSSV, SĐT không bắt buộc)' };
+  if (!columns) {
+    return { error: 'File cần có dòng tiêu đề với cột "Email" và cột "Họ tên" (MSSV, SĐT không bắt buộc)' };
   }
 
-  const rows = records.map((r) => Object.fromEntries(
-    Object.entries(columns).map(([field, header]) => [field, r[header]]),
-  ));
+  const cell = (cells, field) => (columns[field] === undefined ? '' : str(cells[columns[field]]));
+  const rows = [];
+  for (let i = headerIndex + 1; i < grid.length; i++) {
+    const cells = grid[i];
+    const name = columns.name !== undefined
+      ? cell(cells, 'name')
+      : [cell(cells, 'familyName'), cell(cells, 'givenName')].filter(Boolean).join(' ');
+    const row = { email: cell(cells, 'email'), name, mssv: cell(cells, 'mssv'), phone: cell(cells, 'phone') };
+    if (!row.email && !row.name && !row.mssv && !row.phone) continue; // dòng trống
+    rows.push({ ...row, line: startRow + i });
+  }
+
+  if (!rows.length) return { error: 'File trống hoặc không có dòng dữ liệu' };
+  if (rows.length > MAX_ROWS) return { error: `Mỗi lần nhập tối đa ${MAX_ROWS} người` };
   return { rows };
 }
 

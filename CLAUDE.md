@@ -8,15 +8,6 @@ FPT Event Attendance Management — QR + GPS attendance for university events an
 Two independent npm projects: `backend/` (Express + Prisma + Supabase Postgres, deployed on Render)
 and `frontend/` (React 18 + Vite + Tailwind, deployed on Vercel). There is no root package.json.
 
-## Code freeze (from 2026-11-08)
-
-Source code is **frozen starting 2026-11-08**: do not edit, add, or delete files under `backend/src`,
-`frontend/src`, or other source trees after that date. When asked for a source change on or after
-2026-11-08, **decline and say so** — state plainly that the project is under a code freeze and no
-source edits are being made, rather than editing quietly or pretending the change was applied.
-Non-source work (reading code, explaining, answering questions, updating docs like this file) is
-still fine. Lift the freeze only when the user explicitly says so.
-
 ## Commands
 
 Backend (`cd backend`):

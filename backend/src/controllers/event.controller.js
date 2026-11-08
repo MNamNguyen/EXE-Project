@@ -739,8 +739,8 @@ async function importMembers(req, res) {
     const sheet = parseSheet(req.file.buffer);
     if (sheet.error) return res.status(400).json({ success: false, message: sheet.error });
 
-    // Dòng 1 là tiêu đề → dữ liệu bắt đầu ở dòng 2, để BTC dò lại đúng dòng bị bỏ qua.
-    const result = await addParticipantsToEvent(event.id, sheet.rows, { firstLine: 2 });
+    // Mỗi dòng đã mang số dòng thật trong file (parseSheet) để BTC dò lại dòng bị bỏ qua.
+    const result = await addParticipantsToEvent(event.id, sheet.rows);
     if (result.error) return res.status(400).json({ success: false, message: result.error });
 
     return res.json({ success: true, ...result, message: importSummary(result) });

@@ -109,10 +109,49 @@ test('parseSheet recognises Vietnamese headers and needs Email + Họ tên', () 
   };
 
   const ok = parseSheet(book([['STT', 'Họ và tên', 'MSSV', 'Địa chỉ email'], [1, 'An', 'SE1', 'an@fpt.edu.vn']]));
-  assert.deepStrictEqual(ok.rows, [{ name: 'An', mssv: 'SE1', email: 'an@fpt.edu.vn' }]);
+  assert.deepStrictEqual(ok.rows, [{ name: 'An', mssv: 'SE1', email: 'an@fpt.edu.vn', phone: '', line: 2 }]);
 
   const missing = parseSheet(book([['Họ tên', 'MSSV'], ['An', 'SE1']]));
   assert.match(missing.error, /Email/);
+});
+
+const xlsxBook = (rows) => {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'DS');
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+};
+
+test('parseSheet finds the header below a title block and keeps real line numbers', () => {
+  const { rows } = parseSheet(xlsxBook([
+    ['DANH SÁCH LỚP SE1801'],
+    [],
+    ['STT', 'Họ và tên', 'Email', 'MSSV'],
+    [1, 'Nguyễn Văn An', 'an@fpt.edu.vn', 'SE170001'],
+    [],
+    [2, 'Trần Bình', 'binh@fpt.edu.vn', ''],
+  ]));
+  assert.deepStrictEqual(rows.map((r) => [r.line, r.name]), [[4, 'Nguyễn Văn An'], [6, 'Trần Bình']]);
+});
+
+test('parseSheet reads a UTF-8 CSV without BOM and keeps leading zeros', () => {
+  const csv = Buffer.from('Email,Họ tên,SĐT\nan@fpt.edu.vn,Nguyễn Văn An,0901234567\n', 'utf8');
+  assert.deepStrictEqual(parseSheet(csv).rows, [
+    { email: 'an@fpt.edu.vn', name: 'Nguyễn Văn An', mssv: '', phone: '0901234567', line: 2 },
+  ]);
+  // Có BOM (Excel "CSV UTF-8") vẫn đọc được như cũ.
+  assert.strictEqual(parseSheet(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), csv])).rows[0].name, 'Nguyễn Văn An');
+});
+
+test('parseSheet joins split "Họ đệm" + "Tên" columns, but prefers a full-name column', () => {
+  const split = parseSheet(xlsxBook([['Email', 'Họ đệm', 'Tên'], ['an@fpt.edu.vn', 'Nguyễn Văn', 'An']]));
+  assert.strictEqual(split.rows[0].name, 'Nguyễn Văn An');
+
+  const both = parseSheet(xlsxBook([['Email', 'Họ và tên', 'Tên'], ['an@fpt.edu.vn', 'Nguyễn Văn An', 'An']]));
+  assert.strictEqual(both.rows[0].name, 'Nguyễn Văn An');
+});
+
+test('parseSheet rejects a file with only a header row', () => {
+  assert.match(parseSheet(xlsxBook([['Email', 'Họ tên']])).error, /trống/);
 });
 
 // ── Nhập vào sự kiện ────────────────────────────────────────────────────────

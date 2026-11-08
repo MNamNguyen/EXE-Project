@@ -9,3 +9,5 @@ dist/
 *.xlsx
 *.xls
 *.csv
+# Ngoại lệ: file mẫu (chỉ có tiêu đề, không có dữ liệu thật) để BTC tải về điền
+!frontend/public/templates/*.xlsx

@@ -198,7 +198,7 @@ async function importMembers(req, res) {
     const sheet = parseSheet(req.file.buffer);
     if (sheet.error) return res.status(400).json({ success: false, message: sheet.error });
 
-    const result = await addParticipantsToClass(cls.id, sheet.rows, { firstLine: 2 });
+    const result = await addParticipantsToClass(cls.id, sheet.rows);
     if (result.error) return res.status(400).json({ success: false, message: result.error });
 
     return res.json({ success: true, ...result, message: importSummary(result) });

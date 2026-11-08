@@ -1,10 +1,14 @@
 import { useRef, useState } from 'react';
-import { FileSpreadsheet, UserPlus } from 'lucide-react';
+import { Download, FileSpreadsheet, UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Button from '../ui/Button';
 import { Textarea } from '../ui/Input';
 import { Banner } from '../ui/States';
 import { parsePastedParticipants } from '../../utils/participants';
+
+// File mẫu nằm ở public/ nên Vercel phục vụ thẳng (file tĩnh được ưu tiên trước rewrite SPA).
+// Chỉ có dòng tiêu đề ở sheet đầu — không có dòng ví dụ để BTC không lỡ nhập người giả.
+const TEMPLATE_URL = '/templates/mau-danh-sach-thanh-vien.xlsx';
 
 // Nhập người tham gia — dùng chung cho danh sách sự kiện và danh sách lớp. Người tham
 // gia không có tài khoản: BTC chỉ cần email + họ tên (MSSV tuỳ chọn), backend tự tạo
@@ -68,8 +72,9 @@ export default function ParticipantsAdder({ onAdd, onImport, onDone }) {
       <section className="flex flex-col gap-2">
         <p className="text-sm font-medium text-foreground">Nhập từ file Excel / CSV</p>
         <p className="text-pretty text-xs text-muted">
-          Dòng đầu là tiêu đề, cần cột <span className="font-medium text-foreground">Email</span> và{' '}
+          Cần dòng tiêu đề có cột <span className="font-medium text-foreground">Email</span> và{' '}
           <span className="font-medium text-foreground">Họ tên</span>; cột MSSV, SĐT không bắt buộc.
+          Chưa có file thì tải file mẫu về điền.
         </p>
         <input
           ref={fileRef}
@@ -82,9 +87,12 @@ export default function ParticipantsAdder({ onAdd, onImport, onDone }) {
             if (file) run('file', () => onImport(file));
           }}
         />
-        <div>
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="form" icon={FileSpreadsheet} loading={busy === 'file'} disabled={Boolean(busy)} onClick={() => fileRef.current?.click()}>
             Chọn file
+          </Button>
+          <Button as="a" href={TEMPLATE_URL} download variant="ghost" size="form" icon={Download}>
+            Tải file mẫu
           </Button>
         </div>
       </section>
